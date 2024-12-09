@@ -3,6 +3,17 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { BookOpen, Brain, MessagesSquare } from "lucide-react";
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function StudentDashboard() {
   const { data: session, status } = useSession();
@@ -19,47 +30,67 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-3xl font-bold text-gray-900">Student Dashboard</h1>
-          
-          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Current Lessons Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">My Lessons</h3>
-                <p className="mt-2 text-sm text-gray-500">Access your current lessons and materials.</p>
-                <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                  View Lessons
-                </button>
-              </div>
-            </div>
+    <DashboardLayout>
+      <div>
+        <h2 className="text-3xl font-bold text-foreground mb-2">Student Dashboard</h2>
+        <p className="text-muted-foreground mb-6">Access your learning resources</p>
+        
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Current Lessons Card */}
+          <Card className="dashboard-card border-t-4 border-t-primary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <BookOpen className="h-5 w-5" />
+                My Lessons
+              </CardTitle>
+              <CardDescription>
+                Access your current lessons and materials.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button className="w-full">
+                View Lessons
+              </Button>
+            </CardFooter>
+          </Card>
 
-            {/* Practice Exercises Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">Practice Exercises</h3>
-                <p className="mt-2 text-sm text-gray-500">Generate and solve practice problems.</p>
-                <button className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                  Start Practice
-                </button>
-              </div>
-            </div>
+          {/* Practice Exercises Card */}
+          <Card className="dashboard-card border-t-4 border-t-secondary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-secondary">
+                <Brain className="h-5 w-5" />
+                Practice Exercises
+              </CardTitle>
+              <CardDescription>
+                Generate and solve practice problems.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button variant="secondary" className="w-full">
+                Start Practice
+              </Button>
+            </CardFooter>
+          </Card>
 
-            {/* AI Tutor Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">AI Tutor</h3>
-                <p className="mt-2 text-sm text-gray-500">Get personalized explanations and help.</p>
-                <button className="mt-4 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-                  Ask AI Tutor
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* AI Tutor Card */}
+          <Card className="dashboard-card border-t-4 border-t-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-accent">
+                <MessagesSquare className="h-5 w-5" />
+                AI Tutor
+              </CardTitle>
+              <CardDescription>
+                Get personalized explanations and help.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button variant="outline" className="w-full">
+                Ask AI Tutor
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 } 

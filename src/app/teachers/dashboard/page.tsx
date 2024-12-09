@@ -1,65 +1,112 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { BookOpen, FileText, Library } from "lucide-react";
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function TeacherDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'teacher')) {
-      router.push('/login');
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+    } else if (status === 'authenticated' && session?.user?.role !== 'teacher') {
+      router.replace('/students/dashboard');
     }
   }, [session, status, router]);
 
   if (status === 'loading') {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
+          <p className="text-muted-foreground">Please wait while we load your dashboard</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated' || session?.user?.role !== 'teacher') {
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-3xl font-bold text-gray-900">Teacher Dashboard</h1>
-          
-          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Lesson Planning Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">Lesson Planning</h3>
-                <p className="mt-2 text-sm text-gray-500">Create and manage your lesson plans using AI assistance.</p>
-                <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                  Create New Lesson
-                </button>
-              </div>
-            </div>
+    <DashboardLayout>
+      <div>
+        <h2 className="text-3xl font-bold text-foreground mb-2">Teacher Dashboard</h2>
+        <p className="text-muted-foreground mb-6">Manage your lessons and resources</p>
+        
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Lesson Planning Card */}
+          <Card className="dashboard-card border-t-4 border-t-primary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <BookOpen className="h-5 w-5" />
+                Lesson Planning
+              </CardTitle>
+              <CardDescription>
+                Create and manage your lesson plans using AI assistance.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button 
+                className="w-full"
+                onClick={() => router.push('/teachers/lessons')}
+              >
+                View Lessons
+              </Button>
+            </CardFooter>
+          </Card>
 
-            {/* Content Generation Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">Content Generation</h3>
-                <p className="mt-2 text-sm text-gray-500">Generate educational content and resources with AI.</p>
-                <button className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                  Generate Content
-                </button>
-              </div>
-            </div>
+          {/* Content Generation Card */}
+          <Card className="dashboard-card border-t-4 border-t-secondary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-secondary">
+                <FileText className="h-5 w-5" />
+                Content Generation
+              </CardTitle>
+              <CardDescription>
+                Generate educational content and resources with AI.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button variant="secondary" className="w-full">
+                Generate Content
+              </Button>
+            </CardFooter>
+          </Card>
 
-            {/* Resource Management Card */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <h3 className="text-lg font-medium text-gray-900">Resource Library</h3>
-                <p className="mt-2 text-sm text-gray-500">Organize and access your teaching resources.</p>
-                <button className="mt-4 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-                  View Resources
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Resource Management Card */}
+          <Card className="dashboard-card border-t-4 border-t-accent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-accent">
+                <Library className="h-5 w-5" />
+                Resource Library
+              </CardTitle>
+              <CardDescription>
+                Organize and access your teaching resources.
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Button variant="outline" className="w-full">
+                View Resources
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 } 
