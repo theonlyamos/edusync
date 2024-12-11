@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth';
 export async function GET(req: Request) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'teacher') {
+        if (!session) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
@@ -26,6 +26,11 @@ export async function GET(req: Request) {
         }
         if (type) {
             query.type = type;
+        }
+
+        // For teachers, only return content they created
+        if (session.user.role === 'teacher') {
+            query.createdBy = session.user.id;
         }
 
         const content = await db.collection('lessonContent')

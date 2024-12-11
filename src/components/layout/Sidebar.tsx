@@ -10,7 +10,9 @@ import {
   Brain,
   MessagesSquare,
   Settings,
-  LogOut
+  LogOut,
+  Users,
+  BarChart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from 'next-auth/react';
@@ -20,6 +22,34 @@ interface SidebarLink {
   label: string;
   icon: React.ReactNode;
 }
+
+const adminLinks: SidebarLink[] = [
+  {
+    href: '/admin/dashboard',
+    label: 'Dashboard',
+    icon: <LayoutDashboard className="h-5 w-5" />
+  },
+  {
+    href: '/admin/users/teachers',
+    label: 'Teachers',
+    icon: <Users className="h-5 w-5" />
+  },
+  {
+    href: '/admin/users/students',
+    label: 'Students',
+    icon: <Users className="h-5 w-5" />
+  },
+  {
+    href: '/admin/users/admins',
+    label: 'Admins',
+    icon: <Users className="h-5 w-5" />
+  },
+  {
+    href: '/admin/reports',
+    label: 'Reports',
+    icon: <BarChart className="h-5 w-5" />
+  }
+];
 
 const teacherLinks: SidebarLink[] = [
   {
@@ -71,14 +101,34 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
-  const isTeacher = session?.user?.role === 'teacher';
-  const links = isTeacher ? teacherLinks : studentLinks;
+
+  let links: SidebarLink[] = [];
+  let roleLabel = '';
+
+  switch (session?.user?.role) {
+    case 'admin':
+      links = adminLinks;
+      roleLabel = 'Admin Panel';
+      break;
+    case 'teacher':
+      links = teacherLinks;
+      roleLabel = 'Teacher Portal';
+      break;
+    case 'student':
+      links = studentLinks;
+      roleLabel = 'Student Portal';
+      break;
+    default:
+      links = [];
+      roleLabel = 'Portal';
+  }
 
   return (
     <div className="flex flex-col w-64 bg-card border-r h-screen">
       {/* Logo */}
       <div className="p-6">
         <h1 className="text-2xl font-bold gradient-text">EduSync</h1>
+        <p className="text-sm text-muted-foreground mt-1">{roleLabel}</p>
       </div>
 
       {/* Navigation Links */}

@@ -22,7 +22,15 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        if (!process.env.OPENAI_API_KEY) {
+            return new NextResponse('OpenAI API key not configured', { status: 500 });
+        }
+
         const { title, subject, gradeLevel, contentType, topic } = await req.json();
+
+        if (!contentType || !topic || !subject || !gradeLevel) {
+            return new NextResponse('Missing required fields', { status: 400 });
+        }
 
         let systemPrompt = "You are an experienced teacher and educational content creator. ";
         let userPrompt = "";
@@ -98,7 +106,7 @@ Format the response as a JSON object with the following structure:
 {
   "title": string,
   "description": string,
-  "mainIdeas": string[],
+  "mainPoints": string[],
   "topics": Array<{
     "id": string,
     "title": string,
@@ -106,12 +114,7 @@ Format the response as a JSON object with the following structure:
     "keyPoints": string[],
     "relatedConcepts": string[]
   }>,
-  "conclusion": string,
-  "furtherReading": Array<{
-    "title": string,
-    "url": string,
-    "description": string
-  }>
+  "conclusion": string
 }`;
                 break;
 
@@ -119,69 +122,82 @@ Format the response as a JSON object with the following structure:
                 return new NextResponse('Invalid content type', { status: 400 });
         }
 
-        const completion = await openai.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: systemPrompt
-                },
-                {
-                    role: "user",
-                    content: userPrompt
-                }
-            ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0.7,
-            max_tokens: 2000,
-            response_format: { type: "json_object" }
-        });
-
-        const generatedContent = completion.choices[0].message.content;
-
-        if (!generatedContent) {
-            return new NextResponse('No content generated', { status: 500 });
-        }
-
-        // Parse and validate the JSON structure
-        let parsedContent;
         try {
-            parsedContent = JSON.parse(generatedContent);
+            const completion = await openai.chat.completions.create({
+                messages: [
+                    {
+                        role: "system",
+                        content: systemPrompt
+                    },
+                    {
+                        role: "user",
+                        content: userPrompt
+                    }
+                ],
+                model: "llama-3.3-70b-versatile",
+                temperature: 0.7,
+                max_tokens: 2000,
+                response_format: { type: "json_object" }
+            });
 
-            // Add UUIDs to items that need them
-            switch (contentType) {
-                case 'quiz':
-                    parsedContent.questions = parsedContent.questions.map((q: any) => ({
-                        ...q,
-                        id: uuidv4()
-                    }));
-                    break;
-                case 'worksheet':
-                    parsedContent.problems = parsedContent.problems.map((p: any) => ({
-                        ...p,
-                        id: uuidv4()
-                    }));
-                    break;
-                case 'explanation':
-                    parsedContent.sections = parsedContent.sections.map((s: any) => ({
-                        ...s,
-                        id: uuidv4()
-                    }));
-                    break;
-                case 'summary':
-                    parsedContent.topics = parsedContent.topics.map((t: any) => ({
-                        ...t,
-                        id: uuidv4()
-                    }));
-                    break;
+            const generatedContent = completion.choices[0].message.content;
+
+            if (!generatedContent) {
+                return new NextResponse('No content generated from AI', { status: 500 });
             }
-        } catch (error) {
-            console.error('Invalid JSON format received:', error);
-            return new NextResponse('Invalid content format received', { status: 500 });
-        }
 
-        return NextResponse.json(parsedContent);
-    } catch (error) {
+            // Parse and validate the JSON structure
+            let parsedContent;
+            try {
+                parsedContent = JSON.parse(generatedContent);
+
+                // Add UUIDs to items that need them
+                switch (contentType) {
+                    case 'quiz':
+                        parsedContent.questions = parsedContent.questions.map((q: any) => ({
+                            ...q,
+                            id: uuidv4()
+                        }));
+                        break;
+                    case 'worksheet':
+                        parsedContent.problems = parsedContent.problems.map((p: any) => ({
+                            ...p,
+                            id: uuidv4()
+                        }));
+                        break;
+                    case 'explanation':
+                        parsedContent.sections = parsedContent.sections.map((s: any) => ({
+                            ...s,
+                            id: uuidv4()
+                        }));
+                        break;
+                    case 'summary':
+                        if (parsedContent.topics) {
+                            parsedContent.topics = parsedContent.topics.map((t: any) => ({
+                                ...t,
+                                id: uuidv4()
+                            }));
+                        }
+                        break;
+                }
+            } catch (error) {
+                console.error('Invalid JSON format received:', error, generatedContent);
+                return new NextResponse('Invalid content format received from AI', { status: 500 });
+            }
+
+            return NextResponse.json(parsedContent);
+        } catch (error: any) {
+            console.error('OpenAI API error:', error);
+            return new NextResponse(
+                `AI generation error: ${error.message || 'Unknown error'}`,
+                { status: 500 }
+            );
+        }
+    } catch (error: any) {
         console.error('Error generating content:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        return new NextResponse(
+            `Server error: ${error.message || 'Unknown error'}`,
+            { status: 500 }
+        );
     }
 } 

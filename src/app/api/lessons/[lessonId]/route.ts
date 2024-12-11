@@ -12,16 +12,20 @@ export async function GET(
 
     try {
         const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'teacher') {
+        if (!session) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
         const client = await connectToDatabase();
         const db = client.db();
 
-        const lesson = await db.collection('lessons').findOne({
-            _id: new ObjectId(lessonId)
-        });
+        // For teachers, return their own lessons
+        // For students, return any lesson (for now, until we implement lesson assignment)
+        const query = session.user.role === 'teacher'
+            ? { _id: new ObjectId(lessonId), teacherId: session.user.id }
+            : { _id: new ObjectId(lessonId) };
+
+        const lesson = await db.collection('lessons').findOne(query);
 
         if (!lesson) {
             return new NextResponse('Lesson not found', { status: 404 });

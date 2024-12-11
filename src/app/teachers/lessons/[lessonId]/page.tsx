@@ -321,20 +321,18 @@ export default function LessonPage() {
                         </div>
 
                         {isGenerating && (
-                            <Dialog open={isGenerating} onOpenChange={setIsGenerating}>
-                                <DialogContent className="max-w-3xl">
-                                    <ContentGenerationForm
-                                        lessonId={params.lessonId as string}
-                                        lessonTitle={lesson.title}
-                                        subject={lesson.subject}
-                                        gradeLevel={lesson.gradeLevel}
-                                        onContentGenerated={(content) => {
-                                            setIsGenerating(false);
-                                            fetchContents();
-                                        }}
-                                    />
-                                </DialogContent>
-                            </Dialog>
+                            <ContentGenerationForm
+                                lessonId={params.lessonId as string}
+                                lessonTitle={lesson.title}
+                                subject={lesson.subject}
+                                gradeLevel={lesson.gradeLevel}
+                                onContentGenerated={(content) => {
+                                    setIsGenerating(false);
+                                    fetchContents();
+                                }}
+                                onClose={() => setIsGenerating(false)}
+                                open={isGenerating}
+                            />
                         )}
                     </TabsContent>
 

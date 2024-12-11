@@ -16,16 +16,34 @@ async function seed() {
         // Create test users
         const testUsers = [
             {
+                name: 'Admin User',
+                email: 'admin@test.com',
+                password: await hash('admin123', 12),
+                role: 'admin',
+                status: 'active',
+                createdAt: new Date(),
+                updatedAt: new Date()
+            },
+            {
                 name: 'Test Teacher',
                 email: 'teacher@test.com',
                 password: await hash('teacher123', 12),
                 role: 'teacher',
+                status: 'active',
+                level: 'jhs 1',
+                subjects: ['Mathematics', 'Science'],
+                createdAt: new Date(),
+                updatedAt: new Date()
             },
             {
                 name: 'Test Student',
                 email: 'student@test.com',
                 password: await hash('student123', 12),
                 role: 'student',
+                status: 'active',
+                level: 'jhs 1',
+                createdAt: new Date(),
+                updatedAt: new Date()
             },
         ];
 
@@ -34,6 +52,7 @@ async function seed() {
 
         console.log('Database seeded successfully!');
         console.log('Test Users:');
+        console.log('Admin - Email: admin@test.com, Password: admin123');
         console.log('Teacher - Email: teacher@test.com, Password: teacher123');
         console.log('Student - Email: student@test.com, Password: student123');
 

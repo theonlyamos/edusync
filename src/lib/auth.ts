@@ -61,7 +61,23 @@ export const authOptions: NextAuthOptions = {
         }
     },
     pages: {
-        signIn: '/login'
+        signIn: '/login',
+        error: '/login'
+    },
+    events: {
+        async signIn({ user }) {
+            const client = await connectToDatabase();
+            const db = client.db();
+            await db.collection('users').updateOne(
+                { _id: user.id },
+                {
+                    $set: {
+                        lastLogin: new Date(),
+                        lastActivity: new Date()
+                    }
+                }
+            );
+        }
     },
     secret: process.env.NEXTAUTH_SECRET
 }; 

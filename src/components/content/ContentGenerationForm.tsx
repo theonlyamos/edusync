@@ -10,6 +10,13 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -18,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ContentGenerationFormProps {
   lessonId: string;
@@ -26,6 +34,7 @@ interface ContentGenerationFormProps {
   gradeLevel: string;
   onContentGenerated: (content: any) => void;
   onClose: () => void;
+  open: boolean;
 }
 
 export function ContentGenerationForm({
@@ -34,18 +43,21 @@ export function ContentGenerationForm({
   subject,
   gradeLevel,
   onContentGenerated,
-  onClose
+  onClose,
+  open
 }: ContentGenerationFormProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [contentType, setContentType] = useState<string>('');
   const [topic, setTopic] = useState('');
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsGenerating(true);
 
     try {
-      const response = await fetch('/api/content/generate', {
+      // First, generate the content
+      const generateResponse = await fetch('/api/content/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,37 +72,58 @@ export function ContentGenerationForm({
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate content');
+      if (!generateResponse.ok) {
+        const errorData = await generateResponse.text();
+        throw new Error(errorData || 'Failed to generate content');
       }
 
-      const generatedContent = await response.json();
+      const generatedContent = await generateResponse.json();
       
-      // Structure the content for saving with proper typing
-      const contentToSave = {
-        lessonId,
-        type: contentType as 'quiz' | 'worksheet' | 'explanation' | 'summary',
-        content: generatedContent,
-        title: `${contentType.charAt(0).toUpperCase() + contentType.slice(1)} - ${topic}`
-      };
+      // Then, save the content
+      const saveResponse = await fetch('/api/content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lessonId,
+          type: contentType,
+          content: generatedContent
+        }),
+      });
 
-      onContentGenerated(contentToSave);
+      if (!saveResponse.ok) {
+        throw new Error('Failed to save content');
+      }
+
+      const savedContent = await saveResponse.json();
+      onContentGenerated(savedContent);
+      toast({
+        title: 'Success',
+        description: 'Content generated and saved successfully',
+      });
       onClose();
     } catch (error) {
       console.error('Error generating content:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to generate content',
+        variant: 'destructive',
+      });
+    } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <Card className="w-[500px]">
-      <CardHeader>
-        <CardTitle>Generate Content</CardTitle>
-        <CardDescription>
-          Create content for lesson: {lessonTitle}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Generate Content</DialogTitle>
+          <DialogDescription>
+            Create content for lesson: {lessonTitle}
+          </DialogDescription>
+        </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="contentType">Content Type</Label>
@@ -137,7 +170,7 @@ export function ContentGenerationForm({
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 } 

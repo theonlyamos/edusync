@@ -1,15 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SummaryContent } from '@/components/content/types';
 import type { SummaryContentType } from '@/components/content/types';
+import { useToast } from '@/components/ui/use-toast';
+
+interface SummaryWithId extends SummaryContentType {
+  _id: string;
+  lessonId: string;
+}
 
 export default function SummaryPage() {
+  const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
-  const [summaries, setSummaries] = useState<SummaryContentType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [summaries, setSummaries] = useState<SummaryWithId[]>([]);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchSummaries();
+  }, []);
+
+  const fetchSummaries = async () => {
+    try {
+      const response = await fetch('/api/content?type=summary');
+      if (!response.ok) throw new Error('Failed to fetch summaries');
+      const data = await response.json();
+      setSummaries(data.map((item: any) => ({
+        ...item.content,
+        _id: item._id,
+        lessonId: item.lessonId
+      })));
+    } catch (error) {
+      console.error('Error fetching summaries:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch summaries',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleCreateSummary = async () => {
     setIsCreating(true);
@@ -34,12 +69,34 @@ export default function SummaryPage() {
 
       const summary = await response.json();
       setSummaries(prev => [...prev, summary]);
+      toast({
+        title: 'Success',
+        description: 'Summary created successfully',
+      });
     } catch (error) {
       console.error('Error creating summary:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create summary',
+        variant: 'destructive',
+      });
     } finally {
       setIsCreating(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold">Summaries</h1>
+          </div>
+          <p>Loading summaries...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -52,8 +109,12 @@ export default function SummaryPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {summaries.map((summary, index) => (
-            <Card key={index}>
+          {summaries.map((summary) => (
+            <Card 
+              key={summary._id}
+              className="cursor-pointer hover:shadow-lg transition-all duration-200"
+              onClick={() => router.push(`/teachers/lessons/${summary.lessonId}/content/${summary._id}`)}
+            >
               <CardHeader>
                 <CardTitle>{summary.title}</CardTitle>
               </CardHeader>
@@ -62,32 +123,12 @@ export default function SummaryPage() {
                   {summary.description}
                 </p>
                 <p className="text-sm">
-                  {summary.mainIdeas.length} main ideas • {summary.topics.length} topics
+                  {summary.mainPoints.length} main points
                 </p>
-                <div className="mt-4 space-x-2">
-                  <Button variant="outline" size="sm">
-                    Preview
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Edit
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    Share
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           ))}
         </div>
-
-        {summaries.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Preview</h2>
-            <SummaryContent 
-              content={summaries[summaries.length - 1]} 
-            />
-          </div>
-        )}
       </div>
     </DashboardLayout>
   );
