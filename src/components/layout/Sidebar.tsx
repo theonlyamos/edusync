@@ -12,7 +12,12 @@ import {
   Settings,
   LogOut,
   Users,
-  BarChart
+  BarChart,
+  Calendar,
+  BookUser,
+  LibraryBig,
+  UsersRound,
+  GraduationCap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from 'next-auth/react';
@@ -32,17 +37,22 @@ const adminLinks: SidebarLink[] = [
   {
     href: '/admin/users/teachers',
     label: 'Teachers',
-    icon: <Users className="h-5 w-5" />
+    icon: <GraduationCap className="h-5 w-5" />
   },
   {
     href: '/admin/users/students',
     label: 'Students',
-    icon: <Users className="h-5 w-5" />
+    icon: <BookUser className="h-5 w-5" />
   },
   {
     href: '/admin/users/admins',
     label: 'Admins',
-    icon: <Users className="h-5 w-5" />
+    icon: <UsersRound className="h-5 w-5" />
+  },
+  {
+    href: '/admin/grades',
+    label: 'Grades',
+    icon: <LibraryBig className="h-5 w-5" />
   },
   {
     href: '/admin/reports',
@@ -71,6 +81,11 @@ const teacherLinks: SidebarLink[] = [
     href: '/teachers/resources',
     label: 'Resources',
     icon: <Library className="h-5 w-5" />
+  },
+  {
+    href: '/teachers/timetable',
+    label: 'Time Table',
+    icon: <Calendar className="h-5 w-5" />
   }
 ];
 
@@ -81,8 +96,13 @@ const studentLinks: SidebarLink[] = [
     icon: <LayoutDashboard className="h-5 w-5" />
   },
   {
+    href: '/students/timetable',
+    label: 'Time Table',
+    icon: <Calendar className="h-5 w-5" />
+  },
+  {
     href: '/students/lessons',
-    label: 'My Lessons',
+    label: 'Lessons',
     icon: <BookOpen className="h-5 w-5" />
   },
   {
