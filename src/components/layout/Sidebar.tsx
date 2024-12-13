@@ -17,7 +17,8 @@ import {
   BookUser,
   LibraryBig,
   UsersRound,
-  GraduationCap
+  GraduationCap,
+  School
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from 'next-auth/react';
@@ -53,6 +54,11 @@ const adminLinks: SidebarLink[] = [
     href: '/admin/grades',
     label: 'Grades',
     icon: <LibraryBig className="h-5 w-5" />
+  },
+  {
+    href: '/admin/timetables',
+    label: 'Timetables',
+    icon: <Calendar className="h-5 w-5" />
   },
   {
     href: '/admin/reports',

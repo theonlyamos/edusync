@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Users, GraduationCap, BookOpen, Calendar, Book, BookA } from 'lucide-react';
+import { ArrowLeft, Users, GraduationCap, BookOpen, Calendar, Book, BookA, Plus, X, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -90,9 +90,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
   const [timeTable, setTimeTable] = useState<TimeTable>({});
   const [editMode, setEditMode] = useState(false);
   const [newPeriodId, setNewPeriodId] = useState<string | null>(null);
-  const [editingPeriod, setEditingPeriod] = useState<{ id: string, startTime: string, endTime: string } | null>(null);
+  const [editingPeriod, setEditingPeriod] = useState<string | null>(null);
   const [availableTeachers, setAvailableTeachers] = useState<User[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [editingCell, setEditingCell] = useState<{ day: string; periodId: string } | null>(null);
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
@@ -146,35 +147,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     }
   };
 
-  const handleTimeTableChange = (day: string, period: string, field: 'subject' | 'teacherId', value: string) => {
-    setTimeTable(prev => ({
-      ...prev,
-      [day]: {
-        ...prev[day],
-        [period]: {
-          ...prev[day]?.[period],
-          [field]: value
-        }
-      }
-    }));
-  };
-
-  const handleAddPeriod = () => {
-    const tempId = uuidv4();
-    setPeriods(prev => [...prev, { id: tempId, startTime: '', endTime: '' }]);
-  };
-
-  const handlePeriodChange = (id: string, field: 'startTime' | 'endTime', value: string) => {
-    setPeriods(prev => prev.map(p => 
-      p.id === id ? { ...p, [field]: value } : p
-    ));
-  };
-
-  const handleDeletePeriod = (id: string) => {
-    setPeriods(prev => prev.filter(p => p.id !== id));
-  };
-
-  const saveTimeTable = async () => {
+  const updateTimeTableCell = async (day: string, periodId: string, subject: string, teacherId: string) => {
     try {
       const response = await fetch(`/api/admin/grades/${level}/timetable`, {
         method: 'PUT',
@@ -182,22 +155,106 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          timeTable,
-          periods 
+          day,
+          periodId,
+          subject,
+          teacherId
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to save timetable');
+      if (!response.ok) throw new Error('Failed to update timetable');
 
+      const updatedSchedule = await response.json();
+      setTimeTable(updatedSchedule);
       toast({
         title: 'Success',
-        description: 'Timetable saved successfully',
+        description: 'Timetable updated successfully',
       });
-      setEditMode(false);
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to save timetable',
+        description: 'Failed to update timetable',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const addPeriod = async () => {
+    try {
+      const response = await fetch(`/api/admin/grades/${level}/periods`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startTime: '08:00',
+          endTime: '09:00'
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to add period');
+      
+      const newPeriod = await response.json();
+      setPeriods([...periods, newPeriod]);
+      toast({
+        title: 'Success',
+        description: 'Period added successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add period',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const updatePeriod = async (periodId: string, startTime: string, endTime: string) => {
+    try {
+      const response = await fetch(`/api/admin/grades/${level}/periods/${periodId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ startTime, endTime }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update period');
+
+      setPeriods(periods.map(p => 
+        p.id === periodId ? { ...p, startTime, endTime } : p
+      ));
+      setEditingPeriod(null);
+      toast({
+        title: 'Success',
+        description: 'Period updated successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update period',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const deletePeriod = async (periodId: string) => {
+    try {
+      const response = await fetch(`/api/admin/grades/${level}/periods/${periodId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete period');
+
+      setPeriods(periods.filter(p => p.id !== periodId));
+      toast({
+        title: 'Success',
+        description: 'Period deleted successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete period',
         variant: 'destructive',
       });
     }
@@ -410,23 +467,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                 <span>Class Time Table</span>
               </CardTitle>
               <div className="flex gap-2">
-                {editMode ? (
-                  <>
-                    <Button variant="outline" onClick={() => setEditMode(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={saveTimeTable}>
-                      Save Changes
-                    </Button>
-                    <Button onClick={handleAddPeriod}>
-                      Add Period
-                    </Button>
-                  </>
-                ) : (
-                  <Button onClick={() => setEditMode(true)}>
-                    Edit Time Table
-                  </Button>
-                )}
+                <Button onClick={addPeriod} className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Add Period
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -438,49 +482,83 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                       {days.map((day) => (
                         <TableHead key={day}>{day}</TableHead>
                       ))}
-                      {editMode && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {periods.map((period) => (
                       <TableRow key={period.id}>
                         <TableCell className="font-medium whitespace-nowrap">
-                          {editMode ? (
-                            <div className="grid grid-cols-2 gap-2">
+                          {editingPeriod === period.id ? (
+                            <div className="flex items-center gap-2">
                               <Input
                                 type="time"
-                                value={period.startTime}
-                                onChange={(e) => handlePeriodChange(period.id, 'startTime', e.target.value)}
+                                defaultValue={period.startTime}
+                                className="w-32"
+                                onChange={(e) => {
+                                  const startTime = e.target.value;
+                                  const endTimeInput = e.target.parentElement?.querySelector('input[type="time"]:last-child') as HTMLInputElement;
+                                  if (endTimeInput && endTimeInput.value) {
+                                    updatePeriod(period.id, startTime, endTimeInput.value);
+                                  }
+                                }}
                               />
+                              <span>-</span>
                               <Input
                                 type="time"
-                                value={period.endTime}
-                                onChange={(e) => handlePeriodChange(period.id, 'endTime', e.target.value)}
+                                defaultValue={period.endTime}
+                                className="w-32"
+                                onChange={(e) => {
+                                  const endTime = e.target.value;
+                                  const startTimeInput = e.target.parentElement?.querySelector('input[type="time"]:first-child') as HTMLInputElement;
+                                  if (startTimeInput && startTimeInput.value) {
+                                    updatePeriod(period.id, startTimeInput.value, endTime);
+                                  }
+                                }}
                               />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingPeriod(null)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
                             </div>
                           ) : (
-                            <div className="text-sm font-medium">
-                              {period.startTime && period.endTime ? (
-                                `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                              ) : (
-                                'Time not set'
-                              )}
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium" onClick={() => setEditingPeriod(period.id)}>
+                                {period.startTime && period.endTime ? (
+                                  `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                ) : (
+                                  'Click to set time'
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => deletePeriod(period.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
                             </div>
                           )}
                         </TableCell>
                         {days.map((day) => (
                           <TableCell key={`${day}-${period.id}`} className="min-w-[200px]">
-                            {editMode ? (
+                            {editingCell?.day === day && editingCell?.periodId === period.id ? (
                               <div className="space-y-2">
                                 <Select
-                                  value={timeTable[day]?.[period.id]?.subject || ''}
-                                  onValueChange={(value) => handleTimeTableChange(day, period.id, 'subject', value)}
+                                  defaultValue={timeTable[day]?.[period.id]?.subject || 'none'}
+                                  onValueChange={(subject) => {
+                                    const teacherId = timeTable[day]?.[period.id]?.teacherId || 'none';
+                                    updateTimeTableCell(day, period.id, subject === 'none' ? '' : subject, teacherId === 'none' ? '' : teacherId);
+                                  }}
                                 >
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Select Subject" />
+                                    <SelectValue placeholder="Select subject" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {SUBJECTS.map((subject) => (
+                                    <SelectItem value="none">No Subject</SelectItem>
+                                    {SUBJECTS.map(subject => (
                                       <SelectItem key={subject} value={subject}>
                                         {subject}
                                       </SelectItem>
@@ -488,50 +566,53 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                                   </SelectContent>
                                 </Select>
                                 <Select
-                                  value={timeTable[day]?.[period.id]?.teacherId || ''}
-                                  onValueChange={(value) => handleTimeTableChange(day, period.id, 'teacherId', value)}
+                                  defaultValue={timeTable[day]?.[period.id]?.teacherId || 'none'}
+                                  onValueChange={(teacherId) => {
+                                    const subject = timeTable[day]?.[period.id]?.subject || 'none';
+                                    updateTimeTableCell(day, period.id, subject === 'none' ? '' : subject, teacherId === 'none' ? '' : teacherId);
+                                  }}
                                 >
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Select Teacher" />
+                                    <SelectValue placeholder="Select teacher" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {gradeDetails.teachers.map((teacher) => (
+                                    <SelectItem value="none">No Teacher</SelectItem>
+                                    {gradeDetails.teachers.map(teacher => (
                                       <SelectItem key={teacher._id} value={teacher._id}>
                                         {teacher.name}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingCell(null)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
                               </div>
                             ) : (
-                              <div>
+                              <div
+                                className="space-y-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                                onClick={() => setEditingCell({ day, periodId: period.id })}
+                              >
                                 {timeTable[day]?.[period.id] && (
-                                  <div className="space-y-1">
+                                  <>
                                     <div className="flex items-center gap-1 text-sm">
                                       <BookA className="h-4 w-4" />
-                                      <span className="font-medium">{timeTable[day][period.id].subject}</span>
+                                      <span className="font-medium">{timeTable[day][period.id].subject || 'No subject'}</span>
                                     </div>
                                     <div className="flex items-center gap-1 text-primary text-sm">
                                       <GraduationCap className="h-4 w-4" />
                                       {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name || 'No teacher assigned'}
                                     </div>
-                                  </div>
+                                  </>
                                 )}
                               </div>
                             )}
                           </TableCell>
                         ))}
-                        {editMode && (
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeletePeriod(period.id)}
-                            >
-                              Delete
-                            </Button>
-                          </TableCell>
-                        )}
                       </TableRow>
                     ))}
                   </TableBody>

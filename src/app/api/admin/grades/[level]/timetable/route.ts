@@ -1,7 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
+import { connectToDatabase } from '@/lib/db';
+
+export async function GET(
+    request: Request,
+    { params }: { params: { level: string } }
+) {
+    try {
+        const { level } = await params;
+        const decodedLevel = decodeURIComponent(level);
+        const client = await connectToDatabase();
+        const db = client.db();
+
+        const timetable = await db.collection('timetables').findOne({ level: decodedLevel });
+        const schedule = timetable?.schedule || {};
+
+        return NextResponse.json(schedule);
+    } catch (error) {
+        console.error('[TIMETABLE_GET]', error);
+        return new NextResponse('Internal Error', { status: 500 });
+    }
+}
 
 export async function PUT(
     request: Request,
@@ -13,64 +33,59 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { timeTable, periods } = await request.json();
         const { level } = await params;
         const decodedLevel = decodeURIComponent(level);
+        const { day, periodId, subject, teacherId } = await request.json();
+
+        if (!day || !periodId) {
+            return new NextResponse('Missing required fields', { status: 400 });
+        }
 
         const client = await connectToDatabase();
         const db = client.db();
 
-        // Update or create the timetable with periods
+        // First, ensure the document exists with an empty schedule if it doesn't exist
         await db.collection('timetables').updateOne(
             { level: decodedLevel },
             {
-                $set: {
-                    schedule: timeTable,
-                    periods: periods,
-                    updatedAt: new Date()
-                },
                 $setOnInsert: {
-                    level: decodedLevel,
-                    createdAt: new Date()
+                    schedule: {},
+                    periods: []
                 }
             },
             { upsert: true }
         );
 
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('Error updating timetable:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
-    }
-}
-
-export async function GET(
-    request: Request,
-    { params }: { params: { level: string } }
-) {
-    try {
-        const session = await getServerSession(authOptions);
-        if (!session) {
-            return new NextResponse('Unauthorized', { status: 401 });
+        // If both subject and teacherId are empty, remove the entry
+        if (!subject && !teacherId) {
+            await db.collection('timetables').updateOne(
+                { level: decodedLevel },
+                {
+                    $unset: {
+                        [`schedule.${day}.${periodId}`]: ""
+                    }
+                }
+            );
+        } else {
+            // Update or create the entry
+            await db.collection('timetables').updateOne(
+                { level: decodedLevel },
+                {
+                    $set: {
+                        [`schedule.${day}.${periodId}`]: {
+                            subject: subject || '',
+                            teacherId: teacherId || ''
+                        }
+                    }
+                }
+            );
         }
 
-        const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Get the timetable for this grade
-        const timetable = await db.collection('timetables').findOne({
-            level: decodedLevel
-        });
-
-        return NextResponse.json({
-            timeTable: timetable?.schedule || {},
-            periods: timetable?.periods || []
-        });
+        // Get the updated timetable
+        const updatedTimetable = await db.collection('timetables').findOne({ level: decodedLevel });
+        return NextResponse.json(updatedTimetable?.schedule || {});
     } catch (error) {
-        console.error('Error fetching timetable:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('[TIMETABLE_PUT]', error);
+        return new NextResponse('Internal Error', { status: 500 });
     }
 } 
