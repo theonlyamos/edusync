@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { v4 as uuidv4 } from 'uuid';
+import { TimeTableView } from '@/components/timetable/TimeTableView';
 
 interface User {
   _id: string;
@@ -461,164 +462,18 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
 
         <TabsContent value="timetable">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-orange-500" />
-                <span>Class Time Table</span>
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button onClick={addPeriod} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Period
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[200px]">Time</TableHead>
-                      {days.map((day) => (
-                        <TableHead key={day}>{day}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {periods.map((period) => (
-                      <TableRow key={period.id}>
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {editingPeriod === period.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="time"
-                                defaultValue={period.startTime}
-                                className="w-32"
-                                onChange={(e) => {
-                                  const startTime = e.target.value;
-                                  const endTimeInput = e.target.parentElement?.querySelector('input[type="time"]:last-child') as HTMLInputElement;
-                                  if (endTimeInput && endTimeInput.value) {
-                                    updatePeriod(period.id, startTime, endTimeInput.value);
-                                  }
-                                }}
-                              />
-                              <span>-</span>
-                              <Input
-                                type="time"
-                                defaultValue={period.endTime}
-                                className="w-32"
-                                onChange={(e) => {
-                                  const endTime = e.target.value;
-                                  const startTimeInput = e.target.parentElement?.querySelector('input[type="time"]:first-child') as HTMLInputElement;
-                                  if (startTimeInput && startTimeInput.value) {
-                                    updatePeriod(period.id, startTimeInput.value, endTime);
-                                  }
-                                }}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingPeriod(null)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between">
-                              <div className="text-sm font-medium" onClick={() => setEditingPeriod(period.id)}>
-                                {period.startTime && period.endTime ? (
-                                  `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                ) : (
-                                  'Click to set time'
-                                )}
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => deletePeriod(period.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                        {days.map((day) => (
-                          <TableCell key={`${day}-${period.id}`} className="min-w-[200px]">
-                            {editingCell?.day === day && editingCell?.periodId === period.id ? (
-                              <div className="space-y-2">
-                                <Select
-                                  defaultValue={timeTable[day]?.[period.id]?.subject || 'none'}
-                                  onValueChange={(subject) => {
-                                    const teacherId = timeTable[day]?.[period.id]?.teacherId || 'none';
-                                    updateTimeTableCell(day, period.id, subject === 'none' ? '' : subject, teacherId === 'none' ? '' : teacherId);
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select subject" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">No Subject</SelectItem>
-                                    {SUBJECTS.map(subject => (
-                                      <SelectItem key={subject} value={subject}>
-                                        {subject}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Select
-                                  defaultValue={timeTable[day]?.[period.id]?.teacherId || 'none'}
-                                  onValueChange={(teacherId) => {
-                                    const subject = timeTable[day]?.[period.id]?.subject || 'none';
-                                    updateTimeTableCell(day, period.id, subject === 'none' ? '' : subject, teacherId === 'none' ? '' : teacherId);
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select teacher" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">No Teacher</SelectItem>
-                                    {gradeDetails.teachers.map(teacher => (
-                                      <SelectItem key={teacher._id} value={teacher._id}>
-                                        {teacher.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setEditingCell(null)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div
-                                className="space-y-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                                onClick={() => setEditingCell({ day, periodId: period.id })}
-                              >
-                                {timeTable[day]?.[period.id] && (
-                                  <>
-                                    <div className="flex items-center gap-1 text-sm">
-                                      <BookA className="h-4 w-4" />
-                                      <span className="font-medium">{timeTable[day][period.id].subject || 'No subject'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1 text-primary text-sm">
-                                      <GraduationCap className="h-4 w-4" />
-                                      {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name || 'No teacher assigned'}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
+            <TimeTableView
+              timeTable={timeTable}
+              periods={periods}
+              teachers={gradeDetails.teachers}
+              lessons={gradeDetails.lessons}
+              onAddPeriod={addPeriod}
+              onUpdatePeriod={updatePeriod}
+              onDeletePeriod={deletePeriod}
+              onUpdateTimeTableCell={updateTimeTableCell}
+              title="Class Time Table"
+              subjects={SUBJECTS}
+            />
           </Card>
         </TabsContent>
       </Tabs>
