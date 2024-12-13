@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { EducationLevel } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { Input } from '@/components/ui/input';
+import { v4 as uuidv4 } from 'uuid';
 
 interface User {
   _id: string;
@@ -43,11 +45,18 @@ interface TimeTable {
   };
 }
 
+interface Period {
+  id: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface GradeDetails {
   students: User[];
   teachers: User[];
   lessons: Lesson[];
   timeTable?: TimeTable;
+  periods?: Period[];
 }
 
 interface GradeDetailsContentProps {
@@ -75,7 +84,8 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
   const [gradeDetails, setGradeDetails] = useState<GradeDetails>({
     students: [],
     teachers: [],
-    lessons: []
+    lessons: [],
+    periods: []
   });
   const [timeTable, setTimeTable] = useState<TimeTable>({
     'Monday': {},
@@ -85,9 +95,11 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     'Friday': {},
   });
   const [editMode, setEditMode] = useState(false);
+  const [newPeriodId, setNewPeriodId] = useState<string | null>(null);
+  const [editingPeriod, setEditingPeriod] = useState<{ id: string, startTime: string, endTime: string } | null>(null);
   const [availableTeachers, setAvailableTeachers] = useState<User[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
 
-  const periods = ['8:00-9:00', '9:00-10:00', '10:00-11:00', '11:30-12:30', '12:30-1:30', '2:00-3:00'];
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   useEffect(() => {
@@ -113,6 +125,12 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
       setAvailableTeachers(gradeDetails.teachers);
     }
   }, [gradeDetails.teachers]);
+
+  useEffect(() => {
+    if (gradeDetails.periods) {
+      setPeriods(gradeDetails.periods);
+    }
+  }, [gradeDetails.periods]);
 
   const fetchGradeDetails = async () => {
     try {
@@ -145,6 +163,21 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     }));
   };
 
+  const handleAddPeriod = () => {
+    const tempId = uuidv4();
+    setPeriods(prev => [...prev, { id: tempId, startTime: '', endTime: '' }]);
+  };
+
+  const handlePeriodChange = (id: string, field: 'startTime' | 'endTime', value: string) => {
+    setPeriods(prev => prev.map(p => 
+      p.id === id ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const handleDeletePeriod = (id: string) => {
+    setPeriods(prev => prev.filter(p => p.id !== id));
+  };
+
   const saveTimeTable = async () => {
     try {
       const response = await fetch(`/api/admin/grades/${level}/timetable`, {
@@ -152,7 +185,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ timeTable }),
+        body: JSON.stringify({ 
+          timeTable,
+          periods 
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to save timetable');
@@ -386,6 +422,9 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                     <Button onClick={saveTimeTable}>
                       Save Changes
                     </Button>
+                    <Button onClick={handleAddPeriod}>
+                      Add Period
+                    </Button>
                   </>
                 ) : (
                   <Button onClick={() => setEditMode(true)}>
@@ -399,25 +438,41 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Time</TableHead>
+                      <TableHead className="min-w-[200px]">Time</TableHead>
                       {days.map((day) => (
                         <TableHead key={day}>{day}</TableHead>
                       ))}
+                      {editMode && <TableHead>Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {periods.map((period) => (
-                      <TableRow key={period}>
+                      <TableRow key={period.id}>
                         <TableCell className="font-medium whitespace-nowrap">
-                          {period}
+                          {editMode ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Input
+                                type="time"
+                                value={period.startTime}
+                                onChange={(e) => handlePeriodChange(period.id, 'startTime', e.target.value)}
+                              />
+                              <Input
+                                type="time"
+                                value={period.endTime}
+                                onChange={(e) => handlePeriodChange(period.id, 'endTime', e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            `${period.startTime} - ${period.endTime}`
+                          )}
                         </TableCell>
                         {days.map((day) => (
-                          <TableCell key={`${day}-${period}`} className="min-w-[200px]">
+                          <TableCell key={`${day}-${period.id}`} className="min-w-[200px]">
                             {editMode ? (
                               <div className="space-y-2">
                                 <Select
-                                  value={timeTable[day]?.[period]?.subject || ''}
-                                  onValueChange={(value) => handleTimeTableChange(day, period, 'subject', value)}
+                                  value={timeTable[day]?.[period.id]?.subject || ''}
+                                  onValueChange={(value) => handleTimeTableChange(day, period.id, 'subject', value)}
                                 >
                                   <SelectTrigger>
                                     <SelectValue placeholder="Select Subject" />
@@ -431,8 +486,8 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                                   </SelectContent>
                                 </Select>
                                 <Select
-                                  value={timeTable[day]?.[period]?.teacherId || ''}
-                                  onValueChange={(value) => handleTimeTableChange(day, period, 'teacherId', value)}
+                                  value={timeTable[day]?.[period.id]?.teacherId || ''}
+                                  onValueChange={(value) => handleTimeTableChange(day, period.id, 'teacherId', value)}
                                 >
                                   <SelectTrigger>
                                     <SelectValue placeholder="Select Teacher" />
@@ -448,23 +503,23 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                               </div>
                             ) : (
                               <div>
-                                {timeTable[day]?.[period] && (
+                                {timeTable[day]?.[period.id] && (
                                   <div className="space-y-2">
                                     <div className="flex flex-col items-start gap-2">
                                       <div className="flex items-center gap-1 text-sm">
                                         <BookA className="h-4 w-4" />
-                                        {timeTable[day][period].subject}
+                                        {timeTable[day][period.id].subject}
                                       </div>
                                       <div className="flex items-center gap-1 text-primary text-sm">
                                         <GraduationCap className="h-4 w-4" />
-                                        {gradeDetails.teachers.find(t => t._id === timeTable[day][period].teacherId)?.name ?
-                                            <Link href={`/teachers/lessons/${gradeDetails.teachers.find(t => t._id === timeTable[day][period].teacherId)?._id}`}>
-                                                {gradeDetails.teachers.find(t => t._id === timeTable[day][period].teacherId)?.name}
-                                            </Link>
-                                            :
-                                            <span>
-                                                {'No teacher assigned'}
-                                            </span>
+                                        {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name ?
+                                          <Link href={`/teachers/lessons/${gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?._id}`}>
+                                            {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name}
+                                          </Link>
+                                          :
+                                          <span>
+                                            {'No teacher assigned'}
+                                          </span>
                                         }
                                       </div>
                                     </div>
@@ -474,6 +529,17 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                             )}
                           </TableCell>
                         ))}
+                        {editMode && (
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeletePeriod(period.id)}
+                            >
+                              Delete
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>

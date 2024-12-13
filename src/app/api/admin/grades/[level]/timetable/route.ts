@@ -13,19 +13,20 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { timeTable } = await request.json();
+        const { timeTable, periods } = await request.json();
         const { level } = await params;
         const decodedLevel = decodeURIComponent(level);
 
         const client = await connectToDatabase();
         const db = client.db();
 
-        // Update or create the timetable
+        // Update or create the timetable with periods
         await db.collection('timetables').updateOne(
             { level: decodedLevel },
             {
                 $set: {
                     schedule: timeTable,
+                    periods: periods,
                     updatedAt: new Date()
                 },
                 $setOnInsert: {
@@ -64,7 +65,10 @@ export async function GET(
             level: decodedLevel
         });
 
-        return NextResponse.json({ timeTable: timetable?.schedule || {} });
+        return NextResponse.json({
+            timeTable: timetable?.schedule || {},
+            periods: timetable?.periods || []
+        });
     } catch (error) {
         console.error('Error fetching timetable:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
