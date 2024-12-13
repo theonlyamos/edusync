@@ -3,15 +3,24 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import OpenAI from 'openai';
 import { connectToDatabase } from '@/lib/db';
+import { ObjectId } from 'mongodb';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-const getSystemPrompt = (gradeLevel: string) => `You are an AI tutor helping students learn various subjects. You are currently tutoring a student in grade ${gradeLevel}.
+const getSystemPrompt = (gradeLevel: string, lesson?: { title: string; subject: string; objectives?: string }) => {
+    let prompt = `You are an AI tutor helping students learn various subjects. You are currently tutoring a student in grade ${gradeLevel}.`;
 
-Your role is to:
+    if (lesson) {
+        prompt += `\n\nYou are specifically helping with the lesson "${lesson.title}" in the subject "${lesson.subject}".`;
+        if (lesson.objectives) {
+            prompt += `\nThe learning objectives for this lesson are:\n${lesson.objectives}`;
+        }
+    }
+
+    prompt += `\n\nYour role is to:
 1. Provide clear, concise explanations appropriate for grade ${gradeLevel} level
 2. Break down complex concepts into simpler parts
 3. Use examples that are relatable to a grade ${gradeLevel} student
@@ -20,6 +29,13 @@ Your role is to:
 6. Encourage critical thinking while keeping explanations at their level
 7. Be patient, supportive, and encouraging
 8. Use markdown formatting for better readability
+
+After each response, suggest 3-4 follow-up questions that would help deepen the student's understanding of the topic.
+Format your response as follows:
+1. Your main explanation/answer
+2. A line break
+3. "Follow-up Questions:" on a new line
+4. A numbered list of follow-up questions
 
 Remember to:
 - Keep explanations at the appropriate level for a grade ${gradeLevel} student
@@ -30,6 +46,9 @@ Remember to:
 - If a topic is too advanced for their grade level, explain why and offer to break it down or suggest prerequisite topics to learn first
 - If a topic is too basic for their grade level, acknowledge this and offer more challenging aspects of the topic`;
 
+    return prompt;
+};
+
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
@@ -37,25 +56,34 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        // Get student's grade level from the database
         const client = await connectToDatabase();
         const db = client.db();
+
+        // Get student's grade level
         const student = await db.collection('users').findOne({
-            _id: session.user.id
+            _id: new ObjectId(session.user.id)
         });
 
-        if (!student?.gradeLevel) {
+        if (!student?.level) {
             return new NextResponse('Student grade level not found', { status: 400 });
         }
 
-        const { messages } = await req.json();
+        const { messages, lessonId, chatId } = await req.json();
+
+        // If lessonId is provided, get lesson details
+        let lesson: any;
+        if (lessonId) {
+            lesson = await db.collection('lessons').findOne({
+                _id: new ObjectId(lessonId)
+            })
+        }
 
         const completion = await openai.chat.completions.create({
             model: process.env.OPENAI_MODEL as string,
             messages: [
                 {
                     role: "system",
-                    content: getSystemPrompt(student.gradeLevel)
+                    content: getSystemPrompt(student.level, lesson)
                 },
                 ...messages.map((msg: any) => ({
                     role: msg.role,
@@ -67,11 +95,54 @@ export async function POST(req: Request) {
         });
 
         const reply = completion.choices[0].message;
+        const content = reply.content || '';
+
+        // Split content into main response and follow-up questions
+        const parts = content.split(/Follow-up Questions:/i);
+        const mainResponse = parts[0].trim();
+        const followUpQuestions = parts[1]
+            ? parts[1]
+                .trim()
+                .split(/\d+\.\s+/)
+                .filter(q => q.trim())
+                .map(q => q.trim())
+            : [];
+
+        const tutorMessage = {
+            role: 'assistant',
+            content: mainResponse,
+            followUpQuestions,
+            timestamp: new Date().toISOString()
+        };
+
+        // If no chatId provided, create a new chat
+        let newChatId;
+        if (!chatId) {
+            const result = await db.collection('chats').insertOne({
+                userId: session.user.id,
+                lessonId: lessonId ? new ObjectId(lessonId) : null,
+                messages: [...messages, tutorMessage],
+                title: messages[0]?.content?.slice(0, 50) + '...',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            });
+            newChatId = result.insertedId;
+        } else {
+            // Update existing chat
+            await db.collection('chats').updateOne(
+                { _id: new ObjectId(chatId) },
+                {
+                    $set: {
+                        messages: [...messages, tutorMessage],
+                        updatedAt: new Date().toISOString()
+                    }
+                }
+            );
+        }
 
         return NextResponse.json({
-            role: 'assistant',
-            content: reply.content,
-            timestamp: new Date().toISOString()
+            message: tutorMessage,
+            chatId: newChatId || chatId
         });
     } catch (error) {
         console.error('Error in AI tutor:', error);
