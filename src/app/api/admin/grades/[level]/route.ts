@@ -2,24 +2,19 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { EDUCATION_LEVELS } from '@/lib/constants';
 
 export async function GET(
     req: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        const { level } = await params;
-
-        // Validate that the level exists
-        if (!EDUCATION_LEVELS.includes(level as any)) {
-            return new NextResponse('Invalid grade level', { status: 400 });
-        }
-
         const session = await getServerSession(authOptions);
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
+
+        const { level } = await params;
+        const decodedLevel = decodeURIComponent(level);
 
         const client = await connectToDatabase();
         const db = client.db();
@@ -28,7 +23,7 @@ export async function GET(
         const students = await db.collection('users')
             .find({
                 role: 'student',
-                level
+                level: decodedLevel
             })
             .project({
                 password: 0,
@@ -41,7 +36,7 @@ export async function GET(
         const teachers = await db.collection('users')
             .find({
                 role: 'teacher',
-                level
+                level: decodedLevel
             })
             .project({
                 password: 0,
@@ -53,14 +48,14 @@ export async function GET(
         // Get all lessons for this grade
         const lessons = await db.collection('lessons')
             .find({
-                gradeLevel: level
+                gradeLevel: decodedLevel
             })
             .sort({ createdAt: -1 })
             .toArray();
 
         // Get the timetable for this grade
-        const timeTable = await db.collection('timetables')
-            .findOne({ level });
+        const timetable = await db.collection('timetables')
+            .findOne({ level: decodedLevel });
 
         // Convert ObjectIds to strings
         const formattedData = {
@@ -76,7 +71,8 @@ export async function GET(
                 ...lesson,
                 _id: lesson._id.toString()
             })),
-            timeTable: timeTable?.schedule || {}
+            timeTable: timetable?.schedule || {},
+            periods: timetable?.periods || []
         };
 
         return NextResponse.json(formattedData);

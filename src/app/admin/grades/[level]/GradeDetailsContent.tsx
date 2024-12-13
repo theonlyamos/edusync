@@ -87,13 +87,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     lessons: [],
     periods: []
   });
-  const [timeTable, setTimeTable] = useState<TimeTable>({
-    'Monday': {},
-    'Tuesday': {},
-    'Wednesday': {},
-    'Thursday': {},
-    'Friday': {},
-  });
+  const [timeTable, setTimeTable] = useState<TimeTable>({});
   const [editMode, setEditMode] = useState(false);
   const [newPeriodId, setNewPeriodId] = useState<string | null>(null);
   const [editingPeriod, setEditingPeriod] = useState<{ id: string, startTime: string, endTime: string } | null>(null);
@@ -138,6 +132,8 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
       if (!response.ok) throw new Error('Failed to fetch grade details');
       const data = await response.json();
       setGradeDetails(data);
+      setTimeTable(data.timeTable || {});
+      setPeriods(data.periods || []);
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -463,7 +459,13 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                               />
                             </div>
                           ) : (
-                            `${period.startTime} - ${period.endTime}`
+                            <div className="text-sm font-medium">
+                              {period.startTime && period.endTime ? (
+                                `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                              ) : (
+                                'Time not set'
+                              )}
+                            </div>
                           )}
                         </TableCell>
                         {days.map((day) => (
@@ -504,24 +506,14 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                             ) : (
                               <div>
                                 {timeTable[day]?.[period.id] && (
-                                  <div className="space-y-2">
-                                    <div className="flex flex-col items-start gap-2">
-                                      <div className="flex items-center gap-1 text-sm">
-                                        <BookA className="h-4 w-4" />
-                                        {timeTable[day][period.id].subject}
-                                      </div>
-                                      <div className="flex items-center gap-1 text-primary text-sm">
-                                        <GraduationCap className="h-4 w-4" />
-                                        {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name ?
-                                          <Link href={`/teachers/lessons/${gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?._id}`}>
-                                            {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name}
-                                          </Link>
-                                          :
-                                          <span>
-                                            {'No teacher assigned'}
-                                          </span>
-                                        }
-                                      </div>
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1 text-sm">
+                                      <BookA className="h-4 w-4" />
+                                      <span className="font-medium">{timeTable[day][period.id].subject}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-primary text-sm">
+                                      <GraduationCap className="h-4 w-4" />
+                                      {gradeDetails.teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name || 'No teacher assigned'}
                                     </div>
                                   </div>
                                 )}
