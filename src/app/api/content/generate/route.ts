@@ -11,7 +11,7 @@ import type {
 } from '@/components/content/types';
 
 const openai = new OpenAI({
-    baseURL: 'https://api.groq.com/openai/v1',
+    baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -134,7 +134,7 @@ Format the response as a JSON object with the following structure:
                         content: userPrompt
                     }
                 ],
-                model: "llama-3.3-70b-versatile",
+                model: process.env.OPENAI_MODEL as string,
                 temperature: 0.7,
                 max_tokens: 2000,
                 response_format: { type: "json_object" }

@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 import { connectToDatabase } from '@/lib/db';
 
 const openai = new OpenAI({
-    baseURL: 'https://api.groq.com/openai/v1',
+    baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
         const { messages } = await req.json();
 
         const completion = await openai.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
+            model: process.env.OPENAI_MODEL as string,
             messages: [
                 {
                     role: "system",

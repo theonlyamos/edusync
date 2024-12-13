@@ -16,7 +16,7 @@ interface Question {
 }
 
 const openai = new OpenAI({
-    baseURL: 'https://api.groq.com/openai/v1',
+    baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -102,7 +102,7 @@ ${lessonId ? '6. Questions should be based on the provided lesson content' : ''}
                     content: prompt
                 }
             ],
-            model: "llama-3.3-70b-versatile",
+            model: process.env.OPENAI_MODEL as string,
             temperature: 0.7,
             response_format: { type: "json_object" },
         });

@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { authOptions } from '@/lib/auth';
 
 const openai = new OpenAI({
-    baseURL: 'https://api.groq.com/openai/v1',
+    baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -45,7 +45,7 @@ Make it engaging and appropriate for the specified grade level.`;
                     content: prompt
                 }
             ],
-            model: "llama-3.3-70b-versatile",
+            model: process.env.OPENAI_MODEL as string,
             temperature: 0.7,
             max_tokens: 8192,
         });
