@@ -3,15 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { EDUCATION_LEVELS } from '@/lib/constants';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Calendar, BookA, GraduationCap, Plus, Trash2, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { toast } from '@/components/ui/use-toast';
+import { EDUCATION_LEVELS, SUBJECTS } from '@/lib/constants';
+import { useToast } from '@/components/ui/use-toast';
+import { TimeTableView } from '@/components/timetable/TimeTableView';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 interface Period {
   id: string;
@@ -37,6 +34,12 @@ interface Teacher {
   subjects: string[];
 }
 
+interface Lesson {
+  _id: string;
+  title: string;
+  subject: string;
+}
+
 export default function TimetablesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -45,10 +48,8 @@ export default function TimetablesPage() {
   const [timeTable, setTimeTable] = useState<TimeTable>({});
   const [periods, setPeriods] = useState<Period[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [editingCell, setEditingCell] = useState<{ day: string; periodId: string } | null>(null);
-  const [editingPeriod, setEditingPeriod] = useState<string | null>(null);
-
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -73,12 +74,13 @@ export default function TimetablesPage() {
       setTimeTable(data.timeTable || {});
       setPeriods(data.periods || []);
       setTeachers(data.teachers || []);
+      setLessons(data.lessons || []);
     } catch (error) {
       console.error('Error:', error);
       toast({
-        title: "Error",
-        description: "Failed to fetch timetable data",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to fetch timetable data',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -101,15 +103,15 @@ export default function TimetablesPage() {
       const newPeriod = await response.json();
       setPeriods([...periods, newPeriod]);
       toast({
-        title: "Success",
-        description: "Period added successfully",
+        title: 'Success',
+        description: 'Period added successfully',
       });
     } catch (error) {
       console.error('Error:', error);
       toast({
-        title: "Error",
-        description: "Failed to add period",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to add period',
+        variant: 'destructive',
       });
     }
   };
@@ -127,17 +129,16 @@ export default function TimetablesPage() {
       setPeriods(periods.map(p => 
         p.id === periodId ? { ...p, startTime, endTime } : p
       ));
-      setEditingPeriod(null);
       toast({
-        title: "Success",
-        description: "Period updated successfully",
+        title: 'Success',
+        description: 'Period updated successfully',
       });
     } catch (error) {
       console.error('Error:', error);
       toast({
-        title: "Error",
-        description: "Failed to update period",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update period',
+        variant: 'destructive',
       });
     }
   };
@@ -152,52 +153,48 @@ export default function TimetablesPage() {
 
       setPeriods(periods.filter(p => p.id !== periodId));
       toast({
-        title: "Success",
-        description: "Period deleted successfully",
+        title: 'Success',
+        description: 'Period deleted successfully',
       });
     } catch (error) {
       console.error('Error:', error);
       toast({
-        title: "Error",
-        description: "Failed to delete period",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to delete period',
+        variant: 'destructive',
       });
     }
   };
 
-  const updateTimeTableCell = async (day: string, periodId: string, subject: string, teacherId: string) => {
+  const updateTimeTableCell = async (day: string, periodId: string, level: string, subject: string, teacherId: string, lessonId?: string) => {
     try {
       const response = await fetch(`/api/admin/grades/${selectedLevel}/timetable`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           day,
           periodId,
           subject,
-          teacherId
-        })
+          teacherId,
+          lessonId
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to update timetable');
 
-      setTimeTable(prev => ({
-        ...prev,
-        [day]: {
-          ...prev[day],
-          [periodId]: { subject, teacherId }
-        }
-      }));
-      setEditingCell(null);
+      const updatedSchedule = await response.json();
+      setTimeTable(updatedSchedule);
       toast({
-        title: "Success",
-        description: "Timetable updated successfully",
+        title: 'Success',
+        description: 'Timetable updated successfully',
       });
     } catch (error) {
-      console.error('Error:', error);
       toast({
-        title: "Error",
-        description: "Failed to update timetable",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to update timetable',
+        variant: 'destructive',
       });
     }
   };
@@ -218,10 +215,7 @@ export default function TimetablesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-orange-500" />
-              <span>Select Grade Level</span>
-            </CardTitle>
+            <CardTitle>Select Grade Level</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="max-w-xs">
@@ -244,156 +238,18 @@ export default function TimetablesPage() {
 
             {selectedLevel && !loading && (
               <div className="mt-6">
-                <div className="flex justify-end mb-4">
-                  <Button onClick={addPeriod} className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add Period
-                  </Button>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[200px]">Time</TableHead>
-                        {days.map((day) => (
-                          <TableHead key={day}>{day}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {periods.map((period) => (
-                        <TableRow key={period.id}>
-                          <TableCell className="font-medium whitespace-nowrap">
-                            {editingPeriod === period.id ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="time"
-                                  defaultValue={period.startTime}
-                                  className="w-32"
-                                  onChange={(e) => {
-                                    const startTime = e.target.value;
-                                    const endTimeInput = e.target.parentElement?.querySelector('input[type="time"]:last-child') as HTMLInputElement;
-                                    if (endTimeInput && endTimeInput.value) {
-                                      updatePeriod(period.id, startTime, endTimeInput.value);
-                                    }
-                                  }}
-                                />
-                                <span>-</span>
-                                <Input
-                                  type="time"
-                                  defaultValue={period.endTime}
-                                  className="w-32"
-                                  onChange={(e) => {
-                                    const endTime = e.target.value;
-                                    const startTimeInput = e.target.parentElement?.querySelector('input[type="time"]:first-child') as HTMLInputElement;
-                                    if (startTimeInput && startTimeInput.value) {
-                                      updatePeriod(period.id, startTimeInput.value, endTime);
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setEditingPeriod(null)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between">
-                                <div className="text-sm font-medium" onClick={() => setEditingPeriod(period.id)}>
-                                  {period.startTime && period.endTime ? (
-                                    `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                  ) : (
-                                    'Click to set time'
-                                  )}
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => deletePeriod(period.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </div>
-                            )}
-                          </TableCell>
-                          {days.map((day) => (
-                            <TableCell key={`${day}-${period.id}`} className="min-w-[200px]">
-                              {editingCell?.day === day && editingCell?.periodId === period.id ? (
-                                <div className="space-y-2">
-                                  <Select
-                                    defaultValue={timeTable[day]?.[period.id]?.subject || ''}
-                                    onValueChange={(subject) => {
-                                      const teacherId = timeTable[day]?.[period.id]?.teacherId || '';
-                                      updateTimeTableCell(day, period.id, subject, teacherId);
-                                    }}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select subject" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">No Subject</SelectItem>
-                                      {Array.from(new Set(teachers.flatMap(t => t.subjects))).map(subject => (
-                                        <SelectItem key={subject} value={subject}>
-                                          {subject}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Select
-                                    defaultValue={timeTable[day]?.[period.id]?.teacherId || ''}
-                                    onValueChange={(teacherId) => {
-                                      const subject = timeTable[day]?.[period.id]?.subject || '';
-                                      updateTimeTableCell(day, period.id, subject, teacherId);
-                                    }}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select teacher" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="none">No Teacher</SelectItem>
-                                      {teachers.map(teacher => (
-                                        <SelectItem key={teacher._id} value={teacher._id}>
-                                          {teacher.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setEditingCell(null)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div
-                                  className="space-y-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                                  onClick={() => setEditingCell({ day, periodId: period.id })}
-                                >
-                                  {timeTable[day]?.[period.id] && (
-                                    <>
-                                      <div className="flex items-center gap-1 text-sm">
-                                        <BookA className="h-4 w-4" />
-                                        <span className="font-medium">{timeTable[day][period.id].subject || 'No subject'}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1 text-primary text-sm">
-                                        <GraduationCap className="h-4 w-4" />
-                                        {teachers.find(t => t._id === timeTable[day][period.id].teacherId)?.name || 'No teacher assigned'}
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <TimeTableView
+                  timeTable={timeTable}
+                  periods={periods}
+                  teachers={teachers}
+                  lessons={lessons}
+                  onAddPeriod={addPeriod}
+                  onUpdatePeriod={updatePeriod}
+                  onDeletePeriod={deletePeriod}
+                  onUpdateTimeTableCell={updateTimeTableCell}
+                  title="Class Time Table"
+                  subjects={[...SUBJECTS]}
+                />
               </div>
             )}
 

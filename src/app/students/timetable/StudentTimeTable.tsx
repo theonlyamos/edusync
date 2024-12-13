@@ -14,8 +14,22 @@ import Link from 'next/link';
 
 interface TimeTableCell {
   subject: string;
-  teacher: string;
+  teacherId: string;
+  teacherName: string;
   lessonId?: string;
+  lessonTitle?: string;
+}
+
+interface TimeTable {
+  [key: string]: {
+    [key: string]: TimeTableCell;
+  };
+}
+
+interface Period {
+  id: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface Lesson {
@@ -29,10 +43,10 @@ export function StudentTimeTable() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [timeTable, setTimeTable] = useState<{ [key: string]: { [key: string]: TimeTableCell } }>({});
+  const [timeTable, setTimeTable] = useState<TimeTable>({});
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [periods, setPeriods] = useState<Period[]>([]);
 
-  const periods = ['8:00-9:00', '9:00-10:00', '10:00-11:00', '11:30-12:30', '12:30-1:30', '2:00-3:00'];
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   useEffect(() => {
@@ -54,9 +68,10 @@ export function StudentTimeTable() {
         throw new Error('Failed to fetch data');
       }
 
-      const { timeTable: fetchedTimeTable, lessons: fetchedLessons } = await timeTableRes.json();
+      const { timeTable: fetchedTimeTable, lessons: fetchedLessons, periods: fetchedPeriods } = await timeTableRes.json();
       setTimeTable(fetchedTimeTable || {});
       setLessons(fetchedLessons || []);
+      setPeriods(fetchedPeriods || []);
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -107,43 +122,43 @@ export function StudentTimeTable() {
               </TableHeader>
               <TableBody>
                 {periods.map((period) => (
-                  <TableRow key={period}>
+                  <TableRow key={period.id}>
                     <TableCell className="font-medium whitespace-nowrap">
-                      {period}
+                      <div className="text-sm font-medium">
+                        {period.startTime && period.endTime ? (
+                          `${new Date('1970-01-01T' + period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date('1970-01-01T' + period.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        ) : (
+                          'Time not set'
+                        )}
+                      </div>
                     </TableCell>
                     {days.map((day) => (
-                      <TableCell key={`${day}-${period}`} className="min-w-[200px]">
-                        {timeTable[day]?.[period] && (
-                          <div className="space-y-2">
+                      <TableCell key={`${day}-${period.id}`} className="min-w-[200px]">
+                        {timeTable[day]?.[period.id] && (
+                          <div className="space-y-2 p-2 rounded hover:bg-gray-50">
                             <div className="flex flex-col items-start justify-start gap-2">
-                                <div className="flex items-center gap-1 text-primary" title='Subject'>
-                                    <BookA className="h-4 w-4" />
-                                    <span>
-                                        {timeTable[day][period].subject}
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1 text-black" title='Teacher'>
-                                    <User className="h-4 w-4" />
-                                    <span>
-                                        {timeTable[day][period].teacher}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                              {timeTable[day][period].lessonId && (
-                                <div className="flex items-center gap-1">
-                                  <BookOpen className="h-4 w-4" />
-                                  {lessons.find(l => l._id === timeTable[day][period].lessonId)?.title ?
-                                  <Link href={`/students/lessons/${lessons.find(l => l._id === timeTable[day][period].lessonId)?._id}`}>
-                                    {lessons.find(l => l._id === timeTable[day][period].lessonId)?.title}
+                              <div className="flex items-center gap-1 text-primary" title='Subject'>
+                                <BookA className="h-4 w-4" />
+                                <span>
+                                  {timeTable[day][period.id].subject}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 text-black" title='Teacher'>
+                                <User className="h-4 w-4" />
+                                <span>
+                                  {timeTable[day][period.id].teacherName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 text-blue-600" title='Lesson'>
+                                <BookOpen className="h-4 w-4" />
+                                {timeTable[day][period.id].lessonId ? (
+                                  <Link href={`/students/lessons/${timeTable[day][period.id].lessonId}`}>
+                                    {timeTable[day][period.id].lessonTitle}
                                   </Link>
-                                  :
-                                  <span>
-                                    {'No lesson assigned'}
-                                  </span>
-                                  }
-                                </div>
-                              )}
+                                ) : (
+                                  <span className="text-gray-500">No lesson assigned</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )}

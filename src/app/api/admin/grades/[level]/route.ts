@@ -4,12 +4,12 @@ import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(
-    req: Request,
+    request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'admin') {
+        if (!session || session.user.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
@@ -19,65 +19,71 @@ export async function GET(
         const client = await connectToDatabase();
         const db = client.db();
 
-        // Get all students in this grade
+        // Get students for this grade
         const students = await db.collection('users')
             .find({
                 role: 'student',
                 level: decodedLevel
             })
-            .project({
-                password: 0,
-                role: 0
-            })
-            .sort({ name: 1 })
             .toArray();
 
-        // Get all teachers assigned to this grade
+        // Get teachers for this grade
         const teachers = await db.collection('users')
             .find({
-                role: 'teacher',
-                level: decodedLevel
+                role: 'teacher'
             })
-            .project({
-                password: 0,
-                role: 0
-            })
-            .sort({ name: 1 })
             .toArray();
 
-        // Get all lessons for this grade
+        // Get lessons for this grade
         const lessons = await db.collection('lessons')
             .find({
                 gradeLevel: decodedLevel
             })
-            .sort({ createdAt: -1 })
             .toArray();
 
-        // Get the timetable for this grade
+        // Get timetable for this grade
         const timetable = await db.collection('timetables')
-            .findOne({ level: decodedLevel });
+            .findOne({
+                level: decodedLevel
+            });
 
-        // Convert ObjectIds to strings
-        const formattedData = {
+        // Add lesson titles to the timetable
+        const timeTableWithDetails = { ...timetable?.schedule };
+        if (timeTableWithDetails) {
+            Object.entries(timeTableWithDetails).forEach(([day, periods]: [string, any]) => {
+                Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
+                    const lesson = lessons.find(l => l._id.toString() === data.lessonId);
+                    if (lesson) {
+                        timeTableWithDetails[day][periodId] = {
+                            ...data,
+                            lessonTitle: lesson.title
+                        };
+                    }
+                });
+            });
+        }
+
+        return NextResponse.json({
             students: students.map(student => ({
                 ...student,
-                _id: student._id.toString()
+                _id: student._id.toString(),
+                createdAt: student.createdAt?.toISOString()
             })),
             teachers: teachers.map(teacher => ({
                 ...teacher,
-                _id: teacher._id.toString()
+                _id: teacher._id.toString(),
+                createdAt: teacher.createdAt?.toISOString()
             })),
             lessons: lessons.map(lesson => ({
                 ...lesson,
-                _id: lesson._id.toString()
+                _id: lesson._id.toString(),
+                createdAt: lesson.createdAt?.toISOString()
             })),
-            timeTable: timetable?.schedule || {},
+            timeTable: timeTableWithDetails,
             periods: timetable?.periods || []
-        };
-
-        return NextResponse.json(formattedData);
+        });
     } catch (error) {
-        console.error('Error fetching grade details:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('[GRADE_GET]', error);
+        return new NextResponse('Internal Error', { status: 500 });
     }
 } 

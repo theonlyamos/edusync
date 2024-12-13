@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
 
 export async function GET(request: Request) {
     try {
@@ -19,25 +18,40 @@ export async function GET(request: Request) {
             .find({})
             .toArray();
 
-        // Filter and collect all periods where this teacher is assigned
+        // Get all periods from all grade levels
+        const allPeriods: any[] = [];
         const filteredTimeTable: any = {};
+
+        // Filter and collect all periods where this teacher is assigned
         timetables.forEach(timetable => {
             if (timetable?.schedule) {
                 Object.entries(timetable.schedule).forEach(([day, periods]) => {
-                    Object.entries(periods).forEach(([period, data]: [string, any]) => {
+                    Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
                         if (data.teacherId === session.user.id) {
                             if (!filteredTimeTable[day]) {
                                 filteredTimeTable[day] = {};
                             }
-                            filteredTimeTable[day][period] = {
+                            filteredTimeTable[day][periodId] = {
                                 ...data,
-                                level: timetable.level // Include the grade level
+                                level: timetable.level
                             };
+
+                            // Add period to allPeriods if not already included
+                            const periodData = timetable.periods?.find((p: any) => p.id === periodId);
+                            if (periodData && !allPeriods.some(p => p.id === periodId)) {
+                                allPeriods.push({
+                                    ...periodData,
+                                    level: timetable.level
+                                });
+                            }
                         }
                     });
                 });
             }
         });
+
+        // Sort periods by start time
+        allPeriods.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
         // Get the teacher's lessons
         const lessons = await db.collection('lessons')
@@ -51,11 +65,12 @@ export async function GET(request: Request) {
             lessons: lessons.map(lesson => ({
                 ...lesson,
                 _id: lesson._id.toString()
-            }))
+            })),
+            periods: allPeriods
         });
     } catch (error) {
-        console.error('Error fetching timetable:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('[TIMETABLE_GET]', error);
+        return new NextResponse('Internal Error', { status: 500 });
     }
 }
 

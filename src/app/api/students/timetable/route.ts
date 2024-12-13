@@ -32,8 +32,7 @@ export async function GET(request: Request) {
         // Get all teachers for this grade
         const teachers = await db.collection('users')
             .find({
-                role: 'teacher',
-                level: student.level
+                role: 'teacher'
             })
             .toArray();
 
@@ -44,31 +43,37 @@ export async function GET(request: Request) {
             })
             .toArray();
 
-        // Add teacher names to the timetable
-        const timeTableWithTeachers = { ...timetable?.schedule };
-        if (timeTableWithTeachers) {
-            Object.entries(timeTableWithTeachers).forEach(([day, periods]: [string, any]) => {
-                Object.entries(periods).forEach(([period, data]: [string, any]) => {
+        // Add teacher names and lesson titles to the timetable
+        const timeTableWithDetails = { ...timetable?.schedule };
+        if (timeTableWithDetails) {
+            Object.entries(timeTableWithDetails).forEach(([day, periods]: [string, any]) => {
+                Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
                     const teacher = teachers.find(t => t._id.toString() === data.teacherId);
-                    if (teacher) {
-                        timeTableWithTeachers[day][period] = {
-                            ...data,
-                            teacher: teacher.name
-                        };
-                    }
+                    const lesson = lessons.find(l => l._id.toString() === data.lessonId);
+
+                    timeTableWithDetails[day][periodId] = {
+                        ...data,
+                        teacherName: teacher?.name || 'No teacher assigned',
+                        lessonTitle: lesson?.title
+                    };
                 });
             });
         }
 
+        // Sort periods by start time
+        const periods = timetable?.periods || [];
+        periods.sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
+
         return NextResponse.json({
-            timeTable: timeTableWithTeachers || {},
+            timeTable: timeTableWithDetails || {},
             lessons: lessons.map(lesson => ({
                 ...lesson,
                 _id: lesson._id.toString()
-            }))
+            })),
+            periods
         });
     } catch (error) {
-        console.error('Error fetching timetable:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('[TIMETABLE_GET]', error);
+        return new NextResponse('Internal Error', { status: 500 });
     }
 } 

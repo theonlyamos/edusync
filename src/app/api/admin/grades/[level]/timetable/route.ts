@@ -29,13 +29,13 @@ export async function PUT(
 ) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session || session.user.role !== 'admin') {
+        if (!session || !['admin', 'teacher'].includes(session.user.role as string)) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
         const { level } = await params;
         const decodedLevel = decodeURIComponent(level);
-        const { day, periodId, subject, teacherId } = await request.json();
+        const { day, periodId, subject, teacherId, lessonId } = await request.json();
 
         if (!day || !periodId) {
             return new NextResponse('Missing required fields', { status: 400 });
@@ -74,7 +74,8 @@ export async function PUT(
                     $set: {
                         [`schedule.${day}.${periodId}`]: {
                             subject: subject || '',
-                            teacherId: teacherId || ''
+                            teacherId: teacherId || '',
+                            lessonId: lessonId || undefined
                         }
                     }
                 }

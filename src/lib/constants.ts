@@ -13,4 +13,14 @@ export const EDUCATION_LEVELS = [
     'shs 3'
 ] as const;
 
-export type EducationLevel = typeof EDUCATION_LEVELS[number]; 
+export type EducationLevel = typeof EDUCATION_LEVELS[number];
+
+export const SUBJECTS = [
+    'Mathematics',
+    'English',
+    'Science',
+    'Social Studies',
+    'Art',
+    'Music',
+    'Physical Education'
+] as const;
