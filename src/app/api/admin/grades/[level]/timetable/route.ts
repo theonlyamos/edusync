@@ -1,25 +1,34 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
+import { Timetable } from '@/lib/models/Timetable';
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
+        await connectToDatabase();
+
         const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
-        const client = await connectToDatabase();
-        const db = client.db();
 
-        const timetable = await db.collection('timetables').findOne({ level: decodedLevel });
-        const schedule = timetable?.schedule || {};
+        const timetable = await Timetable.findOne({ grade: level })
+            .populate('schedule.*.*.lessonId', 'title subject')
+            .populate('schedule.*.*.teacherId', 'name email')
+            .lean();
 
-        return NextResponse.json(schedule);
+        if (!timetable) {
+            return NextResponse.json(
+                { error: "Timetable not found" },
+            );
+        }
+
+        return NextResponse.json(timetable);
     } catch (error) {
-        console.error('[TIMETABLE_GET]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error fetching timetable:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch timetable" },
+            { status: 500 }
+        );
     }
 }
 
@@ -28,65 +37,74 @@ export async function PUT(
     { params }: { params: { level: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !['admin', 'teacher'].includes(session.user.role as string)) {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
+        const body = await request.json();
         const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
-        const { day, periodId, subject, teacherId, lessonId } = await request.json();
 
-        if (!day || !periodId) {
-            return new NextResponse('Missing required fields', { status: 400 });
-        }
+        await connectToDatabase();
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const currentYear = new Date().getFullYear();
+        const academicYear = `${currentYear}-${currentYear + 1}`;
 
-        // First, ensure the document exists with an empty schedule if it doesn't exist
-        await db.collection('timetables').updateOne(
-            { level: decodedLevel },
+        const updatedTimetable = await Timetable.findOneAndUpdate(
+            { grade: level },
             {
-                $setOnInsert: {
-                    schedule: {},
-                    periods: []
+                $set: {
+                    ...body,
+                    grade: level,
+                    academicYear,
+                    updatedAt: new Date()
                 }
             },
-            { upsert: true }
-        );
+            {
+                new: true,
+                upsert: true
+            }
+        )
+            .populate('schedule.*.*.teacherId', 'name email')
+            .populate('schedule.*.*.lessonId', 'title subject')
+            .lean();
 
-        // If both subject and teacherId are empty, remove the entry
-        if (!subject && !teacherId) {
-            await db.collection('timetables').updateOne(
-                { level: decodedLevel },
-                {
-                    $unset: {
-                        [`schedule.${day}.${periodId}`]: ""
-                    }
-                }
-            );
-        } else {
-            // Update or create the entry
-            await db.collection('timetables').updateOne(
-                { level: decodedLevel },
-                {
-                    $set: {
-                        [`schedule.${day}.${periodId}`]: {
-                            subject: subject || '',
-                            teacherId: teacherId || '',
-                            lessonId: lessonId || undefined
-                        }
-                    }
-                }
+        if (!updatedTimetable) {
+            return NextResponse.json(
+                { error: "Failed to update timetable" },
+                { status: 404 }
             );
         }
 
-        // Get the updated timetable
-        const updatedTimetable = await db.collection('timetables').findOne({ level: decodedLevel });
-        return NextResponse.json(updatedTimetable?.schedule || {});
+        return NextResponse.json(updatedTimetable);
     } catch (error) {
-        console.error('[TIMETABLE_PUT]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error updating timetable:", error);
+        return NextResponse.json(
+            { error: "Failed to update timetable" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(
+    request: Request,
+    { params }: { params: { level: string } }
+) {
+    try {
+        await connectToDatabase();
+
+        const { level } = await params;
+
+        const deletedTimetable = await Timetable.findOneAndDelete({ grade: level }).lean();
+
+        if (!deletedTimetable) {
+            return NextResponse.json(
+                { error: "Timetable not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ message: "Timetable deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting timetable:", error);
+        return NextResponse.json(
+            { error: "Failed to delete timetable" },
+            { status: 500 }
+        );
     }
 } 

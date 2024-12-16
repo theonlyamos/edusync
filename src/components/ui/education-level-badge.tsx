@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
-import { type EducationLevel } from "@/lib/constants";
+import { type GradeLevel } from "@/lib/constants";
 
 interface EducationLevelBadgeProps {
-    level: EducationLevel;
+    level: GradeLevel;
     className?: string;
 }
 
-const getLevelColor = (level: EducationLevel) => {
+const getLevelColor = (level: GradeLevel) => {
     if (level.startsWith('primary')) {
         return 'bg-blue-100 text-blue-800';
     } else if (level.startsWith('jhs')) {

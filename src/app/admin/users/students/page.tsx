@@ -35,14 +35,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import { type EducationLevel } from '@/lib/constants';
+import { type GradeLevel } from '@/lib/constants';
 
 interface Student {
   _id: string;
   name: string;
   email: string;
   status: 'active' | 'inactive';
-  level: EducationLevel;
+  level: GradeLevel;
   createdAt: string;
 }
 

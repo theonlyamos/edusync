@@ -1,89 +1,94 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { authOptions } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/db";
+import { Grade } from "@/lib/models/Grade";
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
+        await connectToDatabase();
 
         const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const grade = await Grade.findOne({ level: level })
+            .populate('teachers', '-password')
+            .populate('students', '-password')
+            .lean();
 
-        // Get students for this grade
-        const students = await db.collection('users')
-            .find({
-                role: 'student',
-                level: decodedLevel
-            })
-            .toArray();
-
-        // Get teachers for this grade
-        const teachers = await db.collection('users')
-            .find({
-                role: 'teacher'
-            })
-            .toArray();
-
-        // Get lessons for this grade
-        const lessons = await db.collection('lessons')
-            .find({
-                gradeLevel: decodedLevel
-            })
-            .toArray();
-
-        // Get timetable for this grade
-        const timetable = await db.collection('timetables')
-            .findOne({
-                level: decodedLevel
-            });
-
-        // Add lesson titles to the timetable
-        const timeTableWithDetails = { ...timetable?.schedule };
-        if (timeTableWithDetails) {
-            Object.entries(timeTableWithDetails).forEach(([day, periods]: [string, any]) => {
-                Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
-                    const lesson = lessons.find(l => l._id.toString() === data.lessonId);
-                    if (lesson) {
-                        timeTableWithDetails[day][periodId] = {
-                            ...data,
-                            lessonTitle: lesson.title
-                        };
-                    }
-                });
-            });
+        if (!grade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json({
-            students: students.map(student => ({
-                ...student,
-                _id: student._id.toString(),
-                createdAt: student.createdAt?.toISOString()
-            })),
-            teachers: teachers.map(teacher => ({
-                ...teacher,
-                _id: teacher._id.toString(),
-                createdAt: teacher.createdAt?.toISOString()
-            })),
-            lessons: lessons.map(lesson => ({
-                ...lesson,
-                _id: lesson._id.toString(),
-                createdAt: lesson.createdAt?.toISOString()
-            })),
-            timeTable: timeTableWithDetails,
-            periods: timetable?.periods || []
-        });
+        return NextResponse.json(grade);
     } catch (error) {
-        console.error('[GRADE_GET]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error fetching grade:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch grade" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function PUT(
+    request: Request,
+    { params }: { params: { level: string } }
+) {
+    try {
+        const body = await request.json();
+        await connectToDatabase();
+
+        const updatedGrade = await Grade.findOneAndUpdate(
+            { level: params.level },
+            { $set: body },
+            { new: true }
+        )
+            .populate('teachers', '-password')
+            .populate('students', '-password')
+            .lean();
+
+        if (!updatedGrade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json(updatedGrade);
+    } catch (error) {
+        console.error("Error updating grade:", error);
+        return NextResponse.json(
+            { error: "Failed to update grade" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(
+    request: Request,
+    { params }: { params: { level: string } }
+) {
+    try {
+        await connectToDatabase();
+
+        const deletedGrade = await Grade.findOneAndDelete({ level: params.level }).lean();
+
+        if (!deletedGrade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ message: "Grade deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting grade:", error);
+        return NextResponse.json(
+            { error: "Failed to delete grade" },
+            { status: 500 }
+        );
     }
 } 

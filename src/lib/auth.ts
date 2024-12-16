@@ -1,83 +1,78 @@
-import { NextAuthOptions } from 'next-auth';
-import CredentialsProvider from 'next-auth/providers/credentials';
-import { connectToDatabase } from './db';
-import { compare } from 'bcryptjs';
+import { connectToDatabase } from "@/lib/db";
+import { User } from "@/lib/models/User";
+import { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
-    session: {
-        strategy: 'jwt'
-    },
     providers: [
         CredentialsProvider({
-            name: 'credentials',
+            name: "credentials",
             credentials: {
-                email: { label: 'Email', type: 'text' },
-                password: { label: 'Password', type: 'password' }
+                email: { label: "Email", type: "text" },
+                password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) {
-                    throw new Error('Invalid credentials');
+                    return null;
                 }
 
-                const client = await connectToDatabase();
-                const db = client.db();
-                const user = await db.collection('users').findOne({
-                    email: credentials.email
-                });
+                await connectToDatabase();
 
-                if (!user || !user.password) {
-                    throw new Error('No user found');
+                const user = await User.findOne({ email: credentials.email }).lean();
+
+                if (!user) {
+                    return null;
                 }
 
-                const isValid = await compare(credentials.password, user.password);
+                const passwordsMatch = await bcrypt.compare(credentials.password, user.password);
 
-                if (!isValid) {
-                    throw new Error('Invalid password');
+                if (!passwordsMatch) {
+                    return null;
                 }
 
                 return {
                     id: user._id.toString(),
                     email: user.email,
                     name: user.name,
-                    role: user.role
+                    role: user.role,
+                    image: user.image || null
                 };
             }
         })
     ],
     callbacks: {
-        jwt: async ({ token, user }) => {
+        async jwt({ token, user }) {
             if (user) {
-                token.role = user.role;
-                token.id = user.id;
+                await connectToDatabase();
+                const dbUser = await User.findById(user.id).lean();
+
+                if (dbUser) {
+                    token.id = dbUser._id.toString();
+                    token.email = dbUser.email;
+                    token.name = dbUser.name;
+                    token.role = dbUser.role;
+                    token.image = dbUser.image || null;
+                }
             }
             return token;
         },
-        session: async ({ session, token }) => {
+        async session({ session, token }) {
             if (token) {
-                session.user.role = token.role;
                 session.user.id = token.id;
+                session.user.name = token.name;
+                session.user.email = token.email;
+                session.user.role = token.role;
+                session.user.image = token.image;
             }
             return session;
         }
     },
     pages: {
-        signIn: '/login',
-        error: '/login'
+        signIn: "/login",
     },
-    events: {
-        async signIn({ user }) {
-            const client = await connectToDatabase();
-            const db = client.db();
-            await db.collection('users').updateOne(
-                { _id: user.id },
-                {
-                    $set: {
-                        lastLogin: new Date(),
-                        lastActivity: new Date()
-                    }
-                }
-            );
-        }
+    session: {
+        strategy: "jwt",
     },
-    secret: process.env.NEXTAUTH_SECRET
+    secret: process.env.NEXTAUTH_SECRET,
 }; 

@@ -1,67 +1,203 @@
-import { hash } from 'bcryptjs';
-import { MongoClient } from 'mongodb';
+import { connectToDatabase } from "@/lib/db";
+import { User } from "@/lib/models/User";
+import { Grade } from "@/lib/models/Grade";
+import { Timetable } from "@/lib/models/Timetable";
+import bcrypt from "bcryptjs";
 
-async function seed() {
-    if (!process.env.MONGODB_URI) {
-        throw new Error('Please add your MongoDB URI to .env.local');
-    }
+async function seedUsers() {
     try {
-        const client = await MongoClient.connect(process.env.MONGODB_URI);
-        const db = client.db();
-        const usersCollection = db.collection('users');
+        // Create admin
+        const adminPassword = await bcrypt.hash("admin123", 10);
+        const admin = await User.create({
+            name: "Admin User",
+            email: "admin@edusync.com",
+            password: adminPassword,
+            role: "admin"
+        });
 
-        // Clear existing users
-        await usersCollection.deleteMany({});
-
-        // Create test users
-        const testUsers = [
+        // Create teachers
+        const teacherPassword = await bcrypt.hash("teacher123", 10);
+        const teachers = await User.create([
             {
-                name: 'Admin User',
-                email: 'admin@test.com',
-                password: await hash('admin123', 12),
-                role: 'admin',
-                status: 'active',
-                createdAt: new Date(),
-                updatedAt: new Date()
+                name: "John Smith",
+                email: "john@edusync.com",
+                password: teacherPassword,
+                role: "teacher",
+                subject: "Mathematics"
             },
             {
-                name: 'Test Teacher',
-                email: 'teacher@test.com',
-                password: await hash('teacher123', 12),
-                role: 'teacher',
-                status: 'active',
-                level: 'jhs 1',
-                subjects: ['Mathematics', 'Science'],
-                createdAt: new Date(),
-                updatedAt: new Date()
+                name: "Sarah Wilson",
+                email: "sarah@edusync.com",
+                password: teacherPassword,
+                role: "teacher",
+                subject: "Science"
             },
             {
-                name: 'Test Student',
-                email: 'student@test.com',
-                password: await hash('student123', 12),
-                role: 'student',
-                status: 'active',
-                level: 'jhs 1',
-                createdAt: new Date(),
-                updatedAt: new Date()
+                name: "Michael Brown",
+                email: "michael@edusync.com",
+                password: teacherPassword,
+                role: "teacher",
+                subject: "English"
+            }
+        ]);
+
+        // Create students
+        const studentPassword = await bcrypt.hash("student123", 10);
+        const students = await User.create([
+            {
+                name: "Alice Johnson",
+                email: "alice@edusync.com",
+                password: studentPassword,
+                role: "student",
+                grade: "Grade 10"
             },
-        ];
+            {
+                name: "Bob Williams",
+                email: "bob@edusync.com",
+                password: studentPassword,
+                role: "student",
+                grade: "Grade 10"
+            },
+            {
+                name: "Carol Davis",
+                email: "carol@edusync.com",
+                password: studentPassword,
+                role: "student",
+                grade: "Grade 11"
+            }
+        ]);
 
-        // Insert test users
-        await usersCollection.insertMany(testUsers);
+        console.log("Users seeded successfully");
+        return { admin, teachers, students };
+    } catch (error) {
+        console.error("Error seeding users:", error);
+        throw error;
+    }
+}
 
-        console.log('Database seeded successfully!');
-        console.log('Test Users:');
-        console.log('Admin - Email: admin@test.com, Password: admin123');
-        console.log('Teacher - Email: teacher@test.com, Password: teacher123');
-        console.log('Student - Email: student@test.com, Password: student123');
 
-        await client.close();
+async function seedTimetables(grades: any[], teachers: any[]) {
+    try {
+        const currentYear = new Date().getFullYear();
+        const academicYear = `${currentYear}-${currentYear + 1}`;
+
+        const timetables = await Timetable.create([
+            {
+                grade: grades[0].level, // Grade 10
+                academicYear,
+                term: "First",
+                effectiveFrom: new Date(),
+                isActive: true,
+                periods: [
+                    {
+                        day: "Monday",
+                        startTime: "08:00",
+                        endTime: "09:30",
+                        subject: "Mathematics",
+                        teacher: teachers[0]._id,
+                        room: "Room 101"
+                    },
+                    {
+                        day: "Monday",
+                        startTime: "10:00",
+                        endTime: "11:30",
+                        subject: "Physics",
+                        teacher: teachers[1]._id,
+                        room: "Lab 1"
+                    },
+                    {
+                        day: "Tuesday",
+                        startTime: "08:00",
+                        endTime: "09:30",
+                        subject: "Chemistry",
+                        teacher: teachers[1]._id,
+                        room: "Lab 2"
+                    },
+                    {
+                        day: "Tuesday",
+                        startTime: "10:00",
+                        endTime: "11:30",
+                        subject: "Biology",
+                        teacher: teachers[1]._id,
+                        room: "Lab 3"
+                    }
+                ]
+            },
+            {
+                grade: grades[1].level, // Grade 11
+                academicYear,
+                term: "First",
+                effectiveFrom: new Date(),
+                isActive: true,
+                periods: [
+                    {
+                        day: "Monday",
+                        startTime: "08:00",
+                        endTime: "09:30",
+                        subject: "English Literature",
+                        teacher: teachers[2]._id,
+                        room: "Room 201"
+                    },
+                    {
+                        day: "Monday",
+                        startTime: "10:00",
+                        endTime: "11:30",
+                        subject: "Creative Writing",
+                        teacher: teachers[2]._id,
+                        room: "Room 202"
+                    },
+                    {
+                        day: "Tuesday",
+                        startTime: "08:00",
+                        endTime: "09:30",
+                        subject: "History",
+                        teacher: teachers[2]._id,
+                        room: "Room 203"
+                    },
+                    {
+                        day: "Tuesday",
+                        startTime: "10:00",
+                        endTime: "11:30",
+                        subject: "Arts",
+                        teacher: teachers[2]._id,
+                        room: "Art Studio"
+                    }
+                ]
+            }
+        ]);
+
+        console.log("Timetables seeded successfully");
+        return timetables;
+    } catch (error) {
+        console.error("Error seeding timetables:", error);
+        throw error;
+    }
+}
+
+async function main() {
+    try {
+        await connectToDatabase();
+
+        // Clear existing data
+        await User.deleteMany({});
+        await Grade.deleteMany({});
+        await Timetable.deleteMany({});
+
+        // Seed users first
+        const { admin, teachers, students } = await seedUsers();
+
+        // Then seed grades with references to users
+        const grades = await seedGrades(teachers, students);
+
+        // Finally seed timetables
+        await seedTimetables(grades, teachers);
+
+        console.log("Database seeded successfully");
         process.exit(0);
     } catch (error) {
-        console.error('Error seeding database:', error);
+        console.error("Error seeding database:", error);
         process.exit(1);
     }
 }
 
-seed();
+main();

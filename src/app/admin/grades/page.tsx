@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users, GraduationCap, BookOpen } from 'lucide-react';
-import { EDUCATION_LEVELS } from '@/lib/constants';
+import { GRADE_LEVELS } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
 
 interface GradeStats {
@@ -96,7 +96,7 @@ export default function GradesPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {EDUCATION_LEVELS.map((level) => {
+          {GRADE_LEVELS.map((level) => {
             const stats = gradeStats.find(stat => stat.level === level) || {
               studentCount: 0,
               teacherCount: 0,

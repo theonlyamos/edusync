@@ -23,18 +23,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
-import { EDUCATION_LEVELS } from '@/lib/constants';
+import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import { type EducationLevel } from '@/lib/constants';
+import { type GradeLevel } from '@/lib/constants';
 import { use } from 'react';
+import { MultiSelect } from '@/components/ui/multi-select';
+
+const QUALIFICATION_OPTIONS = [
+  "Bachelor's Degree",
+  "Master's Degree",
+  "Ph.D.",
+  "Teaching Certificate",
+  "Professional Certification"
+];
+
+const SPECIALIZATION_OPTIONS = [
+  "Special Education",
+  "Early Childhood Education",
+  "STEM Education",
+  "Language Arts",
+  "Educational Technology",
+  "Curriculum Development"
+];
 
 interface Teacher {
   _id: string;
   name: string;
   email: string;
   status: 'active' | 'inactive';
-  level: EducationLevel;
-  subjects: string[];
+  subjects?: string[];
+  grades?: string[];
+  qualifications?: string[];
+  specializations?: string[];
   createdAt: string;
   lastLogin?: string;
   lastActivity?: string;
@@ -55,8 +75,10 @@ export default function TeacherDetailsPage({ params }: PageProps) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    subjects: '',
-    level: '',
+    subjects: [] as string[],
+    grades: [] as string[],
+    qualifications: [] as string[],
+    specializations: [] as string[],
     status: '',
   });
 
@@ -88,11 +110,13 @@ export default function TeacherDetailsPage({ params }: PageProps) {
           const data = await response.json();
           setTeacher(data);
           setFormData({
-            name: data.name,
-            email: data.email,
-            subjects: data.subjects.join(', '),
-            level: data.level,
-            status: data.status,
+            name: data.name || '',
+            email: data.email || '',
+            subjects: data.subjects || [],
+            grades: data.grades || [],
+            qualifications: data.qualifications || [],
+            specializations: data.specializations || [],
+            status: data.status || 'active',
           });
         } catch (error) {
           console.error('Error fetching teacher:', error);
@@ -117,13 +141,18 @@ export default function TeacherDetailsPage({ params }: PageProps) {
 
     try {
       const response = await fetch(`/api/admin/users/teachers/${resolvedParams.id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          subjects: formData.subjects.split(',').map(s => s.trim()).filter(Boolean),
+          name: formData.name,
+          email: formData.email,
+          subjects: formData.subjects,
+          grades: formData.grades,
+          qualifications: formData.qualifications,
+          specializations: formData.specializations,
+          status: formData.status,
         }),
       });
 
@@ -160,17 +189,17 @@ export default function TeacherDetailsPage({ params }: PageProps) {
     }));
   };
 
-  const handleLevelChange = (value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      level: value,
-    }));
-  };
-
   const handleStatusChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
       status: value,
+    }));
+  };
+
+  const handleMultiSelectChange = (name: string) => (values: string[]) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: values,
     }));
   };
 
@@ -250,10 +279,16 @@ export default function TeacherDetailsPage({ params }: PageProps) {
                   {teacher.status}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm font-medium">Education Level</span>
-                <EducationLevelBadge level={teacher.level} />
-              </div>
+              {teacher.grades && teacher.grades.length > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium">Grade Levels</span>
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {teacher.grades.map((grade, index) => (
+                      <EducationLevelBadge key={index} level={grade as GradeLevel} />
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-sm font-medium">Joined</span>
                 <span className="text-sm text-muted-foreground">
@@ -283,23 +318,57 @@ export default function TeacherDetailsPage({ params }: PageProps) {
             <CardHeader>
               <CardTitle>Teaching Information</CardTitle>
               <CardDescription>
-                Subjects and teaching details
+                Subjects and qualifications
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Label>Subjects</Label>
-                <div className="flex flex-wrap gap-2">
-                  {teacher.subjects.map((subject, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
-                    >
-                      {subject}
-                    </span>
-                  ))}
+              {teacher.subjects && teacher.subjects.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <Label>Subjects</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {teacher.subjects.map((subject, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                      >
+                        {subject}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {teacher.qualifications && teacher.qualifications.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <Label>Qualifications</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {teacher.qualifications.map((qual, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {qual}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {teacher.specializations && teacher.specializations.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Specializations</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {teacher.specializations.map((spec, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+                      >
+                        {spec}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -337,26 +406,6 @@ export default function TeacherDetailsPage({ params }: PageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="level">Education Level</Label>
-                <Select
-                  value={formData.level}
-                  onValueChange={handleLevelChange}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select education level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EDUCATION_LEVELS.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {level.toUpperCase()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="status">Account Status</Label>
                 <Select
                   value={formData.status}
@@ -374,18 +423,55 @@ export default function TeacherDetailsPage({ params }: PageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="subjects">Subjects</Label>
-                <Input
-                  id="subjects"
-                  name="subjects"
-                  value={formData.subjects}
-                  onChange={handleChange}
-                  required
-                  placeholder="Enter subjects (comma-separated)"
+                <Label>Subjects</Label>
+                <MultiSelect
+                  options={SUBJECTS.map(subject => ({
+                    label: subject,
+                    value: subject
+                  }))}
+                  selected={formData.subjects}
+                  onChange={handleMultiSelectChange("subjects")}
+                  placeholder="Select subjects..."
                 />
-                <p className="text-sm text-muted-foreground">
-                  Enter subjects separated by commas (e.g., Mathematics, Physics, Chemistry)
-                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Grade Levels</Label>
+                <MultiSelect
+                  options={GRADE_LEVELS.map(grade => ({
+                    label: grade.toUpperCase(),
+                    value: grade
+                  }))}
+                  selected={formData.grades}
+                  onChange={handleMultiSelectChange("grades")}
+                  placeholder="Select grade levels..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Qualifications</Label>
+                <MultiSelect
+                  options={QUALIFICATION_OPTIONS.map(qual => ({
+                    label: qual,
+                    value: qual
+                  }))}
+                  selected={formData.qualifications}
+                  onChange={handleMultiSelectChange("qualifications")}
+                  placeholder="Select qualifications..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Specializations</Label>
+                <MultiSelect
+                  options={SPECIALIZATION_OPTIONS.map(spec => ({
+                    label: spec,
+                    value: spec
+                  }))}
+                  selected={formData.specializations}
+                  onChange={handleMultiSelectChange("specializations")}
+                  placeholder="Select specializations..."
+                />
               </div>
 
               <Button type="submit" className="w-full" disabled={isSaving}>

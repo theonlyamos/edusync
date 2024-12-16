@@ -1,88 +1,65 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
-import { EDUCATION_LEVELS, type EducationLevel } from '@/lib/constants';
-import { hash } from 'bcryptjs';
+import { NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/db";
+import { User } from "@/lib/models/User";
+import bcrypt from "bcryptjs";
 
-export async function GET(req: Request) {
+export async function GET() {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const students = await db.collection('users')
-            .find({ role: 'student' })
-            .project({
-                password: 0,
-                role: 0,
-            })
+        await connectToDatabase();
+        const students = await User.find({ role: "student" })
+            .select("-password")
             .sort({ createdAt: -1 })
-            .toArray();
+            .lean();
 
-        return NextResponse.json(students.map(student => ({
-            ...student,
-            _id: student._id.toString()
-        })));
+        return NextResponse.json(students);
     } catch (error) {
-        console.error('Error fetching students:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error("Error fetching students:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch students" },
+            { status: 500 }
+        );
     }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
+        const body = await request.json();
+        const { email, password, name, grade } = body;
 
-        const { name, email, password, level } = await req.json();
+        await connectToDatabase();
 
-        if (!name || !email || !password || !level) {
-            return new NextResponse('Missing required fields', { status: 400 });
-        }
-
-        // Validate level
-        if (!EDUCATION_LEVELS.includes(level as EducationLevel)) {
-            return new NextResponse('Invalid education level', { status: 400 });
-        }
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Check if email already exists
-        const existingUser = await db.collection('users').findOne({ email });
+        // Check if user already exists
+        const existingUser = await User.findOne({ email }).lean();
         if (existingUser) {
-            return new NextResponse('Email already exists', { status: 400 });
+            return NextResponse.json(
+                { error: "Email already exists" },
+                { status: 400 }
+            );
         }
 
-        const result = await db.collection('users').insertOne({
-            name,
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create new student
+        const student = await User.create({
             email,
-            password: await hash(password, 12),
-            role: 'student',
-            status: 'active',
-            level,
+            password: hashedPassword,
+            name,
+            role: "student",
+            grade,
             createdAt: new Date(),
             updatedAt: new Date()
         });
 
-        return NextResponse.json({
-            _id: result.insertedId.toString(),
-            name,
-            email,
-            status: 'active',
-            level,
-            createdAt: new Date(),
-        });
+        // Remove password from response
+        const { password: _, ...studentWithoutPassword } = student.toObject();
+
+        return NextResponse.json(studentWithoutPassword);
     } catch (error) {
-        console.error('Error creating student:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error("Error creating student:", error);
+        return NextResponse.json(
+            { error: "Failed to create student" },
+            { status: 500 }
+        );
     }
 } 

@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { EDUCATION_LEVELS, SUBJECTS } from '@/lib/constants';
+import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
 import { TimeTableView } from '@/components/timetable/TimeTableView';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -68,7 +68,7 @@ export default function TimetablesPage() {
   const fetchTimetableData = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/admin/grades/${selectedLevel}`);
+      const response = await fetch(`/api/admin/grades/${selectedLevel}/timetable`);
       if (!response.ok) throw new Error('Failed to fetch timetable data');
       const data = await response.json();
       setTimeTable(data.timeTable || {});
@@ -227,7 +227,7 @@ export default function TimetablesPage() {
                   <SelectValue placeholder="Select a grade level" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EDUCATION_LEVELS.map((level) => (
+                  {GRADE_LEVELS.map((level) => (
                     <SelectItem key={level} value={level}>
                       {level.toUpperCase()}
                     </SelectItem>

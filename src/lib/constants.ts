@@ -1,4 +1,4 @@
-export const EDUCATION_LEVELS = [
+export const GRADE_LEVELS = [
     'primary 1',
     'primary 2',
     'primary 3',
@@ -13,7 +13,7 @@ export const EDUCATION_LEVELS = [
     'shs 3'
 ] as const;
 
-export type EducationLevel = typeof EDUCATION_LEVELS[number];
+export type GradeLevel = typeof GRADE_LEVELS[number];
 
 export const SUBJECTS = [
     'Mathematics',

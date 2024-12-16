@@ -23,9 +23,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft, Loader2, Save, GraduationCap, BookOpen, Brain } from 'lucide-react';
-import { EDUCATION_LEVELS } from '@/lib/constants';
+import { GRADE_LEVELS } from '@/lib/constants';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import { type EducationLevel } from '@/lib/constants';
+import { type GradeLevel } from '@/lib/constants';
 import { use } from 'react';
 
 interface Student {
@@ -33,7 +33,7 @@ interface Student {
   name: string;
   email: string;
   status: 'active' | 'inactive';
-  level: EducationLevel;
+  level: GradeLevel;
   createdAt: string;
   lastLogin?: string;
   lastActivity?: string;
@@ -405,7 +405,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
                     <SelectValue placeholder="Select education level" />
                   </SelectTrigger>
                   <SelectContent>
-                    {EDUCATION_LEVELS.map((level) => (
+                    {GRADE_LEVELS.map((level) => (
                       <SelectItem key={level} value={level}>
                         {level.toUpperCase()}
                       </SelectItem>

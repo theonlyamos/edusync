@@ -9,7 +9,7 @@ import { Calendar, BookOpen, BookA, User } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import type { EducationLevel } from '@/lib/constants';
+import type { GradeLevel } from '@/lib/constants';
 import Link from 'next/link';
 
 interface TimeTableCell {

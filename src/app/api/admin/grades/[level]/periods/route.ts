@@ -1,74 +1,66 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
-
-export async function POST(
-    request: Request,
-    { params }: { params: { level: string } }
-) {
-    try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
-
-        const { startTime, endTime } = await request.json();
-        if (!startTime || !endTime) {
-            return new NextResponse('Missing required fields', { status: 400 });
-        }
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // First, ensure the document exists with an empty periods array if it doesn't exist
-        await db.collection('timetables').updateOne(
-            { level: decodedLevel },
-            { $setOnInsert: { periods: [] } },
-            { upsert: true }
-        );
-
-        // Then add the new period
-        const newPeriod = {
-            id: new Date().getTime().toString(),
-            startTime,
-            endTime
-        };
-
-        const result = await db.collection('timetables').updateOne(
-            { level: decodedLevel },
-            { $push: { periods: newPeriod } } as any
-        );
-
-        return NextResponse.json(newPeriod);
-    } catch (error) {
-        console.error('[PERIODS_POST]', error);
-        return new NextResponse('Internal Error', { status: 500 });
-    }
-}
+import { Grade } from '@/lib/models/Grade';
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        const { level } = await params;
-        const decodedLevel = decodeURIComponent(level);
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        const timetable = await db.collection('timetables')
-            .findOne({ level: decodedLevel });
+        const grade = await Grade.findOne({ level: params.level })
+            .select('timetable.periods')
+            .populate('timetable.periods.teacher', 'name')
+            .lean();
 
-        const periods = timetable?.periods || [];
-        periods.sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
+        if (!grade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
+        }
 
-        return NextResponse.json(periods);
+        return NextResponse.json(grade.timetable?.periods || []);
     } catch (error) {
-        console.error('[PERIODS_GET]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error fetching periods:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch periods" },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(
+    request: Request,
+    { params }: { params: { level: string } }
+) {
+    try {
+        const body = await request.json();
+        await connectToDatabase();
+
+        const updatedGrade = await Grade.findOneAndUpdate(
+            { level: params.level },
+            { $push: { 'timetable.periods': body } },
+            { new: true }
+        )
+            .select('timetable.periods')
+            .populate('timetable.periods.teacher', 'name')
+            .lean();
+
+        if (!updatedGrade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json(updatedGrade.timetable.periods);
+    } catch (error) {
+        console.error("Error creating period:", error);
+        return NextResponse.json(
+            { error: "Failed to create period" },
+            { status: 500 }
+        );
     }
 } 

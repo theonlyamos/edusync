@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { EDUCATION_LEVELS } from '@/lib/constants';
+import { GRADE_LEVELS } from '@/lib/constants';
 
 export default function CreateStudentPage() {
   const { data: session, status } = useSession();
@@ -183,7 +183,7 @@ export default function CreateStudentPage() {
                     <SelectValue placeholder="Select education level" />
                   </SelectTrigger>
                   <SelectContent>
-                    {EDUCATION_LEVELS.map((level) => (
+                    {GRADE_LEVELS.map((level) => (
                       <SelectItem key={level} value={level}>
                         {level.toUpperCase()}
                       </SelectItem>

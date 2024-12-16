@@ -1,198 +1,226 @@
 'use client';
 
-import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  LayoutDashboard,
-  BookOpen,
-  FileText,
-  Library,
-  Brain,
-  MessagesSquare,
-  Settings,
-  LogOut,
-  Users,
-  BarChart,
-  Calendar,
-  BookUser,
-  LibraryBig,
-  UsersRound,
-  GraduationCap,
-  School
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSession } from 'next-auth/react';
+import {
+  Book,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  FileText,
+  MessagesSquare,
+  Users,
+  School,
+  Calendar,
+  BarChart,
+  FileCheck,
+  ListChecks,
+  FilePlus,
+  BarChart2,
+  UsersRound
+} from "lucide-react";
 
-interface SidebarLink {
-  href: string;
-  label: string;
-  icon: React.ReactNode;
+const adminLinks = [
+  {
+    label: 'Dashboard',
+    icon: <LayoutDashboard className="h-5 w-5" />,
+    href: '/admin/dashboard'
+  },
+  {
+    label: 'Teachers',
+    icon: <Users className="h-5 w-5" />,
+    href: '/admin/users/teachers'
+  },
+  {
+    label: 'Students',
+    icon: <GraduationCap className="h-5 w-5" />,
+    href: '/admin/users/students'
+  },
+  {
+    label: 'Admins',
+    icon: <UsersRound className="h-5 w-5" />,
+    href: '/admin/users/admins'
+  },
+  {
+    label: 'Grades',
+    icon: <School className="h-5 w-5" />,
+    href: '/admin/grades'
+  },
+  {
+    label: 'Time Tables',
+    icon: <Calendar className="h-5 w-5" />,
+    href: '/admin/timetables'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/admin/assessments',
+    submenu: [
+      {
+        label: 'All Assessments',
+        icon: <ListChecks className="h-5 w-5" />,
+        href: '/admin/assessments'
+      },
+      {
+        label: 'Results Overview',
+        icon: <BarChart2 className="h-5 w-5" />,
+        href: '/admin/assessments/results'
+      }
+    ]
+  }
+];
+
+const teacherLinks = [
+  {
+    label: 'Dashboard',
+    icon: <LayoutDashboard className="h-5 w-5" />,
+    href: '/teachers/dashboard'
+  },
+  {
+    label: 'Lessons',
+    icon: <Book className="h-5 w-5" />,
+    href: '/teachers/lessons'
+  },
+  {
+    label: 'Content',
+    icon: <FileText className="h-5 w-5" />,
+    href: '/teachers/content'
+  },
+  {
+    label: 'Resources',
+    icon: <Library className="h-5 w-5" />,
+    href: '/teachers/resources'
+  },
+  {
+    label: 'Time Table',
+    icon: <Calendar className="h-5 w-5" />,
+    href: '/teachers/timetable'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/assessments',
+    submenu: [
+      {
+        label: 'All Assessments',
+        icon: <ListChecks className="h-5 w-5" />,
+        href: '/assessments'
+      },
+      {
+        label: 'Create Assessment',
+        icon: <FilePlus className="h-5 w-5" />,
+        href: '/assessments/create'
+      }
+    ]
+  }
+];
+
+const studentLinks = [
+  {
+    label: 'Dashboard',
+    icon: <LayoutDashboard className="h-5 w-5" />,
+    href: '/students/dashboard'
+  },
+  {
+    label: 'Lessons',
+    icon: <Book className="h-5 w-5" />,
+    href: '/students/lessons'
+  },
+  {
+    label: 'Practice',
+    icon: <FileText className="h-5 w-5" />,
+    href: '/students/practice'
+  },
+  {
+    label: 'Time Table',
+    icon: <Calendar className="h-5 w-5" />,
+    href: '/students/timetable'
+  },
+  {
+    label: 'AI Tutor',
+    icon: <MessagesSquare className="h-5 w-5" />,
+    href: '/students/tutor'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/assessments'
+  }
+];
+
+interface SidebarProps {
+  role: 'admin' | 'teacher' | 'student';
 }
 
-const adminLinks: SidebarLink[] = [
-  {
-    href: '/admin/dashboard',
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />
-  },
-  {
-    href: '/admin/users/teachers',
-    label: 'Teachers',
-    icon: <GraduationCap className="h-5 w-5" />
-  },
-  {
-    href: '/admin/users/students',
-    label: 'Students',
-    icon: <BookUser className="h-5 w-5" />
-  },
-  {
-    href: '/admin/users/admins',
-    label: 'Admins',
-    icon: <UsersRound className="h-5 w-5" />
-  },
-  {
-    href: '/admin/grades',
-    label: 'Grades',
-    icon: <LibraryBig className="h-5 w-5" />
-  },
-  {
-    href: '/admin/timetables',
-    label: 'Timetables',
-    icon: <Calendar className="h-5 w-5" />
-  },
-  {
-    href: '/admin/reports',
-    label: 'Reports',
-    icon: <BarChart className="h-5 w-5" />
-  }
-];
-
-const teacherLinks: SidebarLink[] = [
-  {
-    href: '/teachers/dashboard',
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />
-  },
-  {
-    href: '/teachers/lessons',
-    label: 'Lessons',
-    icon: <BookOpen className="h-5 w-5" />
-  },
-  {
-    href: '/teachers/content',
-    label: 'Content',
-    icon: <FileText className="h-5 w-5" />
-  },
-  {
-    href: '/teachers/resources',
-    label: 'Resources',
-    icon: <Library className="h-5 w-5" />
-  },
-  {
-    href: '/teachers/timetable',
-    label: 'Time Table',
-    icon: <Calendar className="h-5 w-5" />
-  }
-];
-
-const studentLinks: SidebarLink[] = [
-  {
-    href: '/students/dashboard',
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />
-  },
-  {
-    href: '/students/timetable',
-    label: 'Time Table',
-    icon: <Calendar className="h-5 w-5" />
-  },
-  {
-    href: '/students/lessons',
-    label: 'Lessons',
-    icon: <BookOpen className="h-5 w-5" />
-  },
-  {
-    href: '/students/practice',
-    label: 'Practice',
-    icon: <Brain className="h-5 w-5" />
-  },
-  {
-    href: '/students/tutor',
-    label: 'AI Tutor',
-    icon: <MessagesSquare className="h-5 w-5" />
-  }
-];
-
-export function Sidebar() {
-  const router = useRouter();
+export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  let links;
 
-  let links: SidebarLink[] = [];
-  let roleLabel = '';
-
-  switch (session?.user?.role) {
+  switch (role) {
     case 'admin':
       links = adminLinks;
-      roleLabel = 'Admin Panel';
       break;
     case 'teacher':
       links = teacherLinks;
-      roleLabel = 'Teacher Portal';
       break;
     case 'student':
       links = studentLinks;
-      roleLabel = 'Student Portal';
       break;
     default:
-      links = [];
-      roleLabel = 'Portal';
+      links = studentLinks;
   }
 
+  const isActive = (href: string) => {
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+
   return (
-    <div className="flex flex-col w-64 bg-card border-r h-screen">
-      {/* Logo */}
+    <div className="w-64 h-screen bg-card border-r">
       <div className="p-6">
         <h1 className="text-2xl font-bold gradient-text">EduSync</h1>
-        <p className="text-sm text-muted-foreground mt-1">{roleLabel}</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {role.charAt(0).toUpperCase() + role.slice(1)} Portal
+        </p>
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex-1 px-4 space-y-2">
-        {links.map((link) => (
-          <Button
-            key={link.href}
-            variant={pathname === link.href ? "secondary" : "ghost"}
-            className={cn(
-              "w-full justify-start gap-2",
-              pathname === link.href && "bg-secondary/20"
-            )}
-            onClick={() => router.push(link.href)}
-          >
-            {link.icon}
-            {link.label}
-          </Button>
-        ))}
-      </nav>
-
-      {/* Bottom Section */}
-      <div className="p-4 border-t space-y-2">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2"
-          onClick={() => router.push('/settings')}
-        >
-          <Settings className="h-5 w-5" />
-          Settings
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 text-destructive hover:text-destructive"
-          onClick={() => router.push('/api/auth/signout')}
-        >
-          <LogOut className="h-5 w-5" />
-          Sign out
-        </Button>
+      <div className="px-3 py-2">
+        <div className="space-y-1">
+          {links.map((link) => (
+            <div key={link.href}>
+              <Button
+                variant={isActive(link.href) ? "secondary" : "ghost"}
+                className={cn("w-full justify-start", {
+                  'mb-1': link.submenu
+                })}
+                asChild
+              >
+                <Link href={link.href}>
+                  {link.icon}
+                  <span className="ml-3">{link.label}</span>
+                </Link>
+              </Button>
+              {link.submenu && (
+                <div className="ml-6 space-y-1">
+                  {link.submenu.map((sublink) => (
+                    <Button
+                      key={sublink.href}
+                      variant={isActive(sublink.href) ? "secondary" : "ghost"}
+                      className="w-full justify-start"
+                      asChild
+                    >
+                      <Link href={sublink.href}>
+                        {sublink.icon}
+                        <span className="ml-3">{sublink.label}</span>
+                      </Link>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

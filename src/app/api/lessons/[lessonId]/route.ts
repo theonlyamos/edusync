@@ -1,107 +1,134 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
-import { authOptions } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/db";
+import { Lesson } from "@/lib/models/Lesson";
+import { auth } from "@/auth";
+import mongoose from "mongoose";
 
 export async function GET(
-    req: Request,
-    context: { params: { lessonId: string } }
+    request: Request,
+    { params }: { params: { lessonId: string } }
 ) {
-    const { lessonId } = await context.params;
-
     try {
-        const session = await getServerSession(authOptions);
+        const session = await auth();
         if (!session) {
-            return new NextResponse('Unauthorized', { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        // For teachers, return their own lessons
-        // For students, return any lesson (for now, until we implement lesson assignment)
-        const query = session.user.role === 'teacher'
-            ? { _id: new ObjectId(lessonId), teacherId: session.user.id }
-            : { _id: new ObjectId(lessonId) };
-
-        const lesson = await db.collection('lessons').findOne(query);
+        const lesson = await Lesson.findById(params.lessonId)
+            .populate('teacher', 'name')
+            .lean();
 
         if (!lesson) {
-            return new NextResponse('Lesson not found', { status: 404 });
+            return NextResponse.json(
+                { error: "Lesson not found" },
+                { status: 404 }
+            );
         }
 
         return NextResponse.json(lesson);
     } catch (error) {
-        console.error('Error fetching lesson:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error("Error fetching lesson:", error);
+        return NextResponse.json(
+            { error: "Failed to fetch lesson" },
+            { status: 500 }
+        );
     }
 }
 
 export async function PUT(
-    req: Request,
-    context: { params: { lessonId: string } }
+    request: Request,
+    { params }: { params: { lessonId: string } }
 ) {
-    const { lessonId } = await context.params;
-
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'teacher') {
-            return new NextResponse('Unauthorized', { status: 401 });
+        const session = await auth();
+        if (!session || session.user.role !== 'teacher') {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-        const updates = await req.json();
+        const body = await request.json();
+        await connectToDatabase();
 
-        const result = await db.collection('lessons').updateOne(
-            { _id: new ObjectId(lessonId) },
-            { $set: updates }
-        );
+        const lesson = await Lesson.findById(params.lessonId).lean();
 
-        if (result.matchedCount === 0) {
-            return new NextResponse('Lesson not found', { status: 404 });
+        if (!lesson) {
+            return NextResponse.json(
+                { error: "Lesson not found" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json({ message: 'Lesson updated successfully' });
+        if (lesson.teacher.toString() !== session.user.id) {
+            return NextResponse.json(
+                { error: "Not authorized to update this lesson" },
+                { status: 403 }
+            );
+        }
+
+        const updatedLesson = await Lesson.findByIdAndUpdate(
+            params.lessonId,
+            { $set: body },
+            { new: true }
+        )
+            .populate('teacher', 'name')
+            .lean();
+
+        return NextResponse.json(updatedLesson);
     } catch (error) {
-        console.error('Error updating lesson:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error("Error updating lesson:", error);
+        return NextResponse.json(
+            { error: "Failed to update lesson" },
+            { status: 500 }
+        );
     }
 }
 
 export async function DELETE(
-    req: Request,
-    context: { params: { lessonId: string } }
+    request: Request,
+    { params }: { params: { lessonId: string } }
 ) {
-    const { lessonId } = await context.params;
-
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user?.role !== 'teacher') {
-            return new NextResponse('Unauthorized', { status: 401 });
+        const session = await auth();
+        if (!session || session.user.role !== 'teacher') {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        // Delete the lesson
-        const result = await db.collection('lessons').deleteOne({
-            _id: new ObjectId(lessonId)
-        });
+        const lesson = await Lesson.findById(params.lessonId).lean();
 
-        if (result.deletedCount === 0) {
-            return new NextResponse('Lesson not found', { status: 404 });
+        if (!lesson) {
+            return NextResponse.json(
+                { error: "Lesson not found" },
+                { status: 404 }
+            );
         }
 
-        // Delete associated content
-        await db.collection('lessonContent').deleteMany({
-            lessonId: new ObjectId(lessonId)
-        });
+        if (lesson.teacher.toString() !== session.user.id) {
+            return NextResponse.json(
+                { error: "Not authorized to delete this lesson" },
+                { status: 403 }
+            );
+        }
 
-        return NextResponse.json({ message: 'Lesson and associated content deleted successfully' });
+        await Lesson.findByIdAndDelete(params.lessonId);
+
+        return NextResponse.json({ message: "Lesson deleted successfully" });
     } catch (error) {
-        console.error('Error deleting lesson:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error("Error deleting lesson:", error);
+        return NextResponse.json(
+            { error: "Failed to delete lesson" },
+            { status: 500 }
+        );
     }
 } 

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
+import { User } from '@/lib/models/User';
+import { Teacher } from '@/lib/models/Teacher';
 
 export async function GET(
     req: Request,
@@ -11,78 +12,151 @@ export async function GET(
     try {
         const session = await getServerSession(authOptions);
         if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { teacherId } = params;
+        await connectToDatabase();
 
-        const { teacherId } = await params;
-        const teacher = await db.collection('users').findOne(
-            { _id: new ObjectId(teacherId), role: 'teacher' },
-            { projection: { password: 0, role: 0 } }
-        );
-
-        if (!teacher) {
-            return new NextResponse('Teacher not found', { status: 404 });
+        // Get user details
+        const userDoc = await User.findById(teacherId);
+        if (!userDoc) {
+            return NextResponse.json(
+                { error: "Teacher not found" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json({
-            ...teacher,
-            _id: teacher._id.toString()
-        });
+        // Get teacher details
+        const teacherDoc = await Teacher.findOne({ userId: teacherId });
+        if (!teacherDoc) {
+            return NextResponse.json(
+                { error: "Teacher details not found" },
+                { status: 404 }
+            );
+        }
+
+        // Convert Mongoose documents to plain objects
+        const user = userDoc.toObject();
+        const teacher = teacherDoc.toObject();
+
+        // Create a serializable object with all required fields
+        const serializedData = {
+            _id: user._id.toString(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            status: user.isActive ? 'active' : 'inactive',
+            createdAt: user.createdAt.toISOString(),
+            updatedAt: user.updatedAt.toISOString(),
+            userId: teacher.userId.toString(),
+            subjects: teacher.subjects || [],
+            grades: teacher.grades || [],
+            qualifications: teacher.qualifications || [],
+            specializations: teacher.specializations || [],
+            joinDate: teacher.joinDate.toISOString()
+        };
+
+        return NextResponse.json(serializedData);
     } catch (error) {
         console.error('Error fetching teacher:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch teacher" },
+            { status: 500 }
+        );
     }
 }
 
-export async function PATCH(
+export async function PUT(
     req: Request,
     { params }: { params: { teacherId: string } }
 ) {
     try {
         const session = await getServerSession(authOptions);
         if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
         }
 
-        const updates = await req.json();
-        const allowedUpdates = ['name', 'email', 'status', 'subjects'];
-        const updateData: { [key: string]: any } = {};
+        const body = await req.json();
+        await connectToDatabase();
 
-        Object.keys(updates).forEach(key => {
-            if (allowedUpdates.includes(key)) {
-                updateData[key] = updates[key];
-            }
-        });
+        // Update user basic info
+        const { name, email, subjects, grades, qualifications, specializations, status } = body;
 
-        if (Object.keys(updateData).length === 0) {
-            return new NextResponse('No valid updates provided', { status: 400 });
-        }
-
-        updateData.updatedAt = new Date();
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const result = await db.collection('users').findOneAndUpdate(
-            { _id: new ObjectId(params.teacherId), role: 'teacher' },
-            { $set: updateData },
-            { returnDocument: 'after', projection: { password: 0, role: 0 } }
+        const userDoc = await User.findByIdAndUpdate(
+            params.teacherId,
+            {
+                $set: {
+                    name,
+                    email,
+                    isActive: status === 'active'
+                }
+            },
+            { new: true }
         );
 
-        if (!result) {
-            return new NextResponse('Teacher not found', { status: 404 });
+        if (!userDoc) {
+            return NextResponse.json(
+                { error: "Teacher not found" },
+                { status: 404 }
+            );
         }
 
-        return NextResponse.json({
-            ...result,
-            _id: result._id.toString()
-        });
+        // Update teacher specific info
+        const teacherDoc = await Teacher.findOneAndUpdate(
+            { userId: params.teacherId },
+            {
+                $set: {
+                    subjects,
+                    grades,
+                    qualifications,
+                    specializations
+                }
+            },
+            { new: true }
+        );
+
+        if (!teacherDoc) {
+            return NextResponse.json(
+                { error: "Teacher details not found" },
+                { status: 404 }
+            );
+        }
+
+        // Convert Mongoose documents to plain objects
+        const user = userDoc.toObject();
+        const teacher = teacherDoc.toObject();
+
+        // Create a serializable response
+        const serializedData = {
+            _id: user._id.toString(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            status: user.isActive ? 'active' : 'inactive',
+            createdAt: user.createdAt.toISOString(),
+            updatedAt: user.updatedAt.toISOString(),
+            userId: teacher.userId.toString(),
+            subjects: teacher.subjects || [],
+            grades: teacher.grades || [],
+            qualifications: teacher.qualifications || [],
+            specializations: teacher.specializations || [],
+            joinDate: teacher.joinDate.toISOString()
+        };
+
+        return NextResponse.json(serializedData);
     } catch (error) {
         console.error('Error updating teacher:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to update teacher" },
+            { status: 500 }
+        );
     }
 }
 
@@ -93,36 +167,37 @@ export async function DELETE(
     try {
         const session = await getServerSession(authOptions);
         if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Check if teacher has any associated lessons
-        const hasLessons = await db.collection('lessons').findOne({
-            teacherId: new ObjectId(params.teacherId)
-        });
-
-        if (hasLessons) {
-            return new NextResponse(
-                'Cannot delete teacher with associated lessons. Please reassign or delete the lessons first.',
-                { status: 400 }
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
             );
         }
 
-        const result = await db.collection('users').deleteOne({
-            _id: new ObjectId(params.teacherId),
-            role: 'teacher'
-        });
+        await connectToDatabase();
 
-        if (result.deletedCount === 0) {
-            return new NextResponse('Teacher not found', { status: 404 });
+        // Instead of deleting, deactivate the user
+        const userDoc = await User.findByIdAndUpdate(
+            params.teacherId,
+            { $set: { isActive: false } },
+            { new: true }
+        );
+
+        if (!userDoc) {
+            return NextResponse.json(
+                { error: "Teacher not found" },
+                { status: 404 }
+            );
         }
 
-        return new NextResponse(null, { status: 204 });
+        return NextResponse.json({
+            message: "Teacher deactivated successfully",
+            id: userDoc._id.toString()
+        });
     } catch (error) {
-        console.error('Error deleting teacher:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('Error deactivating teacher:', error);
+        return NextResponse.json(
+            { error: "Failed to deactivate teacher" },
+            { status: 500 }
+        );
     }
 } 

@@ -1,36 +1,73 @@
-import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
 
 if (!process.env.MONGODB_URI) {
     throw new Error('Please add your Mongo URI to .env.local');
 }
 
-const uri = process.env.MONGODB_URI;
-const options = {};
+const MONGODB_URI = process.env.MONGODB_URI;
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
+const options: mongoose.ConnectOptions = {
+    maxPoolSize: 10,
+    minPoolSize: 5,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+    connectTimeoutMS: 10000
+};
 
 if (process.env.NODE_ENV === 'development') {
-    // In development mode, use a global variable so that the value
-    // is preserved across module reloads caused by HMR (Hot Module Replacement).
-    let globalWithMongo = global as typeof globalThis & {
-        _mongoClientPromise?: Promise<MongoClient>
-    }
+    // In development mode, enable debug mode to see mongoose queries
+    mongoose.set('debug', true);
+}
 
-    if (!globalWithMongo._mongoClientPromise) {
-        client = new MongoClient(uri, options);
-        globalWithMongo._mongoClientPromise = client.connect();
-    }
-    clientPromise = globalWithMongo._mongoClientPromise;
-} else {
-    // In production mode, it's best to not use a global variable.
-    client = new MongoClient(uri, options);
-    clientPromise = client.connect();
+let cached = global.mongoose;
+
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
 }
 
 export async function connectToDatabase() {
-    if (!clientPromise) {
-        throw new Error('MongoDB client not initialized');
+    if (cached.conn) {
+        return cached.conn;
     }
-    return clientPromise;
-} 
+
+    if (!cached.promise) {
+        cached.promise = mongoose.connect(MONGODB_URI, options)
+            .then(mongoose => {
+                console.log('MongoDB connected successfully');
+                return mongoose;
+            })
+            .catch(error => {
+                console.error('Error connecting to MongoDB:', error);
+                throw error;
+            });
+    }
+
+    try {
+        cached.conn = await cached.promise;
+    } catch (e) {
+        cached.promise = null;
+        throw e;
+    }
+
+    return cached.conn;
+}
+
+// Add connection error handlers
+mongoose.connection.on('error', err => {
+    console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn('MongoDB disconnected. Attempting to reconnect...');
+});
+
+mongoose.connection.on('reconnected', () => {
+    console.log('MongoDB reconnected successfully');
+});
+
+// Gracefully close the connection when the app is shutting down
+process.on('SIGINT', async () => {
+    await mongoose.connection.close();
+    process.exit(0);
+}); 

@@ -1,46 +1,53 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
-// import { db } from '@/lib/db';
+import { Grade } from '@/lib/models/Grade';
+import mongoose from 'mongoose';
 
 export async function PUT(
     request: Request,
     { params }: { params: { level: string; periodId: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
+        const body = await request.json();
+        await connectToDatabase();
 
-        const { level, periodId } = await params;
-        const decodedLevel = decodeURIComponent(level);
-        const { startTime, endTime } = await request.json();
-        if (!startTime || !endTime) {
-            return new NextResponse('Missing required fields', { status: 400 });
-        }
-
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const period = await db.collection('timetables').updateOne(
+        const updatedGrade = await Grade.findOneAndUpdate(
             {
-                level: decodedLevel,
-                'periods.id': periodId
+                level: params.level,
+                'timetable.periods._id': new mongoose.Types.ObjectId(params.periodId)
             },
             {
                 $set: {
-                    'periods.$.startTime': startTime,
-                    'periods.$.endTime': endTime
+                    'timetable.periods.$': {
+                        _id: new mongoose.Types.ObjectId(params.periodId),
+                        ...body
+                    }
                 }
-            }
+            },
+            { new: true }
+        )
+            .select('timetable.periods')
+            .populate('timetable.periods.teacher', 'name')
+            .lean();
+
+        if (!updatedGrade) {
+            return NextResponse.json(
+                { error: "Grade or period not found" },
+                { status: 404 }
+            );
+        }
+
+        const updatedPeriod = updatedGrade.timetable.periods.find(
+            (p: any) => p._id.toString() === params.periodId
         );
 
-        return NextResponse.json(period);
+        return NextResponse.json(updatedPeriod);
     } catch (error) {
-        console.error('[PERIOD_PUT]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error updating period:", error);
+        return NextResponse.json(
+            { error: "Failed to update period" },
+            { status: 500 }
+        );
     }
 }
 
@@ -49,24 +56,35 @@ export async function DELETE(
     { params }: { params: { level: string; periodId: string } }
 ) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || session.user.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
+        await connectToDatabase();
+
+        const updatedGrade = await Grade.findOneAndUpdate(
+            { level: params.level },
+            {
+                $pull: {
+                    'timetable.periods': {
+                        _id: new mongoose.Types.ObjectId(params.periodId)
+                    }
+                }
+            },
+            { new: true }
+        )
+            .select('timetable.periods')
+            .lean();
+
+        if (!updatedGrade) {
+            return NextResponse.json(
+                { error: "Grade not found" },
+                { status: 404 }
+            );
         }
 
-        const { level, periodId } = await params;
-        const decodedLevel = decodeURIComponent(level);
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        await db.collection('timetables').updateOne(
-            { level: decodedLevel },
-            { $pull: { periods: { id: periodId } } } as any
-        );
-
-        return new NextResponse(null, { status: 204 });
+        return NextResponse.json({ message: "Period deleted successfully" });
     } catch (error) {
-        console.error('[PERIOD_DELETE]', error);
-        return new NextResponse('Internal Error', { status: 500 });
+        console.error("Error deleting period:", error);
+        return NextResponse.json(
+            { error: "Failed to delete period" },
+            { status: 500 }
+        );
     }
 } 

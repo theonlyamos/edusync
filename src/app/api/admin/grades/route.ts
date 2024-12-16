@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { EDUCATION_LEVELS } from '@/lib/constants';
+import { GRADE_LEVELS } from '@/lib/constants';
 
 export async function GET(req: Request) {
     try {
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         const db = client.db();
 
         // Get statistics for each grade level
-        const gradeStats = await Promise.all(EDUCATION_LEVELS.map(async (level) => {
+        const gradeStats = await Promise.all(GRADE_LEVELS.map(async (level) => {
             // Count students in this grade
             const studentCount = await db.collection('users').countDocuments({
                 role: 'student',

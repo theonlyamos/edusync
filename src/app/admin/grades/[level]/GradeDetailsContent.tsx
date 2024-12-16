@@ -11,7 +11,7 @@ import { ArrowLeft, Users, GraduationCap, BookOpen, Calendar, Book, BookA, Plus,
 import { useToast } from '@/components/ui/use-toast';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { EducationLevel } from '@/lib/constants';
+import type { GradeLevel } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
@@ -285,7 +285,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
         </Button>
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold">Grade Details</h1>
-          <EducationLevelBadge level={level as EducationLevel} />
+          <EducationLevelBadge level={level as GradeLevel} />
         </div>
         <p className="text-muted-foreground mt-2">Manage students, teachers, and lessons for this grade</p>
       </div>
