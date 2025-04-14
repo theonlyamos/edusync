@@ -1,0 +1,9 @@
+- Use bun for package management
+- Use tailwindcss for styling
+- Use shadcn/ui for components
+- Use react-hook-form for form handling
+- Use zod for form validation
+- use mongodb (Mongoose) for database
+- use axios for api calls
+- use react-query for data fetching
+- Do not comment the code unless explicitly asked to do so

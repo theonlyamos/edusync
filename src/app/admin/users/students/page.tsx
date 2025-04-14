@@ -41,8 +41,8 @@ interface Student {
   _id: string;
   name: string;
   email: string;
-  status: 'active' | 'inactive';
-  level: GradeLevel;
+  isActive: boolean;
+  grade: GradeLevel;
   createdAt: string;
 }
 
@@ -149,7 +149,7 @@ export default function StudentsPage() {
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.level.toLowerCase().includes(searchQuery.toLowerCase())
+    student.grade.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (status === 'loading' || isLoading) {
@@ -169,7 +169,7 @@ export default function StudentsPage() {
   return (
     <DashboardLayout>
       <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-wrap justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
@@ -185,7 +185,7 @@ export default function StudentsPage() {
               </p>
             </div>
           </div>
-          <Button onClick={() => router.push('/admin/users/students/create')}>
+          <Button className='whitespace-nowrap flex ' onClick={() => router.push('/admin/users/students/create')}>
             <UserPlus className="h-4 w-4 mr-2" />
             Add Student
           </Button>
@@ -226,15 +226,15 @@ export default function StudentsPage() {
                       <TableCell>{student.name}</TableCell>
                       <TableCell>{student.email}</TableCell>
                       <TableCell>
-                        <EducationLevelBadge level={student.level} />
+                        <EducationLevelBadge level={student.grade} />
                       </TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          student.status === 'active' 
+                          student.isActive
                             ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {student.status}
+                          {student.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -256,10 +256,10 @@ export default function StudentsPage() {
                             <DropdownMenuItem
                               onClick={() => handleStatusChange(
                                 student._id,
-                                student.status === 'active' ? 'inactive' : 'active'
+                                student.isActive ? 'inactive' : 'active'
                               )}
                             >
-                              {student.status === 'active' ? 'Deactivate' : 'Activate'}
+                              {student.isActive ? 'Deactivate' : 'Activate'}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-red-600"

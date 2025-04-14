@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Lesson } from "@/lib/models/Lesson";
-import { auth } from "@/auth";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function GET(request: Request) {
     try {
-        const session = await auth();
+        const session = await getServerSession(authOptions);
         if (!session) {
             return NextResponse.json(
                 { error: "Unauthorized" },
@@ -44,8 +45,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const session = await auth();
-        if (!session || session.user.role !== 'teacher') {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user.role || !['admin', 'teacher'].includes(session.user.role)) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }

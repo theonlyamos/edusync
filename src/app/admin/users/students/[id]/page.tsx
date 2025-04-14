@@ -32,8 +32,8 @@ interface Student {
   _id: string;
   name: string;
   email: string;
-  status: 'active' | 'inactive';
-  level: GradeLevel;
+  isActive: boolean;
+  grade: GradeLevel;
   createdAt: string;
   lastLogin?: string;
   lastActivity?: string;
@@ -62,8 +62,8 @@ export default function StudentDetailsPage({ params }: PageProps) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    level: '',
-    status: '',
+    grade: '',
+    isActive: false,
   });
 
   useEffect(() => {
@@ -97,8 +97,8 @@ export default function StudentDetailsPage({ params }: PageProps) {
           setFormData({
             name: studentData.name,
             email: studentData.email,
-            level: studentData.level,
-            status: studentData.status,
+            grade: studentData.grade,
+            isActive: studentData.isActive,
           });
 
           // Fetch student stats
@@ -173,14 +173,14 @@ export default function StudentDetailsPage({ params }: PageProps) {
   const handleLevelChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      level: value,
+      grade: value,
     }));
   };
 
   const handleStatusChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      status: value,
+      isActive: value === 'active',
     }));
   };
 
@@ -253,16 +253,16 @@ export default function StudentDetailsPage({ params }: PageProps) {
               <div className="flex justify-between">
                 <span className="text-sm font-medium">Account Status</span>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  student.status === 'active' 
+                  student.isActive 
                     ? 'bg-green-100 text-green-800'
                     : 'bg-red-100 text-red-800'
                 }`}>
-                  {student.status}
+                  {student.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm font-medium">Education Level</span>
-                <EducationLevelBadge level={student.level} />
+                <EducationLevelBadge level={student.grade} />
               </div>
               <div className="flex justify-between">
                 <span className="text-sm font-medium">Joined</span>
@@ -397,7 +397,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
               <div className="space-y-2">
                 <Label htmlFor="level">Education Level</Label>
                 <Select
-                  value={formData.level}
+                  value={formData.grade}
                   onValueChange={handleLevelChange}
                   required
                 >
@@ -417,7 +417,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
               <div className="space-y-2">
                 <Label htmlFor="status">Account Status</Label>
                 <Select
-                  value={formData.status}
+                  value={formData.isActive ? 'active' : 'inactive'}
                   onValueChange={handleStatusChange}
                   required
                 >

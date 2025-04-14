@@ -48,9 +48,9 @@ export default function AssessmentsPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    subject: '',
-    gradeLevel: '',
-    type: '',
+    subject: 'all',
+    gradeLevel: 'all',
+    type: 'all',
   });
 
   useEffect(() => {
@@ -60,9 +60,9 @@ export default function AssessmentsPage() {
   const fetchAssessments = async () => {
     try {
       const queryParams = new URLSearchParams();
-      if (filters.subject) queryParams.append('subject', filters.subject);
-      if (filters.gradeLevel) queryParams.append('gradeLevel', filters.gradeLevel);
-      if (filters.type) queryParams.append('type', filters.type);
+      if (filters.subject !== 'all') queryParams.append('subject', filters.subject);
+      if (filters.gradeLevel !== 'all') queryParams.append('gradeLevel', filters.gradeLevel);
+      if (filters.type !== 'all') queryParams.append('type', filters.type);
 
       const response = await fetch(`/api/assessments?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch assessments');
@@ -130,7 +130,7 @@ export default function AssessmentsPage() {
               <SelectValue placeholder="Filter by Subject" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Subjects</SelectItem>
+              <SelectItem value="all">All Subjects</SelectItem>
               {/* Add your subjects here */}
             </SelectContent>
           </Select>
@@ -145,7 +145,7 @@ export default function AssessmentsPage() {
               <SelectValue placeholder="Filter by Grade Level" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Grades</SelectItem>
+              <SelectItem value="all">All Grades</SelectItem>
               {/* Add your grade levels here */}
             </SelectContent>
           </Select>
@@ -160,7 +160,7 @@ export default function AssessmentsPage() {
               <SelectValue placeholder="Filter by Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="quiz">Quiz</SelectItem>
               <SelectItem value="exam">Exam</SelectItem>
               <SelectItem value="homework">Homework</SelectItem>

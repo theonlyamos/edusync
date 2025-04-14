@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth';
 import OpenAI from 'openai';
 import { connectToDatabase } from '@/lib/db';
 import { ObjectId } from 'mongodb';
+import { Student } from '@/lib/models/Student';
+import { Lesson } from '@/lib/models/Lesson';
+import { Chat } from '@/lib/models/Chat';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
@@ -56,26 +59,25 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
         // Get student's grade level
-        const student = await db.collection('users').findOne({
-            _id: new ObjectId(session.user.id)
-        });
+        const student = await Student.findOne({ userId: session.user.id })
 
-        if (!student?.level) {
+        if (!student?.grade) {
             return new NextResponse('Student grade level not found', { status: 400 });
         }
 
         const { messages, lessonId, chatId } = await req.json();
 
+        // Ensure connectToDatabase is called (assuming it establishes the Mongoose connection)
+        await connectToDatabase();
+
         // If lessonId is provided, get lesson details
         let lesson: any;
         if (lessonId) {
-            lesson = await db.collection('lessons').findOne({
-                _id: new ObjectId(lessonId)
-            })
+            // Use Mongoose findOne
+            lesson = await Lesson.findOne({ _id: lessonId });
         }
 
         const completion = await openai.chat.completions.create({
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
             messages: [
                 {
                     role: "system",
-                    content: getSystemPrompt(student.level, lesson)
+                    content: getSystemPrompt(student.grade, lesson)
                 },
                 ...messages.map((msg: any) => ({
                     role: msg.role,
@@ -118,24 +120,23 @@ export async function POST(req: Request) {
         // If no chatId provided, create a new chat
         let newChatId;
         if (!chatId) {
-            const result = await db.collection('chats').insertOne({
-                userId: session.user.id,
-                lessonId: lessonId ? new ObjectId(lessonId) : null,
+            // Use Chat model to create a new chat
+            const newChat = new Chat({
+                userId: new ObjectId(session.user.id), // Ensure userId is ObjectId
+                lessonId: lessonId ? new ObjectId(lessonId) : null, // Ensure lessonId is ObjectId
                 messages: [...messages, tutorMessage],
                 title: messages[0]?.content?.slice(0, 50) + '...',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                // createdAt and updatedAt are handled by Mongoose defaults/hooks
             });
-            newChatId = result.insertedId;
+            const savedChat = await newChat.save();
+            newChatId = savedChat._id;
         } else {
-            // Update existing chat
-            await db.collection('chats').updateOne(
-                { _id: new ObjectId(chatId) },
+            // Use Chat model to update existing chat
+            await Chat.updateOne(
+                { _id: new ObjectId(chatId) }, // Ensure chatId is ObjectId
                 {
-                    $set: {
-                        messages: [...messages, tutorMessage],
-                        updatedAt: new Date().toISOString()
-                    }
+                    $push: { messages: tutorMessage },
+                    $set: { updatedAt: new Date() } // Mongoose timestamp hook might handle this
                 }
             );
         }

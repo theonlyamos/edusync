@@ -1,15 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Lesson } from "@/lib/models/Lesson";
-import { auth } from "@/auth";
-import mongoose from "mongoose";
+import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth";
 
 export async function GET(
-    request: Request,
-    { params }: { params: { lessonId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await auth();
+        const session = await getServerSession(authOptions);
         if (!session) {
             return NextResponse.json(
                 { error: "Unauthorized" },
@@ -19,7 +19,9 @@ export async function GET(
 
         await connectToDatabase();
 
-        const lesson = await Lesson.findById(params.lessonId)
+        const { lessonId } = await params;
+
+        const lesson = await Lesson.findById(lessonId)
             .populate('teacher', 'name')
             .lean();
 
@@ -41,12 +43,12 @@ export async function GET(
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: { lessonId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session || session.user.role !== 'teacher') {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user.role || !['admin', 'teacher'].includes(session.user.role)) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -56,7 +58,9 @@ export async function PUT(
         const body = await request.json();
         await connectToDatabase();
 
-        const lesson = await Lesson.findById(params.lessonId).lean();
+        const { lessonId } = await params;
+
+        const lesson = await Lesson.findById(lessonId);
 
         if (!lesson) {
             return NextResponse.json(
@@ -65,7 +69,7 @@ export async function PUT(
             );
         }
 
-        if (lesson.teacher.toString() !== session.user.id) {
+        if (session.user.role === 'teacher' && lesson.teacherId.toString() !== session.user.id) {
             return NextResponse.json(
                 { error: "Not authorized to update this lesson" },
                 { status: 403 }
@@ -73,7 +77,7 @@ export async function PUT(
         }
 
         const updatedLesson = await Lesson.findByIdAndUpdate(
-            params.lessonId,
+            lessonId,
             { $set: body },
             { new: true }
         )
@@ -91,12 +95,12 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: { lessonId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await auth();
-        if (!session || session.user.role !== 'teacher') {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user.role || !['admin', 'teacher'].includes(session.user.role)) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -105,7 +109,9 @@ export async function DELETE(
 
         await connectToDatabase();
 
-        const lesson = await Lesson.findById(params.lessonId).lean();
+        const { lessonId } = await params;
+
+        const lesson = await Lesson.findById(lessonId);
 
         if (!lesson) {
             return NextResponse.json(
@@ -114,14 +120,14 @@ export async function DELETE(
             );
         }
 
-        if (lesson.teacher.toString() !== session.user.id) {
+        if (session.user.role === 'teacher' && lesson.teacherId.toString() !== session.user.id) {
             return NextResponse.json(
                 { error: "Not authorized to delete this lesson" },
                 { status: 403 }
             );
         }
 
-        await Lesson.findByIdAndDelete(params.lessonId);
+        await Lesson.findByIdAndDelete(lessonId);
 
         return NextResponse.json({ message: "Lesson deleted successfully" });
     } catch (error) {

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { signOut } from 'next-auth/react';
+import { ReactElement } from 'react';
 import {
   Book,
   GraduationCap,
@@ -19,10 +21,18 @@ import {
   ListChecks,
   FilePlus,
   BarChart2,
-  UsersRound
+  UsersRound,
+  LogOut
 } from "lucide-react";
 
-const adminLinks = [
+interface SidebarLink {
+  label: string;
+  icon: ReactElement;
+  href: string;
+  submenu?: SidebarLink[];
+}
+
+const adminLinks: SidebarLink[] = [
   {
     label: 'Dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
@@ -72,7 +82,7 @@ const adminLinks = [
   }
 ];
 
-const teacherLinks = [
+const teacherLinks: SidebarLink[] = [
   {
     label: 'Dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
@@ -117,7 +127,7 @@ const teacherLinks = [
   }
 ];
 
-const studentLinks = [
+const studentLinks: SidebarLink[] = [
   {
     label: 'Dashboard',
     icon: <LayoutDashboard className="h-5 w-5" />,
@@ -156,7 +166,7 @@ interface SidebarProps {
 
 export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
-  let links;
+  let links: SidebarLink[];
 
   switch (role) {
     case 'admin':
@@ -177,50 +187,63 @@ export function Sidebar({ role }: SidebarProps) {
   };
 
   return (
-    <div className="w-64 h-screen bg-card border-r">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold gradient-text">EduSync</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {role.charAt(0).toUpperCase() + role.slice(1)} Portal
-        </p>
+    <div className="w-64 h-screen bg-card border-r flex flex-col">
+      <div>
+        <div className="p-6">
+          <h1 className="text-2xl font-bold gradient-text">EduSync</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {role.charAt(0).toUpperCase() + role.slice(1)} Portal
+          </p>
+        </div>
+
+        <div className="px-3 py-2">
+          <div className="space-y-1">
+            {links.map((link: SidebarLink) => (
+              <div key={link.href}>
+                <Button
+                  variant={isActive(link.href) ? "secondary" : "ghost"}
+                  className={cn("w-full justify-start", {
+                    'mb-1': link?.submenu
+                  })}
+                  asChild
+                >
+                  <Link href={link.href}>
+                    {link.icon}
+                    <span className="ml-3">{link.label}</span>
+                  </Link>
+                </Button>
+                {link.submenu && (
+                  <div className="ml-6 space-y-1">
+                    {link.submenu.map((sublink: SidebarLink) => (
+                      <Button
+                        key={sublink.href}
+                        variant={isActive(sublink.href) ? "secondary" : "ghost"}
+                        className="w-full justify-start"
+                        asChild
+                      >
+                        <Link href={sublink.href}>
+                          {sublink.icon}
+                          <span className="ml-3">{sublink.label}</span>
+                        </Link>
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="px-3 py-2">
-        <div className="space-y-1">
-          {links.map((link) => (
-            <div key={link.href}>
-              <Button
-                variant={isActive(link.href) ? "secondary" : "ghost"}
-                className={cn("w-full justify-start", {
-                  'mb-1': link.submenu
-                })}
-                asChild
-              >
-                <Link href={link.href}>
-                  {link.icon}
-                  <span className="ml-3">{link.label}</span>
-                </Link>
-              </Button>
-              {link.submenu && (
-                <div className="ml-6 space-y-1">
-                  {link.submenu.map((sublink) => (
-                    <Button
-                      key={sublink.href}
-                      variant={isActive(sublink.href) ? "secondary" : "ghost"}
-                      className="w-full justify-start"
-                      asChild
-                    >
-                      <Link href={sublink.href}>
-                        {sublink.icon}
-                        <span className="ml-3">{sublink.label}</span>
-                      </Link>
-                    </Button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="mt-auto p-3">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-red-500 hover:bg-red-500 hover:text-white"
+          onClick={() => signOut({ callbackUrl: '/login' })}
+        >
+          <LogOut className="h-5 w-5 mr-3" />
+          <span className="ml-3">Logout</span>
+        </Button>
       </div>
     </div>
   );

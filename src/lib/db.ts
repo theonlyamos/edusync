@@ -17,7 +17,7 @@ const options: mongoose.ConnectOptions = {
 
 if (process.env.NODE_ENV === 'development') {
     // In development mode, enable debug mode to see mongoose queries
-    mongoose.set('debug', true);
+    mongoose.set('debug', false);
 }
 
 let cached = global.mongoose;

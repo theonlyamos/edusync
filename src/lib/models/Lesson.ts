@@ -75,7 +75,7 @@ const lessonSchema = new mongoose.Schema<ILesson>(
             required: true
         },
         teacher: {
-            type: mongoose.Schema.Types.ObjectId,
+            type: String,
             ref: 'User',
             required: true
         },

@@ -76,9 +76,11 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   }, [session, status, router]);
 
   useEffect(() => {
-    fetchLesson();
-    fetchContent();
-    fetchResources();
+    if (resolvedParams.lessonId) {
+      fetchLesson();
+      fetchContent();
+      fetchResources();
+    }
   }, [resolvedParams.lessonId]);
 
   const fetchLesson = async () => {
@@ -131,10 +133,16 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
     }
   };
 
-  const handleStartPractice = async () => {
+  const handleStartPractice = async (isRetry = false) => {
     if (!lesson) return;
 
-    setGeneratingPractice(true);
+    if (!isRetry) {
+      setGeneratingPractice(true);
+    }
+    
+    setPracticing(false);
+    setQuestions([]);
+
     try {
       const response = await fetch('/api/students/practice/generate', {
         method: 'POST',
@@ -142,10 +150,6 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subject: lesson.subject,
-          topic: lesson.title,
-          difficulty: 'medium',
-          type: 'lesson_practice',
           lessonId: lesson._id,
         }),
       });
@@ -153,8 +157,14 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
       if (!response.ok) throw new Error('Failed to generate practice');
 
       const data = await response.json();
-      setQuestions(data.questions);
-      setPracticing(true);
+      
+      if (data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
+        setPracticing(true);
+      } else {
+        toast({ title: 'No questions generated', description: 'Could not generate practice questions.', variant: 'destructive' })
+      }
+      
     } catch (error) {
       console.error('Error generating practice:', error);
       toast({
@@ -163,16 +173,19 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
         variant: 'destructive',
       });
     } finally {
-      setGeneratingPractice(false);
+       if (!isRetry) {
+         setGeneratingPractice(false);
+       }
     }
   };
 
-  const handlePracticeComplete = (score: number) => {
+  const handleRetry = () => {
     setPracticing(false);
-    toast({
-      title: 'Practice Complete!',
-      description: `You scored ${score}%. Keep up the good work!`,
-    });
+    setTimeout(() => setPracticing(true), 0); 
+  };
+
+  const handleGenerateNew = () => {
+    handleStartPractice();
   };
 
   if (status === 'loading' || loading) {
@@ -212,12 +225,21 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
             </Button>
             <h2 className="text-2xl font-bold">{lesson.title} - Practice</h2>
           </div>
-          <PracticeExercise
-            subject={lesson.subject}
-            topic={lesson.title}
-            questions={questions}
-            onComplete={handlePracticeComplete}
-          />
+          {questions.length > 0 ? (
+            <PracticeExercise
+              subject={lesson.subject}
+              topic={lesson.title}
+              questions={questions}
+              onRetry={handleRetry}
+              onGenerateNew={handleGenerateNew}
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <p>Loading questions or no questions generated.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </DashboardLayout>
     );
@@ -362,7 +384,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                   </CardHeader>
                   <CardContent>
                     <Button 
-                      onClick={handleStartPractice}
+                      onClick={() => handleStartPractice()}
                       disabled={generatingPractice}
                     >
                       {generatingPractice ? (
