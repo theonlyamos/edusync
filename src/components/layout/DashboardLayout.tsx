@@ -1,18 +1,28 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
-import { redirect } from 'next/navigation';
 
-interface DashboardLayoutProps {
+export interface DashboardLayoutProps {
   children: React.ReactNode;
-  role?: string
+  role?: string;
+  fullBleed?: boolean;
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
+  const router = useRouter();
   const { data: session, status } = useSession();
 
-  if (status === 'loading') {
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session?.user) {
+      router.push('/login');
+    }
+  }, [status, session, router]);
+
+  if (status !== 'authenticated') {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -20,23 +30,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     );
   }
 
-  if (!session?.user) {
-    redirect('/login');
-  }
-
-  const role = session.user.role === 'admin' || 
-               session.user.role === 'teacher' || 
-               session.user.role === 'student' 
-               ? session.user.role 
-               : 'student';
+  const userRole = session.user.role;
+  const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
+    ? userRole
+    : 'student';
 
   return (
     <div className="flex h-screen bg-background">
       <Sidebar role={role} />
       <main className="flex-1 overflow-y-auto">
-        <div className="container mx-auto py-6 px-4">
-          {children}
-        </div>
+        {fullBleed ? (
+          children
+        ) : (
+          <div className="container mx-auto py-6 px-4">
+            {children}
+          </div>
+        )}
       </main>
     </div>
   );

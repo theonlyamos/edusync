@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
+import { Chat } from '@/lib/models/Chat';
 
 export async function GET(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ chatId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -16,13 +17,12 @@ export async function GET(
 
         const { chatId } = await params;
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        const chat = await db.collection('chats').findOne({
+        const chat = await Chat.findOne({
             _id: new ObjectId(chatId),
-            userId: session.user.id
-        });
+            userId: new ObjectId(session.user.id)
+        }).lean();
 
         if (!chat) {
             return new NextResponse('Chat not found', { status: 404 });
@@ -45,22 +45,20 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { chatId } = await params;
-
+        const { chatId } = params;
         const { messages } = await request.json();
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        const result = await db.collection('chats').updateOne(
+        const result = await Chat.updateOne(
             {
                 _id: new ObjectId(chatId),
-                userId: session.user.id
+                userId: new ObjectId(session.user.id)
             },
             {
                 $set: {
                     messages,
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date()
                 }
             }
         );
@@ -86,14 +84,13 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { chatId } = await params;
+        const { chatId } = params;
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        await connectToDatabase();
 
-        const result = await db.collection('chats').deleteOne({
+        const result = await Chat.deleteOne({
             _id: new ObjectId(chatId),
-            userId: session.user.id
+            userId: new ObjectId(session.user.id)
         });
 
         if (result.deletedCount === 0) {
