@@ -166,6 +166,11 @@ const studentLinks: SidebarLink[] = [
     label: 'Assessments',
     icon: <FileCheck className="h-5 w-5" />,
     href: '/assessments'
+  },
+  {
+    label: 'Illustrator',
+    icon: <BarChart className="h-5 w-5" />,
+    href: '/students/illustrator'
   }
 ];
 
@@ -322,4 +327,4 @@ export function Sidebar({ role }: SidebarProps) {
       </div>
     </div>
   );
-} 
+}
