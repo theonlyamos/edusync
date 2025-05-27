@@ -53,6 +53,15 @@ interface PathShape extends BaseShape {
 
 type Shape = BoxShape | PathShape;
 
+// Define the structure for a canvas checkpoint
+interface CanvasCheckpoint {
+  id: string;
+  timestamp: number;
+  baseLayerImageSrc: string | null; // Can be null if it was just background + shapes
+  shapes: Shape[]; // Shapes on the canvas at this checkpoint
+  previewDataUrl: string; // Thumbnail of the canvas state
+}
+
 export default function CollaboratorPage() {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ChatForm>({
     resolver: zodResolver(chatSchema)
@@ -75,6 +84,12 @@ export default function CollaboratorPage() {
   // State for managing drawn shapes
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+
+  // State to hold the AI-generated image as the base layer
+  const [baseLayerImage, setBaseLayerImage] = useState<HTMLImageElement | null>(null);
+
+  // State for canvas checkpoints
+  const [checkpoints, setCheckpoints] = useState<CanvasCheckpoint[]>([]);
 
   // State to hold points for the current path being drawn
   const [currentPathPoints, setCurrentPathPoints] = useState<{ x: number; y: number }[] | null>(null);
@@ -109,6 +124,24 @@ export default function CollaboratorPage() {
         // Create a new image element from the base64 data
         const img = new Image();
         
+        // --- Create Checkpoint of current state BEFORE applying AI image ---
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const previewDataUrlPre = canvas.toDataURL('image/jpeg', 0.5);
+          // Deep copy shapes to avoid issues with state updates
+          const currentShapesDeepCopy = JSON.parse(JSON.stringify(shapes)); 
+
+          const checkpointPreAI: CanvasCheckpoint = {
+            id: Date.now().toString() + "_pre",
+            timestamp: Date.now(),
+            baseLayerImageSrc: baseLayerImage ? baseLayerImage.src : null,
+            shapes: currentShapesDeepCopy,
+            previewDataUrl: previewDataUrlPre,
+          };
+          setCheckpoints(prev => [checkpointPreAI, ...prev].slice(0, 10));
+        }
+        // --- End of Pre-AI Checkpoint ---
+
         // Create a Blob URL for the image data
         try {
           // First convert the base64 string to a binary array
@@ -146,64 +179,9 @@ export default function CollaboratorPage() {
           // Handle loading and drawing of the image
           img.onload = () => {
             console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
-            const canvas = canvasRef.current;
-            if (canvas) {
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                // Get the device pixel ratio
-                const pixelRatio = window.devicePixelRatio || 1;
-                const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
-                
-                console.log('Canvas dimensions:', cssWidth, 'x', cssHeight, 'Pixel ratio:', pixelRatio);
-                
-                // Clear the canvas properly first
-                // DON'T call initializeCanvas() here as it might have side effects
-                ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Clear current shapes
-                setShapes([]);
-                
-                // Fill with background color
-                const bgColor = getThemeBackgroundColor();
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Reset transform for correct scaling
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
-                
-                // Explicitly handle scale based on device pixel ratio
-                if (pixelRatio !== 1) {
-                  console.log('Applying pixel ratio scaling:', 1/pixelRatio);
-                  ctx.scale(1, 1); // Just use natural scaling
-                }
-                
-                // Draw the image with explicit dimensions to ensure it fits the canvas
-                try {
-                  console.log('Drawing image with dimensions:', canvas.width, 'x', canvas.height);
-                  
-                  // Try direct drawing first
-                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                  console.log('Image drawn to canvas - DIRECT METHOD');
-                } catch (drawError) {
-                  console.error('Error during drawImage:', drawError);
-                  
-                  // Fallback approach
-                  try {
-                    // Try with CSS dimensions instead
-                    ctx.drawImage(img, 0, 0, cssWidth * pixelRatio, cssHeight * pixelRatio);
-                    console.log('Image drawn to canvas - FALLBACK METHOD');
-                  } catch (fallbackError) {
-                    console.error('Fallback drawing also failed:', fallbackError);
-                    toast({
-                      title: 'Drawing Error',
-                      description: 'Failed to draw the image to canvas',
-                      variant: 'destructive'
-                    });
-                  }
-                }
-              }
-            }
+            // Set the base layer image and clear existing shapes.
+            setBaseLayerImage(img);
+            setShapes([]); // Clear existing user-drawn shapes
           };
 
           // Console log the image data (first few characters)
@@ -237,80 +215,6 @@ export default function CollaboratorPage() {
     return '#ffffff'; // Default fallback
   };
 
-  // Effect to resize canvas and set initial background, accounting for device pixel ratio
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const pixelRatio = window.devicePixelRatio || 1;
-      const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
-      
-      // Set canvas internal size based on device pixels
-      canvas.width = cssWidth * pixelRatio;
-      canvas.height = cssHeight * pixelRatio;
-
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Scale the context to draw using CSS pixels
-        ctx.scale(pixelRatio, pixelRatio);
-
-        // Initialize background using CSS dimensions
-        const bgColor = getThemeBackgroundColor();
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, cssWidth, cssHeight); // Fill using CSS dimensions
-      }
-    }
-    
-    // Add observer to detect theme changes
-    const observer = new MutationObserver(() => {
-      initializeCanvas();
-    });
-    
-    observer.observe(document.documentElement, { 
-      attributes: true, 
-      attributeFilter: ['class'] 
-    });
-    
-    return () => observer.disconnect();
-  }, []);
-  
-  // Function to initialize/reset canvas - also needs scaling
-  const initializeCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const pixelRatio = window.devicePixelRatio || 1;
-    const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
-
-    // Ensure internal size is correct
-    canvas.width = cssWidth * pixelRatio;
-    canvas.height = cssHeight * pixelRatio;
-
-    // Reset transform and scale before clearing
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(pixelRatio, pixelRatio);
-
-    const bgColor = getThemeBackgroundColor();
-    ctx.fillStyle = bgColor;
-    ctx.clearRect(0, 0, cssWidth, cssHeight); // Use clearRect for safety
-    ctx.fillRect(0, 0, cssWidth, cssHeight); // Fill using CSS dimensions
-  };
-  
-  // Clear canvas function
-  const clearCanvas = () => {
-    // Make sure we're using the current theme background 
-    const bgColor = getThemeBackgroundColor();
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-    }
-  };
-
   // Refine getCoords to use clientX/Y and getBoundingClientRect consistently
   const getCoords = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current!;
@@ -320,26 +224,61 @@ export default function CollaboratorPage() {
     let clientY: number;
 
     if ('touches' in e) {
-      // Handle touch events:
-      // - For touchstart/touchmove, use e.touches[0]
-      // - For touchend, use e.changedTouches[0]
       const touch = e.touches.length > 0 ? e.touches[0] : e.changedTouches[0];
       clientX = touch.clientX;
       clientY = touch.clientY;
     } else {
-      // Mouse event: Use clientX/clientY
       clientX = e.clientX;
       clientY = e.clientY;
     }
 
-    // Calculate coordinates relative to the canvas element's border edge
-    // These coordinates are in CSS pixels, which is correct because the context is scaled
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
     return { x, y };
   };
 
+  // Effect to resize canvas and set initial background, accounting for device pixel ratio
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const handleResizeOrThemeChange = () => {
+        const pixelRatio = window.devicePixelRatio || 1;
+        const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
+        
+        canvas.width = cssWidth * pixelRatio;
+        canvas.height = cssHeight * pixelRatio;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Reset transform before applying scale, to avoid cumulative scaling on resize/theme change
+          ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        }
+        redrawCanvas(); // Redraw with new dimensions/theme
+      };
+
+      handleResizeOrThemeChange(); // Initial setup
+
+      const observer = new MutationObserver(() => {
+        handleResizeOrThemeChange(); // Re-setup and redraw on theme change
+      });
+      
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+      
+      // Also listen for resize events
+      window.addEventListener('resize', handleResizeOrThemeChange);
+
+      return () => {
+        observer.disconnect();
+        window.removeEventListener('resize', handleResizeOrThemeChange);
+      };
+    }
+  // Ensure redrawCanvas is available and baseLayerImage changes trigger re-evaluation if canvas wasn't ready.
+  }, [baseLayerImage]); 
+  
   // Function to redraw the entire canvas from the shapes array
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
@@ -347,10 +286,39 @@ export default function CollaboratorPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 1. Clear canvas (using existing initialize function is good)
-    initializeCanvas(); // Ensures background is correct
+    // 1. Setup canvas dimensions and clear
+    // This part is crucial and should reflect the setup in the mount useEffect
+    const pixelRatio = window.devicePixelRatio || 1;
+    const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
 
-    // 2. Draw all shapes
+    // Ensure internal size is correct for the current display
+    // Check if canvas dimensions match CSS * pixelRatio, adjust if not
+    if (canvas.width !== cssWidth * pixelRatio || canvas.height !== cssHeight * pixelRatio) {
+        canvas.width = cssWidth * pixelRatio;
+        canvas.height = cssHeight * pixelRatio;
+        // Ensure transform is reset and then scaled
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0); 
+    } else {
+        // If dimensions are already correct, just ensure transform is set correctly for this redraw
+        // Reset transform before applying scale, to avoid cumulative scaling
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    }
+    
+    // Clear the canvas using CSS dimensions (since context is scaled)
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    // 2. Draw base layer (AI image or background color)
+    if (baseLayerImage) {
+      // Draw the AI image, ensuring it covers the canvas (using cssWidth, cssHeight as it's scaled)
+      ctx.drawImage(baseLayerImage, 0, 0, cssWidth, cssHeight);
+    } else {
+      // Fill with background color if no base image
+      const bgColor = getThemeBackgroundColor();
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, cssWidth, cssHeight);
+    }
+
+    // 3. Draw all user shapes on top
     shapes.forEach(shape => {
       ctx.lineWidth = shape.size;
       ctx.lineCap = 'round'; // Ensure line cap is set for paths
@@ -380,7 +348,7 @@ export default function CollaboratorPage() {
         }
       }
 
-      // 3. Highlight selected shape (visual part implemented later)
+      // 4. Highlight selected shape (visual part implemented later)
       if (shape.id === selectedShapeId) {
          console.log("Selected shape:", shape.id); 
          // TODO: Implement visual highlighting (e.g., bounding box)
@@ -397,7 +365,7 @@ export default function CollaboratorPage() {
   // Ensure all dependencies that might affect drawing or initialization are included
   // Adding penColor, toolSize etc. might cause redraws during preview, handle carefully.
   // For now, only redraw when the actual shapes array or selection changes.
-  }, [shapes, selectedShapeId]); 
+  }, [shapes, selectedShapeId, baseLayerImage]); // Added baseLayerImage
 
   // Refactored startDrawing
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -617,13 +585,14 @@ export default function CollaboratorPage() {
       setShapes(prev => prev.filter(shape => shape.id !== selectedShapeId));
       setSelectedShapeId(null);
     } else {
-      // Clear canvas drawings (shapes) and all text boxes
-      clearCanvas(); // Clears the visual canvas
+      // Clear canvas drawings (shapes), all text boxes, and the base image
+      setBaseLayerImage(null); // Clear AI-generated image
       setShapes([]); // Clear shapes state
       setTextBoxes([]); // Clear text boxes state
       setSelectedTextBoxId(null);
       setSelectedShapeId(null);
       setFocusedTextBoxId(null);
+      // redrawCanvas will be triggered by state changes (baseLayerImage, shapes)
     }
   };
 
@@ -643,6 +612,40 @@ export default function CollaboratorPage() {
     if (currentImageUrl) {
       window.open(currentImageUrl, '_blank');
     }
+  };
+
+  // Add a function to revert to a checkpoint
+  const revertToCheckpoint = (checkpointId: string) => {
+    const checkpoint = checkpoints.find(c => c.id === checkpointId);
+    if (!checkpoint) {
+      toast({ title: 'Error', description: 'Checkpoint not found.', variant: 'destructive' });
+      return;
+    }
+
+    if (checkpoint.baseLayerImageSrc) {
+      const imageToLoad = new Image();
+      imageToLoad.onload = () => {
+        setBaseLayerImage(imageToLoad);
+        setShapes([...checkpoint.shapes]); // Restore shapes from the checkpoint
+        toast({ title: 'Canvas Restored', description: `Restored to checkpoint from ${new Date(checkpoint.timestamp).toLocaleTimeString()}` });
+      };
+      imageToLoad.onerror = () => {
+        console.error('Error loading checkpoint image:', checkpoint.baseLayerImageSrc);
+        toast({ title: 'Error', description: 'Failed to load image for checkpoint.', variant: 'destructive' });
+      };
+      imageToLoad.src = checkpoint.baseLayerImageSrc;
+    } else {
+      // No base image for this checkpoint (it was background color + shapes)
+      setBaseLayerImage(null);
+      setShapes([...checkpoint.shapes]);
+      toast({ title: 'Canvas Restored', description: `Restored to checkpoint from ${new Date(checkpoint.timestamp).toLocaleTimeString()} (custom drawing)` });
+    }
+  };
+
+  // Function to clear all checkpoints
+  const clearCheckpoints = () => {
+    setCheckpoints([]);
+    toast({ title: 'History Cleared', description: 'Checkpoint history has been cleared.' });
   };
 
   return (
@@ -767,6 +770,14 @@ export default function CollaboratorPage() {
             </div>
           )}
         </div>
+
+        {/* Checkpoints Bar - Left Middle */}
+        <CheckpointsBar 
+          checkpoints={checkpoints} 
+          onRevert={revertToCheckpoint} 
+          onClearHistory={clearCheckpoints} 
+        />
+
         {/* Chat Overlay - Bottom Right */}
         <div className={cn(
           "absolute bottom-4 right-4 z-30 w-80 bg-card/90 text-card-foreground backdrop-blur-sm border rounded-lg shadow-lg flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
@@ -825,3 +836,52 @@ export default function CollaboratorPage() {
     </DashboardLayout>
   );
 } 
+
+// New CheckpointsBar component
+const CheckpointsBar = ({ 
+  checkpoints, 
+  onRevert, 
+  onClearHistory 
+}: { 
+  checkpoints: CanvasCheckpoint[], 
+  onRevert: (id: string) => void, 
+  onClearHistory: () => void 
+}) => {
+  if (checkpoints.length === 0) {
+    return null; // Don't render the bar if there are no checkpoints
+  }
+
+  return (
+    <div className="absolute top-1/2 left-4 transform -translate-y-1/2 z-30 bg-card/90 text-card-foreground backdrop-blur-sm p-3 rounded-lg shadow-md border flex flex-col space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto w-36">
+      <div className="flex items-center justify-between sticky top-0 bg-card/90 py-1 mb-1">
+        <h4 className="text-sm font-semibold text-center flex-grow">History</h4>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={onClearHistory} 
+          className="h-6 w-6 p-0 -mr-1" // Adjust styling for tight fit
+          title="Clear History"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      {checkpoints.map(cp => (
+        <button
+          key={cp.id}
+          onClick={() => onRevert(cp.id)}
+          className={cn(
+            "block p-1 rounded-md hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary w-full"
+          )}
+          title={`Revert to ${new Date(cp.timestamp).toLocaleString()}`}
+        >
+          <img 
+            src={cp.previewDataUrl} 
+            alt={`Checkpoint ${new Date(cp.timestamp).toLocaleTimeString()}`} 
+            className="w-full h-20 object-cover rounded border border-border mb-1" // Adjusted for vertical bar
+          />
+          <p className="text-xs text-muted-foreground truncate">{new Date(cp.timestamp).toLocaleTimeString()}</p>
+        </button>
+      ))}
+    </div>
+  );
+}; 
