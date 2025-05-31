@@ -6,11 +6,13 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import dynamic from 'next/dynamic';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { VoiceControl } from '@/components/voice/VoiceControl';
+import dynamic from 'next/dynamic';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
+const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
 export default function IllustratorPage() {
   const [input, setInput] = useState('');
@@ -27,13 +29,16 @@ export default function IllustratorPage() {
     setExplanation('');
     setCode('');
     setLibrary(null);
+    
     try {
       const res = await fetch('/api/students/illustrator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: input })
       });
+      
       if (!res.ok) throw new Error('Failed to get AI response');
+      
       const data = await res.json();
       setExplanation(data.explanation);
       setCode(data.code);
@@ -86,9 +91,13 @@ export default function IllustratorPage() {
                   className="min-h-[100px]"
                   disabled={isLoading}
                 />
-                <Button onClick={handleAsk} disabled={isLoading || !input.trim()}>
-                  {isLoading ? 'Generating...' : 'Ask AI'}
-                </Button>
+                
+                <div className="flex gap-2">
+                  <Button onClick={handleAsk} disabled={isLoading || !input.trim()}>
+                    {isLoading ? 'Generating...' : 'Ask AI'}
+                  </Button>
+                  <VoiceControl onError={setError} />
+                </div>
                 
                 {error && (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-md">
@@ -159,6 +168,3 @@ export default function IllustratorPage() {
     </DashboardLayout>
   );
 }
-
-// Dynamically import the live sketch renderer
-const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });

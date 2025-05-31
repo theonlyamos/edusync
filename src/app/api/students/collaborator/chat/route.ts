@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Modality } from '@google/genai';
 
 // Ensure the API key is set in environment variables
-const API_KEY = process.env.GOOGLE_API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-    console.error('GOOGLE_API_KEY environment variable not set');
+    console.error('GEMINI_API_KEY environment variable not set');
 }
 
 export async function POST(request: NextRequest) {

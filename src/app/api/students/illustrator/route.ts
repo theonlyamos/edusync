@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  baseURL: process.env.GOOGLE_OPENAI_BASE_URL,
-  apiKey: process.env.GOOGLE_API_KEY,
+  baseURL: process.env.GEMINI_OPENAI_BASE_URL,
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 const SYSTEM_PROMPT = `You are an expert educator and creative coder. When a student asks a question, you:
