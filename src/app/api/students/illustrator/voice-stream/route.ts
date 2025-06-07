@@ -31,11 +31,6 @@ function initWebSocketServer() {
 
     wss.on('connection', (ws, req) => {
         console.log('WebSocket connection established');
-        console.log('Connection details:', {
-            url: req.url,
-            headers: req.headers,
-            remoteAddress: req.socket.remoteAddress
-        });
 
         ws.on('message', async (data) => {
             try {
@@ -54,7 +49,7 @@ function initWebSocketServer() {
                     // Try to parse as string first (might be JSON sent as buffer)
                     try {
                         const stringData = data.toString('utf8');
-                        console.log('Trying to parse buffer as string:', stringData);
+                        console.log('Trying to parse buffer as string:');
                         const message = JSON.parse(stringData);
                         await handleWebSocketMessage(ws, message);
                     } catch (parseError) {
@@ -119,7 +114,7 @@ async function handleWebSocketMessage(ws: any, message: any) {
 
 async function handleAudioData(ws: any, audioData: Buffer) {
     // Find session associated with this WebSocket
-    let sessionData = null;
+    let sessionData = null;;
     for (const [sessionId, data] of Array.from(activeSessions.entries())) {
         if (data.ws === ws) {
             sessionData = data;
@@ -228,6 +223,7 @@ async function handleStartSession(ws: any, sessionId: string) {
                 },
                 onmessage: (message: LiveServerMessage) => {
                     console.log('Received message from Gemini');
+                    console.log('Gemini Message:', message);
                     responseQueue.push(message);
                 },
                 onerror: (e: ErrorEvent) => {

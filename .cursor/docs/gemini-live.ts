@@ -10,7 +10,6 @@ import {
     TurnCoverage,
     Type,
 } from '@google/genai';
-import mime from 'mime';
 import { writeFile } from 'fs';
 const responseQueue: LiveServerMessage[] = [];
 let session: Session | undefined = undefined;
