@@ -24,6 +24,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const processorRef = useRef<AudioWorkletNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
+    const playbackCtxRef = useRef<AudioContext | null>(null);
+    const nextPlaybackTimeRef = useRef<number>(0);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -63,7 +65,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             wsRef.current.send(JSON.stringify({ type: 'end', sessionId: sessionIdRef.current }));
         }
 
-        // Run the full cleanup
+        // Close playback context
+        if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
+            playbackCtxRef.current.close();
+        }
+        playbackCtxRef.current = null;
+        nextPlaybackTimeRef.current = 0;
+
+        // Run the full cleanup for capture resources
         cleanupAudioResources();
     }, [cleanupAudioResources]);
 
@@ -95,6 +104,35 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767;
                 }
                 ws.send(pcmData.buffer);
+            } else {
+                // Continuous playback of WAV fragment
+                const arrayBuf = event.data as ArrayBuffer;
+
+                const playChunk = async () => {
+                    try {
+                        let ctx = playbackCtxRef.current;
+                        if (!ctx || ctx.state === 'closed') {
+                            ctx = new AudioContext({ sampleRate: 24000 });
+                            playbackCtxRef.current = ctx;
+                            nextPlaybackTimeRef.current = ctx.currentTime;
+                        }
+
+                        // decode WAV to AudioBuffer
+                        const audioBuffer = await ctx.decodeAudioData(arrayBuf.slice(0));
+
+                        const source = ctx.createBufferSource();
+                        source.buffer = audioBuffer;
+                        source.connect(ctx.destination);
+
+                        const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
+                        source.start(startAt);
+                        nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
+                    } catch (e) {
+                        console.error('Failed to play audio chunk', e);
+                    }
+                };
+
+                playChunk();
             }
         };
 
@@ -162,9 +200,34 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                                 reject(new Error(message.error || 'Unknown server error during startup'));
                             }
                         } else {
-                            const audioBlob = new Blob([event.data], { type: 'audio/wav' });
-                            const url = URL.createObjectURL(audioBlob);
-                            setAudioUrl(url);
+                            // Continuous playback of WAV fragment
+                            const arrayBuf = event.data as ArrayBuffer;
+
+                            const playChunk = async () => {
+                                try {
+                                    let ctx = playbackCtxRef.current;
+                                    if (!ctx || ctx.state === 'closed') {
+                                        ctx = new AudioContext({ sampleRate: 24000 });
+                                        playbackCtxRef.current = ctx;
+                                        nextPlaybackTimeRef.current = ctx.currentTime;
+                                    }
+
+                                    // decode WAV to AudioBuffer
+                                    const audioBuffer = await ctx.decodeAudioData(arrayBuf.slice(0));
+
+                                    const source = ctx.createBufferSource();
+                                    source.buffer = audioBuffer;
+                                    source.connect(ctx.destination);
+
+                                    const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
+                                    source.start(startAt);
+                                    nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
+                                } catch (e) {
+                                    console.error('Failed to play audio chunk', e);
+                                }
+                            };
+
+                            playChunk();
                         }
                     };
 

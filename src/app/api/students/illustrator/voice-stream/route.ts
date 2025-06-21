@@ -211,6 +211,7 @@ function processResponseQueue(sessionId: string) {
     if (!sessionData) return;
 
     const { responseQueue, audioParts, ws, sampleRate } = sessionData;
+    const FRAGMENT_PARTS = 3; // send after every 3 chunks (~120-150 ms)
 
     while (responseQueue.length > 0) {
         const message = responseQueue.shift();
@@ -222,11 +223,14 @@ function processResponseQueue(sessionId: string) {
             }
         }
 
-        // If the turn is complete and we have audio, send it to the client
-        if (message?.serverContent?.turnComplete && audioParts.length > 0) {
+        const shouldFlush =
+            audioParts.length >= FRAGMENT_PARTS ||
+            (message?.serverContent?.turnComplete && audioParts.length > 0);
+
+        if (shouldFlush) {
             const wavBuffer = convertToWav(audioParts, 24000);
             ws.send(wavBuffer);
-            audioParts.length = 0; // Clear the parts for the next turn
+            audioParts.length = 0; // Clear parts buffer
         }
     }
 }
