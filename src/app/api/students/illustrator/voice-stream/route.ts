@@ -1,14 +1,11 @@
 import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
-import { GoogleGenAI, MediaResolution, Modality, TurnCoverage, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage } from '@google/genai';
 
-// WebSocket polyfills for Node.js environment
-if (typeof global !== 'undefined') {
+// Polyfill WebSocket for Node.js if it doesn't exist
+if (typeof global !== 'undefined' && !global.WebSocket) {
     try {
-        const WebSocket = require('ws');
-        if (!global.WebSocket) {
-            global.WebSocket = WebSocket;
-        }
+        global.WebSocket = require('ws');
     } catch (error) {
         console.warn('WebSocket polyfill failed to load:', error);
     }
@@ -16,69 +13,44 @@ if (typeof global !== 'undefined') {
 
 export const runtime = 'nodejs';
 
-// Store active sessions
+// In-memory store for active streaming sessions
 const activeSessions = new Map<string, any>();
 let wss: WebSocketServer | null = null;
 
-// Initialize WebSocket server
+// Initialize the WebSocket server once
 function initWebSocketServer() {
     if (wss) return wss;
 
-    wss = new WebSocketServer({
-        port: 3001,
-        path: '/voice-stream'
-    });
+    wss = new WebSocketServer({ port: 3001, path: '/voice-stream' });
 
-    wss.on('connection', (ws, req) => {
-        console.log('WebSocket connection established');
-
-        ws.on('message', async (data) => {
+    wss.on('connection', (ws) => {
+        ws.on('message', async (data, isBinary) => {
             try {
-                console.log('WebSocket message received:', {
-                    type: typeof data,
-                    isBuffer: Buffer.isBuffer(data),
-                    isArrayBuffer: data instanceof ArrayBuffer
-                });
-
-                // Check if it's a string message (JSON)
-                if (typeof data === 'string') {
-                    console.log('Processing string message:', data);
-                    const message = JSON.parse(data);
-                    await handleWebSocketMessage(ws, message);
-                } else if (Buffer.isBuffer(data)) {
-                    // Try to parse as string first (might be JSON sent as buffer)
-                    try {
-                        const stringData = data.toString('utf8');
-                        console.log('Trying to parse buffer as string:');
-                        const message = JSON.parse(stringData);
-                        await handleWebSocketMessage(ws, message);
-                    } catch (parseError) {
-                        // If not JSON, treat as binary audio data
-                        console.log('Treating as binary audio data, size:', data.length);
-                        await handleAudioData(ws, data);
-                    }
-                } else {
-                    // Handle other data types (ArrayBuffer, etc.)
-                    let audioBuffer: Buffer;
-                    if (data instanceof ArrayBuffer) {
-                        audioBuffer = Buffer.from(data);
+                if (!isBinary) {
+                    let messageStr: string;
+                    if (typeof data === 'string') {
+                        messageStr = data;
+                    } else if (data instanceof Buffer) {
+                        messageStr = data.toString('utf8');
                     } else {
-                        audioBuffer = Buffer.from(data as any);
+                        messageStr = Buffer.from(data as ArrayBuffer).toString('utf8');
                     }
-                    console.log('Treating as binary audio data (converted), size:', audioBuffer.length);
+                    const message = JSON.parse(messageStr);
+                    await handleWebSocketMessage(ws, message);
+                } else {
+                    const audioBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
                     await handleAudioData(ws, audioBuffer);
                 }
             } catch (error) {
                 console.error('Error handling WebSocket message:', error);
+                ws.send(JSON.stringify({ type: 'error', error: 'Internal server error' }));
             }
         });
 
         ws.on('close', () => {
-            console.log('WebSocket connection closed');
-            // Cleanup any associated sessions
+            // Clean up session associated with this WebSocket
             for (const [sessionId, sessionData] of Array.from(activeSessions.entries())) {
                 if (sessionData.ws === ws) {
-                    console.log('Cleaning up session:', sessionId);
                     sessionData.session?.close();
                     activeSessions.delete(sessionId);
                     break;
@@ -86,274 +58,203 @@ function initWebSocketServer() {
             }
         });
 
-        ws.on('error', (error) => {
-            console.error('WebSocket error:', error);
-        });
+        ws.on('error', (error) => console.error('WebSocket error:', error));
     });
 
     console.log('WebSocket server initialized on port 3001');
     return wss;
 }
 
-async function handleWebSocketMessage(ws: any, message: any) {
+// Handles control messages like 'start' and 'end'
+async function handleWebSocketMessage(ws: any, message: { type: string; sessionId: string; sampleRate?: number }) {
     const { type, sessionId, sampleRate } = message;
-    console.log('Received WebSocket message:', { type, sessionId });
 
     switch (type) {
         case 'start':
-            await handleStartSession(ws, sessionId);
+            if (!sampleRate) {
+                ws.send(JSON.stringify({ type: 'error', error: 'Sample rate is required to start a session.' }));
+                return;
+            }
+            await handleStartSession(ws, sessionId, sampleRate);
             break;
         case 'end':
             await handleEndSession(sessionId);
             break;
         default:
-            console.log('Unknown message type:', type);
-            ws.send(JSON.stringify({ error: 'Unknown message type' }));
+            console.warn('Unknown message type:', type);
+            ws.send(JSON.stringify({ type: 'error', error: 'Unknown message type' }));
     }
 }
 
+// Forwards binary audio data to the Gemini API
 async function handleAudioData(ws: any, audioData: Buffer) {
-    // Find session associated with this WebSocket
-    let sessionData = null;;
-    for (const [sessionId, data] of Array.from(activeSessions.entries())) {
+    let sessionData;
+    for (const data of Array.from(activeSessions.values())) {
         if (data.ws === ws) {
             sessionData = data;
             break;
         }
     }
 
-    if (!sessionData) {
-        console.error('No session found for WebSocket. Active sessions:', activeSessions.size);
-        console.error('Available session IDs:', Array.from(activeSessions.keys()));
+    if (!sessionData || sessionData.status !== 'ready') {
+        // Don't send an error, as this can happen during session setup
+        console.warn('Session not ready for audio data. Discarding.');
         return;
     }
 
-    // Check if Gemini session is ready
-    if (!sessionData.session) {
-        console.error('Gemini session not ready yet for session:', sessionData.sessionId);
-        return;
-    }
+    // Gemini native-audio expects 16-bit-PCM, 16-kHz, mono audio encoded as base64.
+    const base64Audio = audioData.toString('base64');
 
-    try {
-        // Convert audio data to base64 for Gemini Live
-        const audioBuffer = Buffer.isBuffer(audioData) ? audioData : Buffer.from(audioData);
-        const audioBase64 = audioBuffer.toString('base64');
-
-        console.log('Sending audio data to Gemini, size:', audioBuffer.length);
-
-        // Send to Gemini Live
-        sessionData.session.sendClientContent({
-            turns: [{
-                role: 'user',
-                parts: [{
-                    inlineData: {
-                        mimeType: sessionData.contentType || 'audio/pcm;rate=44100',
-                        data: audioBase64,
-                    },
-                }],
-            }],
-        });
-
-        // Check for immediate response
-        const responseAudio = await checkForResponseAudio(sessionData);
-        if (responseAudio) {
-            ws.send(responseAudio);
+    sessionData.session.sendRealtimeInput({
+        audio: {
+            data: base64Audio,
+            mimeType: `audio/pcm;rate=${sessionData.sampleRate || 16000}`
         }
-    } catch (error) {
-        console.error('Failed to process audio data:', error);
-    }
+    });
 }
 
-async function handleStartSession(ws: any, sessionId: string) {
-    try {
-        console.log('=== Starting session creation process ===');
-        console.log('Session ID:', sessionId);
-        console.log('WebSocket state:', ws.readyState);
 
+// Starts a new voice streaming session with Gemini
+async function handleStartSession(ws: any, sessionId: string, sampleRate: number) {
+    if (activeSessions.has(sessionId)) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Session ID already exists.' }));
+        return;
+    }
+
+    try {
         const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.error('API key not configured');
-            ws.send(JSON.stringify({
-                type: 'error',
-                error: 'API key not configured'
-            }));
-            return;
-        }
+        if (!apiKey) throw new Error('GEMINI_API_KEY environment variable not set.');
 
         const ai = new GoogleGenAI({ apiKey });
-        const model = 'models/gemini-2.0-flash-live-001';
+
         const responseQueue: LiveServerMessage[] = [];
         const audioParts: string[] = [];
 
-        // Create session variable that will be set by the connection
-        let geminiSession: any = null;
+        // **FIX:** Use the newer model name and configuration
+        const model = 'models/gemini-2.5-flash-preview-native-audio-dialog';
+        const config = {
+            responseModalities: [Modality.AUDIO],
+            mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+            speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+            },
+            // **FIX:** The newer model uses this input config
+            inputConfig: {
+                // **FIX:** Use the sample rate provided by the client
+                audio: { sampleRateHz: sampleRate }
+            }
+        };
 
-        // Create a placeholder session entry first
-        console.log('Creating placeholder session entry...');
+        // Store session state before connecting
         activeSessions.set(sessionId, {
-            session: null, // Will be set once Gemini session is ready
+            session: null,
+            status: 'creating',
             responseQueue,
             audioParts,
             ws,
-            contentType: 'audio/pcm;rate=44100',
-            sessionId: sessionId,
-            status: 'creating'
+            sampleRate, // Store for WAV conversion later
         });
-
-        console.log('Placeholder created. Total sessions:', activeSessions.size);
-        console.log('Session IDs:', Array.from(activeSessions.keys()));
-
-        console.log('Connecting to Gemini Live API with model:', model);
-        geminiSession = await ai.live.connect({
+        const geminiSession = await ai.live.connect({
             model,
+            config,
             callbacks: {
                 onopen: () => {
-                    console.log('=== Gemini session opened ===');
-                    console.log('Session ID:', sessionId);
-                    // Update the session with the actual Gemini session
                     const sessionData = activeSessions.get(sessionId);
                     if (sessionData) {
-                        sessionData.session = geminiSession;
                         sessionData.status = 'ready';
-                        console.log('Session updated with Gemini connection');
-                        console.log('Session is now ready for audio data');
-                    } else {
-                        console.error('Session data not found when Gemini opened!');
+                        ws.send(JSON.stringify({ type: 'session-started', sessionId }));
                     }
                 },
                 onmessage: (message: LiveServerMessage) => {
-                    console.log('Received message from Gemini');
-                    console.log('Gemini Message:', message);
+                    // When Gemini sends a message, add it to the queue for processing
                     responseQueue.push(message);
+                    processResponseQueue(sessionId);
                 },
                 onerror: (e: ErrorEvent) => {
-                    console.error('Gemini session error:', e.message);
+                    console.error(`Gemini session error for ID ${sessionId}:`, e.message);
+                    ws.send(JSON.stringify({ type: 'error', error: `Gemini error: ${e.message}` }));
                     activeSessions.delete(sessionId);
                 },
                 onclose: (e: CloseEvent) => {
-                    console.log('Gemini session closed:', e.reason);
+                    try {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'session-ended',
+                                sessionId,
+                                reason: e.reason || 'closed'
+                            })
+                        );
+                    } catch (err) {
+                        console.warn('Failed to send session-ended message:', err);
+                    }
                     activeSessions.delete(sessionId);
-                },
-            },
-            config: {
-                responseModalities: [Modality.AUDIO],
-                mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-                speechConfig: {
-                    voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: 'Zephyr' },
-                    },
-                },
-                realtimeInputConfig: {
-                    turnCoverage: TurnCoverage.TURN_INCLUDES_ALL_INPUT,
                 },
             },
         });
 
-        console.log('Gemini Live connection established');
-
-        // Update the session data with the connected session
-        const sessionData = activeSessions.get(sessionId);
-        if (sessionData) {
-            sessionData.session = geminiSession;
-            sessionData.status = 'ready';
-            console.log('Session data fully updated');
-        } else {
-            console.error('Session data lost during connection!');
+        // Store the session object after successful connection
+        const storedSessionData = activeSessions.get(sessionId);
+        if (storedSessionData) {
+            storedSessionData.session = geminiSession;
         }
 
-        console.log('=== Session fully initialized ===');
-        console.log('Sending session-started message to client');
-
-        ws.send(JSON.stringify({
-            type: 'session-started',
-            sessionId
-        }));
-
-        console.log('Session-started message sent');
-
     } catch (error: any) {
-        console.error('=== Failed to start session ===');
-        console.error('Error:', error);
-        console.error('Stack:', error.stack);
+        console.error(`Failed to start session ${sessionId}:`, error);
+        ws.send(JSON.stringify({ type: 'error', error: 'Failed to start session', details: error.message }));
         activeSessions.delete(sessionId);
-        ws.send(JSON.stringify({
-            type: 'error',
-            error: 'Failed to start session',
-            details: error.message
-        }));
     }
 }
 
+// Process the queue of messages from Gemini
+function processResponseQueue(sessionId: string) {
+    const sessionData = activeSessions.get(sessionId);
+    if (!sessionData) return;
+
+    const { responseQueue, audioParts, ws, sampleRate } = sessionData;
+
+    while (responseQueue.length > 0) {
+        const message = responseQueue.shift();
+
+        if (message?.serverContent?.modelTurn?.parts) {
+            const part = message.serverContent.modelTurn.parts[0];
+            if (part?.inlineData?.data) {
+                audioParts.push(part.inlineData.data);
+            }
+        }
+
+        // If the turn is complete and we have audio, send it to the client
+        if (message?.serverContent?.turnComplete && audioParts.length > 0) {
+            const wavBuffer = convertToWav(audioParts, 24000);
+            ws.send(wavBuffer);
+            audioParts.length = 0; // Clear the parts for the next turn
+        }
+    }
+}
+
+// Ends the session and cleans up resources
 async function handleEndSession(sessionId: string) {
     const sessionData = activeSessions.get(sessionId);
     if (sessionData) {
-        const finalAudio = await handleFinalTurn(sessionData);
-        if (finalAudio) {
-            sessionData.ws.send(finalAudio);
-        }
+        processResponseQueue(sessionId); // Process any remaining messages
         sessionData.session?.close();
         activeSessions.delete(sessionId);
     }
 }
 
-async function checkForResponseAudio(sessionData: any): Promise<Buffer | null> {
-    const { responseQueue, audioParts } = sessionData;
 
-    while (responseQueue.length > 0) {
-        const message = responseQueue.shift();
-        if (message?.serverContent?.modelTurn?.parts) {
-            for (const part of message.serverContent.modelTurn.parts) {
-                if (part.inlineData?.data) {
-                    audioParts.push(part.inlineData.data);
-                }
-            }
-        }
+// Converts raw PCM audio chunks (base64) into a valid WAV file buffer
+function convertToWav(rawData: string[], sampleRate: number): Buffer {
+    // **FIX:** Correctly calculate total data length from base64 chunks
+    const pcmData = rawData.map(data => Buffer.from(data, 'base64'));
+    const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
 
-        if (message?.serverContent?.turnComplete && audioParts.length > 0) {
-            const audioBuffer = convertToWav(audioParts, 'audio/pcm;rate=24000');
-            audioParts.length = 0;
-            return audioBuffer;
-        }
-    }
-
-    return null;
-}
-
-async function handleFinalTurn(sessionData: any): Promise<Buffer | null> {
-    const { responseQueue, audioParts } = sessionData;
-    let done = false;
-
-    while (!done) {
-        if (responseQueue.length > 0) {
-            const message = responseQueue.shift();
-            if (message?.serverContent?.modelTurn?.parts) {
-                for (const part of message.serverContent.modelTurn.parts) {
-                    if (part.inlineData?.data) {
-                        audioParts.push(part.inlineData.data);
-                    }
-                }
-            }
-            if (message?.serverContent?.turnComplete) {
-                done = true;
-            }
-        } else {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-    }
-
-    if (audioParts.length > 0) {
-        return convertToWav(audioParts, 'audio/pcm;rate=24000');
-    }
-
-    return null;
-}
-
-function convertToWav(rawData: string[], mimeType: string): Buffer {
-    const options = parseMimeType(mimeType);
-    const dataLength = rawData.reduce((a, b) => a + b.length, 0);
-    const wavHeader = createWavHeader(dataLength, options);
-    const buffer = Buffer.concat(rawData.map(data => Buffer.from(data, 'base64')));
-    return Buffer.concat([wavHeader, buffer]);
+    const options = {
+        numChannels: 1,
+        sampleRate: sampleRate,
+        bitsPerSample: 16,
+    };
+    const wavHeader = createWavHeader(totalDataLength, options);
+    return Buffer.concat([wavHeader, ...pcmData]);
 }
 
 interface WavConversionOptions {
@@ -362,44 +263,19 @@ interface WavConversionOptions {
     bitsPerSample: number;
 }
 
-function parseMimeType(mimeType: string): WavConversionOptions {
-    const [fileType, ...params] = mimeType.split(';').map(s => s.trim());
-    const [_, format] = fileType.split('/');
-
-    const options: Partial<WavConversionOptions> = {
-        numChannels: 1,
-        bitsPerSample: 16,
-    };
-
-    if (format && format.startsWith('L')) {
-        const bits = parseInt(format.slice(1), 10);
-        if (!isNaN(bits)) {
-            options.bitsPerSample = bits;
-        }
-    }
-
-    for (const param of params) {
-        const [key, value] = param.split('=').map(s => s.trim());
-        if (key === 'rate') {
-            options.sampleRate = parseInt(value, 10);
-        }
-    }
-
-    return options as WavConversionOptions;
-}
-
+// Creates a 44-byte WAV file header
 function createWavHeader(dataLength: number, options: WavConversionOptions): Buffer {
     const { numChannels, sampleRate, bitsPerSample } = options;
-    const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-    const blockAlign = numChannels * bitsPerSample / 8;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
     const buffer = Buffer.alloc(44);
 
     buffer.write('RIFF', 0);
     buffer.writeUInt32LE(36 + dataLength, 4);
     buffer.write('WAVE', 8);
     buffer.write('fmt ', 12);
-    buffer.writeUInt32LE(16, 16);
-    buffer.writeUInt16LE(1, 20);
+    buffer.writeUInt32LE(16, 16); // PCM header size
+    buffer.writeUInt16LE(1, 20);  // Audio format (1 for PCM)
     buffer.writeUInt16LE(numChannels, 22);
     buffer.writeUInt32LE(sampleRate, 24);
     buffer.writeUInt32LE(byteRate, 28);
@@ -411,14 +287,15 @@ function createWavHeader(dataLength: number, options: WavConversionOptions): Buf
     return buffer;
 }
 
-// HTTP endpoint to initialize WebSocket server
+
+// The GET endpoint to ensure the WebSocket server is running
 export async function GET() {
     initWebSocketServer();
     return new Response(JSON.stringify({
-        message: 'WebSocket server initialized',
+        message: 'WebSocket server is running',
         port: 3001,
         path: '/voice-stream'
     }), {
         headers: { 'Content-Type': 'application/json' }
     });
-} 
+}

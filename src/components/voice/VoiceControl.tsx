@@ -80,7 +80,7 @@ export function VoiceControl({ onError }: VoiceControlProps) {
     if (isStreaming) return 'Stop voice streaming';
     return 'Start voice streaming';
   };
-
+ 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-2">
@@ -119,11 +119,11 @@ export function VoiceControl({ onError }: VoiceControlProps) {
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
           <span className="text-xs text-red-500">Streaming audio...</span>
           <span className="ml-2 text-xs text-muted-foreground">Click mic to stop</span>
-        </div>
+        </div> 
       )}
 
       {/* Audio playback */}
-      {audioUrl && !isStreaming && (
+      {audioUrl && (
         <div>
           <audio src={audioUrl} controls autoPlay />
         </div>

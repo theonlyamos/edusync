@@ -1,50 +1,41 @@
+// audio-processor.js
+
 class AudioStreamProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.bufferSize = 4096;
-        this.buffer = new Float32Array(this.bufferSize);
-        this.bufferIndex = 0;
-        this.frameCount = 0;
+        // A buffer to hold audio data before sending
+        this.buffer = [];
+        // The number of samples to collect before sending a message
+        this.bufferSize = 2048;
     }
 
     process(inputs, outputs, parameters) {
-        this.frameCount++;
-
-        // Debug every 1000 frames (~23ms at 44.1kHz)
-        if (this.frameCount % 1000 === 0) {
-            console.log('AudioWorklet process called, inputs:', inputs.length, 'input channels:', inputs[0]?.length);
-        }
-
+        // We only expect one input
         const input = inputs[0];
-        if (!input || input.length === 0) {
-            console.log('No input channels available');
-            return true;
-        }
+        if (input.length > 0) {
+            // Get the first channel of the audio data
+            const channelData = input[0];
+            // Add the new data to our buffer
+            this.buffer.push(...channelData);
 
-        const inputChannel = input[0];
-        if (!inputChannel || inputChannel.length === 0) {
-            console.log('No input data in channel 0');
-            return true;
-        }
+            // Once the buffer is full, send the data
+            while (this.buffer.length >= this.bufferSize) {
+                // Get the chunk of data to send
+                const chunk = this.buffer.slice(0, this.bufferSize);
+                // Remove the chunk from the buffer
+                this.buffer = this.buffer.slice(this.bufferSize);
 
-        // Process audio samples
-        for (let i = 0; i < inputChannel.length; i++) {
-            this.buffer[this.bufferIndex] = inputChannel[i];
-            this.bufferIndex++;
-
-            if (this.bufferIndex >= this.bufferSize) {
-                // Send buffer to main thread
-                console.log('Sending audio buffer to main thread, size:', this.bufferSize);
+                // Post the audio data back to the main thread
                 this.port.postMessage({
                     type: 'audioData',
-                    data: this.buffer.slice()
+                    data: chunk
                 });
-                this.bufferIndex = 0;
             }
         }
-
+        // Return true to keep the processor alive
         return true;
     }
 }
 
-registerProcessor('audio-stream-processor', AudioStreamProcessor); 
+// Register the processor
+registerProcessor('audio-stream-processor', AudioStreamProcessor);
