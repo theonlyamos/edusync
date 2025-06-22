@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
-import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
 
 // Polyfill WebSocket for Node.js if it doesn't exist
 if (typeof global !== 'undefined' && !global.WebSocket) {
@@ -132,6 +132,24 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
 
         // **FIX:** Use the newer model name and configuration
         const model = 'models/gemini-2.5-flash-preview-native-audio-dialog';
+
+        // Define a tool the model can call to generate illustrative explanations & code
+        const generateIllustrationFn = {
+            name: 'generate_visual_explanation',
+            description: 'Creates an educational explanation and a runnable code snippet (React, p5.js, or Three.js) that visually illustrates the given concept. Returns JSON matching { explanation: string, code: string, library: "react" | "p5" | "three" | null }.',
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    question: {
+                        type: Type.STRING,
+                        description: 'The student\'s question or concept to illustrate.'
+                    }
+                },
+                required: ['question']
+            },
+            behaviour: Behavior.NON_BLOCKING
+        };
+
         const config = {
             responseModalities: [Modality.AUDIO],
             mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
@@ -142,7 +160,9 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
             inputConfig: {
                 // **FIX:** Use the sample rate provided by the client
                 audio: { sampleRateHz: sampleRate }
-            }
+            },
+            // Register the function declaration so Gemini can call it when appropriate
+            tools: [{ functionDeclarations: [generateIllustrationFn] }]
         };
 
         // Store session state before connecting
@@ -215,6 +235,37 @@ function processResponseQueue(sessionId: string) {
 
     while (responseQueue.length > 0) {
         const message = responseQueue.shift();
+        // Log any tool calls (function calling)
+        if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
+            for (const fn of message.toolCall.functionCalls) {
+                const info = { id: fn.id, name: fn.name, args: fn.args };
+                console.log('Gemini requested tool call:', info);
+                // Forward the tool call to the corresponding browser client
+                try {
+                    ws.send(JSON.stringify({ type: 'tool-call', ...info }));
+                } catch (err) {
+                    console.warn('Failed to forward tool call to client:', err);
+                }
+
+                // Send an immediate stub response back to Gemini so it can continue
+                try {
+                    sessionData.session?.sendToolResponse({
+                        functionResponses: [
+                            {
+                                id: fn.id,
+                                name: fn.name,
+                                response: {
+                                    result: 'Tool is being called',
+                                    scheduling: FunctionResponseScheduling.SILENT
+                                }
+                            }
+                        ]
+                    });
+                } catch (err) {
+                    console.warn('Failed to send tool response back to Gemini:', err);
+                }
+            }
+        }
 
         if (message?.serverContent?.modelTurn?.parts) {
             const part = message.serverContent.modelTurn.parts[0];

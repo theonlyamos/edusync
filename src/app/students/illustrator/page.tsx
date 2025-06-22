@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import dynamic from 'next/dynamic';
+import { Mic } from 'lucide-react';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -22,6 +23,7 @@ export default function IllustratorPage() {
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
+  const [voiceActive, setVoiceActive] = useState(false);
 
   const handleAsk = async () => {
     setIsLoading(true);
@@ -73,6 +75,11 @@ export default function IllustratorPage() {
     }
   };
 
+  const handleToolCall = (name: string, args: any) => {
+    console.log('Received tool call from Gemini:', name, args);
+    // Future: update UI or dispatch actions
+  };
+
   return (
     <DashboardLayout>
       <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
@@ -96,7 +103,20 @@ export default function IllustratorPage() {
                   <Button onClick={handleAsk} disabled={isLoading || !input.trim()}>
                     {isLoading ? 'Generating...' : 'Ask AI'}
                   </Button>
-                  <VoiceControl onError={setError} />
+                  {/* Mic toggle button */}
+                  <Button
+                    type="button"
+                    variant={voiceActive ? 'secondary' : 'outline'}
+                    size="icon"
+                    onClick={() => setVoiceActive((prev) => !prev)}
+                    title={voiceActive ? 'Stop voice streaming' : 'Start voice streaming'}
+                  >
+                    <Mic className={`w-5 h-5 ${voiceActive ? 'text-red-500 animate-pulse' : 'text-green-600'}`} />
+                  </Button>
+                </div>
+
+                <div className="flex gap-2">
+                  <VoiceControl active={voiceActive} onError={setError} onToolCall={handleToolCall} />
                 </div>
                 
                 {error && (

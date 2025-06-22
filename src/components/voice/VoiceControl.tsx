@@ -1,131 +1,75 @@
-import { Button } from '@/components/ui/button';
-import { Mic } from 'lucide-react';
 import { useAudioStreaming } from '@/hooks/useAudioStreaming';
-import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
+import React, { useEffect } from 'react';
 
 interface VoiceControlProps {
+  /** Whether mic streaming should be active */
+  active: boolean;
   onError?: (error: string) => void;
+  onToolCall?: (name: string, args: any) => void;
 }
 
-export function VoiceControl({ onError }: VoiceControlProps) {
-  const { 
-    isStreaming, 
-    audioUrl, 
-    error: streamingError, 
-    startStreaming, 
+export function VoiceControl({ active, onError, onToolCall }: VoiceControlProps) {
+  const {
+    isStreaming,
+    isSpeaking,
+    error: _streamingError,
+    startStreaming,
     stopStreaming,
-    clearError: clearStreamingError
+    setToolCallListener,
   } = useAudioStreaming();
 
-  const {
-    permission,
-    isLoading: permissionLoading,
-    error: permissionError,
-    requestPermission,
-    testMicrophone,
-    clearError: clearPermissionError
-  } = useMicrophonePermission();
-
-  const handleMicClick = async () => {
-    if (isStreaming) {
-      await stopStreaming();
-      return;
-    }
-
-    // Clear any previous errors
-    clearStreamingError();
-    clearPermissionError();
-
-    // Check permission
-    if (permission === 'denied') {
-      const error = 'Microphone access denied. Please enable microphone access in browser settings.';
-      onError?.(error);
-      return;
-    }
-
-    // Request permission if needed
-    if (permission !== 'granted') {
-      const hasPermission = await requestPermission();
-      if (!hasPermission) {
-        onError?.(permissionError);
-        return;
+  // React to `active` prop changes
+  useEffect(() => {
+    const manage = async () => {
+      try {
+        if (active && !isStreaming) {
+          await startStreaming();
+        } else if (!active && isStreaming) {
+          stopStreaming();
+        }
+      } catch (err: any) {
+        console.error('VoiceControl streaming error:', err);
+        onError?.(err.message || 'Voice streaming failed');
       }
-    }
+    };
+    void manage();
+  }, [active, isStreaming, startStreaming, stopStreaming, onError]);
 
-    // Test microphone
-    const micWorking = await testMicrophone();
-    if (!micWorking) {
-      const error = 'Microphone test failed. Please check your microphone.';
-      onError?.(error);
-      return;
-    }
+  // Register tool call listener
+  useEffect(() => {
+    setToolCallListener(onToolCall ?? (() => {}));
+  }, [onToolCall, setToolCallListener]);
 
-    // Start streaming
-    await startStreaming();
-    if (streamingError) {
-      onError?.(streamingError);
-    }
-  };
-
-  const getMicButtonColor = () => {
-    if (permission === 'denied') return 'text-gray-400';
-    if (isStreaming) return 'text-red-500 animate-pulse';
-    if (permission === 'granted') return 'text-green-600';
-    return 'text-yellow-600';
-  };
-
-  const getMicButtonTitle = () => {
-    if (permission === 'denied') return 'Microphone access denied. Please enable in browser settings.';
-    if (permission === 'prompt' || permission === 'unknown') return 'Click to request microphone access';
-    if (isStreaming) return 'Stop voice streaming';
-    return 'Start voice streaming';
-  };
- 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Button 
-          type="button" 
-          variant={isStreaming ? 'secondary' : 'outline'} 
-          size="icon" 
-          onClick={handleMicClick} 
-          disabled={permission === 'denied' || permissionLoading}
-          title={getMicButtonTitle()}
-        >
-          <Mic className={`w-5 h-5 ${getMicButtonColor()}`} />
-        </Button>
-      </div>
-
-      {/* Permission status indicator */}
-      {permission !== 'granted' && permission !== 'unknown' && (
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${
-            permission === 'denied' ? 'bg-red-500' : 'bg-yellow-500'
-          }`} />
-          <span className={`text-xs ${
-            permission === 'denied' ? 'text-red-600' : 'text-yellow-600'
-          }`}>
-            {permission === 'denied' 
-              ? 'Microphone access denied' 
-              : 'Microphone permission required'
-            }
-          </span>
+    <div className="flex flex-col gap-2 items-start">
+      {/* Streaming indicator & equalizer */}
+      {isStreaming && (
+        <div className="flex items-center gap-2 text-xs text-red-500">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <span>Streaming…</span>
         </div>
       )}
 
-      {/* Streaming indicator */}
-      {isStreaming && (
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-xs text-red-500">Streaming audio...</span>
-          <span className="ml-2 text-xs text-muted-foreground">Click mic to stop</span>
-        </div> 
-      )}
-
-      {/* Audio playback */}
-      {audioUrl && (
-        <div>
-          <audio src={audioUrl} controls autoPlay />
+      {isSpeaking && (
+        <div className="relative w-20 h-20 flex items-center justify-center mt-2">
+          {/* Ripple rings */}
+          {[0,1,2].map((i) => (
+            <span
+              key={i}
+              className="absolute inset-0 rounded-full border-2 border-green-400 animate-ripple"
+              style={{ animationDelay: `${i * 0.4}s` }}
+            />
+          ))}
+          {/* Inner equalizer */}
+          <div className="relative flex items-end gap-[3px] h-8">
+            {[0,1,2,3,4].map((i) => (
+              <span
+                key={i}
+                className="w-[4px] bg-green-500 rounded-sm animate-equalizer"
+                style={{ animationDelay: `${i * 0.1}s` }}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

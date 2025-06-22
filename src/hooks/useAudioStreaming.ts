@@ -4,18 +4,22 @@ interface AudioStreamingState {
     isStreaming: boolean;
     audioUrl: string | null;
     error: string;
+    isSpeaking: boolean;
 }
 
 interface AudioStreamingActions {
     startStreaming: () => Promise<void>;
     stopStreaming: () => void;
     clearError: () => void;
+    setToolCallListener: (cb: (name: string, args: any) => void) => void;
 }
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to hold mutable values that don't trigger re-renders
     const isStreamingRef = useRef(false);
@@ -26,6 +30,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const wsRef = useRef<WebSocket | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
+    const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -127,6 +132,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
                         source.start(startAt);
                         nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
+
+                        // Mark assistant speaking
+                        setIsSpeaking(true);
+                        if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+                        speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
                     } catch (e) {
                         console.error('Failed to play audio chunk', e);
                     }
@@ -195,6 +205,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                             } else if (message.type === 'session-ended') {
                                 console.log('Server signalled session end:', message.reason);
                                 stopStreaming();
+                            } else if (message.type === 'tool-call') {
+                                toolCallListenerRef.current?.(message.name, message.args);
                             } else if (message.type === 'error') {
                                 clearTimeout(timeout);
                                 reject(new Error(message.error || 'Unknown server error during startup'));
@@ -222,6 +234,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                                     const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
                                     source.start(startAt);
                                     nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
+
+                                    // Mark assistant speaking
+                                    setIsSpeaking(true);
+                                    if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+                                    speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
                                 } catch (e) {
                                     console.error('Failed to play audio chunk', e);
                                 }
@@ -255,6 +272,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         }
     }, [setupAudioWorklet, stopStreaming, cleanupAudioResources]);
 
+    const setToolCallListener = useCallback((cb: (name: string, args: any) => void) => {
+        toolCallListenerRef.current = cb;
+    }, []);
+
     const clearError = useCallback(() => setError(''), []);
 
     // Effect to ensure cleanup on component unmount
@@ -266,5 +287,5 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, startStreaming, stopStreaming, clearError };
+    return { isStreaming, audioUrl, error, isSpeaking, startStreaming, stopStreaming, clearError, setToolCallListener };
 }
