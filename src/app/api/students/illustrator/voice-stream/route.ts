@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
+import { Schema } from 'zod';
 
 // Polyfill WebSocket for Node.js if it doesn't exist
 if (typeof global !== 'undefined' && !global.WebSocket) {
@@ -17,7 +18,57 @@ export const runtime = 'nodejs';
 const activeSessions = new Map<string, any>();
 let wss: WebSocketServer | null = null;
 
-// Initialize the WebSocket server once
+const systemPrompt = `You are a friendly, knowledgeable, and creative AI tutor. Your main goal is to have a natural, encouraging conversation with high school students to help them learn.
+
+### Your Behavior
+
+* **Be Conversational:** Chat with the student, explain concepts, and answer their questions in a clear, straightforward, and friendly manner.
+* **Recognize Opportunities:** Your most important skill is to recognize when a student might be struggling with a concept that is best explained visually.
+* **Create and Display Visuals:** You have a special ability to display visual aids using the \`display_visual_aid\` tool. To use it, you must first **create all the content yourself**. This includes:
+    1.  A clear \`explanation\` text.
+    2.  A runnable \`code\` snippet, following the rules below.
+    3.  The correct \`library\` name (\`'p5'\`, \`'three'\`, or \`'react'\`).
+
+    Once you have generated all three pieces of information, call the \`display_visual_aid\` tool to show it to the student.
+
+### Explanation Rules
+
+* Always aim your explanation at a high school student.
+* Keep the focus on the educational concept.
+* Explain how the interactive part of your visual helps with learning.
+* **NEVER** use technical jargon like "React", "JavaScript", "useState", etc. Talk about the idea, not the code.
+
+### Code Generation Rules
+
+When you write the code snippet, you **must** follow these rules:
+
+**1. p5.js / Three.js**
+* The code must be pure, self-contained JavaScript.
+* Do NOT include HTML or any surrounding boilerplate.
+
+**2. React**
+* Use modern React with hooks. The hooks \`useState\`, \`useEffect\`, \`useMemo\`, and \`useCallback\` are available directly.
+* Use only the following available UI components: \`Button\`, \`Input\`, \`Card\`, \`CardContent\`, \`CardHeader\`, \`CardTitle\`, \`Badge\`, \`Textarea\`, \`Label\`, \`RadioGroup\`, \`RadioGroupItem\`, \`Checkbox\`, \`Select\`, \`SelectContent\`, \`SelectItem\`, \`SelectTrigger\`, \`SelectValue\`, \`Slider\`.
+* Your main component must be named \`Component\`, \`App\`, \`Quiz\`, \`InteractiveComponent\`, \`Calculator\`, or \`Game\`.
+* **MOST IMPORTANT:** You **MUST** use \`React.createElement()\` syntax. **NEVER** use JSX tags (e.g., \`<Card>\`).
+
+* **\`React.createElement()\` Example:**
+    \`\`\`javascript
+    function Quiz() {
+      const [currentQuestion, setCurrentQuestion] = useState(0);
+
+      return React.createElement(Card, null,
+        React.createElement(CardHeader, null,
+          React.createElement(CardTitle, null, "Math Quiz")
+        ),
+        React.createElement(CardContent, null,
+          React.createElement('p', null, 'Quiz content goes here...')
+        )
+      );
+    }
+    \`\`\`
+`;
+
 function initWebSocketServer() {
     if (wss) return wss;
 
@@ -130,39 +181,43 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
         const responseQueue: LiveServerMessage[] = [];
         const audioParts: string[] = [];
 
-        // **FIX:** Use the newer model name and configuration
-        const model = 'models/gemini-2.5-flash-preview-native-audio-dialog';
+        const model = 'models/gemini-2.5-flash-exp-native-audio-thinking-dialog';
 
-        // Define a tool the model can call to generate illustrative explanations & code
-        const generateIllustrationFn = {
-            name: 'generate_visual_explanation',
-            description: 'Creates an educational explanation and a runnable code snippet (React, p5.js, or Three.js) that visually illustrates the given concept. Returns JSON matching { explanation: string, code: string, library: "react" | "p5" | "three" | null }.',
+        const displayVisualAidFn = {
+            name: 'display_visual_aid',
+            description: "Call this function to display a visual illustration to the student. The AI must generate the explanation, code, and library name itself before calling this function.",
             parameters: {
                 type: Type.OBJECT,
                 properties: {
-                    question: {
+                    explanation: {
                         type: Type.STRING,
-                        description: 'The student\'s question or concept to illustrate.'
+                        description: "The complete text explanation that will accompany the code."
+                    },
+                    code: {
+                        type: Type.STRING,
+                        description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React)."
+                    },
+                    library: {
+                        type: Type.STRING,
+                        description: "The name of the library used for the code. Must be one of 'p5', 'three', or 'react'."
                     }
                 },
-                required: ['question']
+                required: ['explanation', 'code', 'library']
             },
             behaviour: Behavior.NON_BLOCKING
         };
 
         const config = {
             responseModalities: [Modality.AUDIO],
+            systemInstruction: systemPrompt,
             mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
             speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
             },
-            // **FIX:** The newer model uses this input config
             inputConfig: {
-                // **FIX:** Use the sample rate provided by the client
                 audio: { sampleRateHz: sampleRate }
             },
-            // Register the function declaration so Gemini can call it when appropriate
-            tools: [{ functionDeclarations: [generateIllustrationFn] }]
+            tools: [{ functionDeclarations: [displayVisualAidFn] }]
         };
 
         // Store session state before connecting

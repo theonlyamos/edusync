@@ -77,7 +77,9 @@ export default function IllustratorPage() {
 
   const handleToolCall = (name: string, args: any) => {
     console.log('Received tool call from Gemini:', name, args);
-    // Future: update UI or dispatch actions
+    setExplanation(args.explanation);
+    setCode(args.code);
+    setLibrary(args.library);
   };
 
   return (

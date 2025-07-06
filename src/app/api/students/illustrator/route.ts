@@ -19,7 +19,7 @@ IMPORTANT FOR EXPLANATIONS:
 - Keep explanations focused on the subject matter and learning objectives
 
 For React components:
-- Create interactive educational components like quizzes, calculators, forms, or games
+- Create interactive educational components like quizzes, calculators, forms, or games.
 - Use modern React with hooks - hooks are available directly: useState, useEffect, useMemo, useCallback
 - Available components: Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Textarea, Label, RadioGroup, RadioGroupItem, Checkbox, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Slider
 - Name your main component as "Component", "App", "Quiz", "InteractiveComponent", "Calculator", or "Game"
