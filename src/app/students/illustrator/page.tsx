@@ -1,7 +1,8 @@
 // AI-Powered Illustrative Explainer Page
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { toPng } from 'html-to-image';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,28 +25,14 @@ export default function IllustratorPage() {
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
   const [voiceActive, setVoiceActive] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const vizRef = useRef<HTMLDivElement | null>(null);
+  const isCapturingRef = useRef(false);
 
   const handleAsk = async () => {
-    setIsLoading(true);
-    setError('');
-    setExplanation('');
-    setCode('');
-    setLibrary(null);
-    
     try {
-      const res = await fetch('/api/students/illustrator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: input })
-      });
-      
-      if (!res.ok) throw new Error('Failed to get AI response');
-      
-      const data = await res.json();
-      setExplanation(data.explanation);
-      setCode(data.code);
-      console.log(data.code)
-      setLibrary(data.library);
+      window.dispatchEvent(new CustomEvent('voice-send-text', { detail: input }));
+      setInput('');
     } catch (e: any) {
       setError(e.message || 'Unknown error');
     } finally {
@@ -77,12 +64,28 @@ export default function IllustratorPage() {
   };
 
   const handleToolCall = (name: string, args: any) => {
-    console.log('Received tool call from Gemini:', name, args);
     setExplanation(args.explanation);
     setCode(args.code);
-    console.log(args.code)
     setLibrary(args.library);
   };
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const id = setInterval(() => {
+      const container = vizRef.current as HTMLElement | null;
+      if (!container || isCapturingRef.current) return;
+      isCapturingRef.current = true;
+      toPng(container, { pixelRatio: 1 })
+        .then((dataUrl) => {
+          window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
+        })
+        .catch(() => {})
+        .finally(() => {
+          isCapturingRef.current = false;
+        });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [connectionStatus, show, code, library]);
 
   return (
     <DashboardLayout>
@@ -98,13 +101,19 @@ export default function IllustratorPage() {
                 <Textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim()) handleAsk();
+                    }
+                  }}
                   placeholder="Ask the AI to explain or illustrate a concept, create a quiz, or build an interactive component..."
                   className="min-h-[100px]"
-                  disabled={isLoading}
+                  disabled={isLoading || connectionStatus !== 'connected'}
                 />
                 
                 <div className="flex gap-2">
-                  <Button onClick={handleAsk} disabled={isLoading || !input.trim()}>
+                  <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'}>
                     {isLoading ? 'Generating...' : 'Ask AI'}
                   </Button>
                   {/* Mic toggle button */}
@@ -120,7 +129,12 @@ export default function IllustratorPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <VoiceControl active={voiceActive} onError={setError} onToolCall={handleToolCall} />
+                  <VoiceControl
+                    active={voiceActive}
+                    onError={setError}
+                    onToolCall={handleToolCall}
+                    onConnectionStatusChange={setConnectionStatus}
+                  />
                 </div>
                 
                 {error && (
@@ -143,7 +157,7 @@ export default function IllustratorPage() {
         </div>
 
         {/* Right Panel - Preview/Code Editor */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col"  ref={vizRef}>
           {code && library ? (
             <Card className="flex-1 flex flex-col">
               <CardHeader>
@@ -161,7 +175,11 @@ export default function IllustratorPage() {
               </CardHeader>
               <CardContent className="flex-1 flex flex-col p-0">
                 <div className="flex-1 p-6">
-                  {show === 'render' && renderVisualization()}
+                  {show === 'render' && (
+                    <div className="h-full">
+                      {renderVisualization()}
+                    </div>
+                  )}
                   {show === 'code' && (
                     <div className="h-full">
                       <Editor

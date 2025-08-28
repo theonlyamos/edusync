@@ -27,22 +27,22 @@ function sanitizeFilename(input: string): string {
     return input.replace(/[^a-z0-9-_]/gi, '_').slice(0, 64);
 }
 
-async function saveToolCall(sessionId: string, info: ToolCallInfo): Promise<void> {
-    await fs.mkdir(TOOL_CALLS_DIR, { recursive: true });
-    const timestamp = new Date();
-    const safeSession = sanitizeFilename(sessionId);
-    const safeName = sanitizeFilename(info.name || 'unknown');
-    const file = `${timestamp.toISOString().replace(/[:.]/g, '-')}_${safeSession}_${safeName}.json`;
-    const filePath = path.join(TOOL_CALLS_DIR, file);
-    const payload = {
-        sessionId,
-        id: info.id,
-        name: info.name,
-        args: info.args,
-        timestamp: timestamp.toISOString(),
-    };
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8');
-}
+// async function saveToolCall(sessionId: string, info: ToolCallInfo): Promise<void> {
+//     await fs.mkdir(TOOL_CALLS_DIR, { recursive: true });
+//     const timestamp = new Date();
+//     const safeSession = sanitizeFilename(sessionId);
+//     const safeName = sanitizeFilename(info.name || 'unknown');
+//     const file = `${timestamp.toISOString().replace(/[:.]/g, '-')}_${safeSession}_${safeName}.json`;
+//     const filePath = path.join(TOOL_CALLS_DIR, file);
+//     const payload = {
+//         sessionId,
+//         id: info.id,
+//         name: info.name,
+//         args: info.args,
+//         timestamp: timestamp.toISOString(),
+//     };
+//     await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8');
+// }
 
 const systemPrompt = `You are a friendly, knowledgeable, and creative AI tutor. Your main goal is to have a natural, encouraging conversation with high school students to help them learn.
 
@@ -143,8 +143,8 @@ function initWebSocketServer() {
 }
 
 // Handles control messages like 'start' and 'end'
-async function handleWebSocketMessage(ws: any, message: { type: string; sessionId: string; sampleRate?: number }) {
-    const { type, sessionId, sampleRate } = message;
+async function handleWebSocketMessage(ws: any, message: { type: string; sessionId: string; sampleRate?: number; text?: string; data?: string; mimeType?: string }) {
+    const { type, sessionId, sampleRate, text, data, mimeType } = message;
 
     switch (type) {
         case 'start':
@@ -156,6 +156,42 @@ async function handleWebSocketMessage(ws: any, message: { type: string; sessionI
             break;
         case 'end':
             await handleEndSession(sessionId);
+            break;
+        case 'text':
+            if (!sessionId || typeof text !== 'string') {
+                ws.send(JSON.stringify({ type: 'error', error: 'Text message requires sessionId and text string.' }));
+                return;
+            }
+            try {
+                const sessionData = activeSessions.get(sessionId);
+                if (!sessionData || !sessionData.session) {
+                    ws.send(JSON.stringify({ type: 'error', error: 'Session not found or not ready.' }));
+                    return;
+                }
+                sessionData.session.sendRealtimeInput({ text });
+                ws.send(JSON.stringify({ type: 'text-ack', sessionId }));
+            } catch (err: any) {
+                console.error('Failed to forward text to Gemini:', err);
+                ws.send(JSON.stringify({ type: 'error', error: 'Failed to send text to session.' }));
+            }
+            break;
+        case 'media':
+            if (!sessionId || typeof data !== 'string' || typeof mimeType !== 'string') {
+                ws.send(JSON.stringify({ type: 'error', error: 'Media message requires sessionId, data, and mimeType.' }));
+                return;
+            }
+            try {
+                const sessionData = activeSessions.get(sessionId);
+                if (!sessionData || !sessionData.session) {
+                    ws.send(JSON.stringify({ type: 'error', error: 'Session not found or not ready.' }));
+                    return;
+                }
+                sessionData.session.sendRealtimeInput({ media: { data, mimeType } });
+                ws.send(JSON.stringify({ type: 'media-ack', sessionId }));
+            } catch (err: any) {
+                console.error('Failed to forward media to Gemini:', err);
+                ws.send(JSON.stringify({ type: 'error', error: 'Failed to send media to session.' }));
+            }
             break;
         default:
             console.warn('Unknown message type:', type);
@@ -293,6 +329,10 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
             },
         });
 
+        geminiSession.sendRealtimeInput({
+            text: 'Hello'
+        });
+
         // Store the session object after successful connection
         const storedSessionData = activeSessions.get(sessionId);
         if (storedSessionData) {
@@ -320,7 +360,6 @@ function processResponseQueue(sessionId: string) {
         if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
             for (const fn of message.toolCall.functionCalls) {
                 const info = { id: fn.id, name: fn.name, args: fn.args };
-                console.log('Gemini requested tool call:', info);
 
                 // Forward the tool call to the corresponding browser client
                 try {
@@ -330,9 +369,9 @@ function processResponseQueue(sessionId: string) {
                 }
 
                 // Persist the tool call to disk as JSON
-                saveToolCall(sessionId, info).catch((err) => {
-                    console.warn('Failed to persist tool call:', err);
-                });
+                // saveToolCall(sessionId, info).catch((err) => {
+                //     console.warn('Failed to persist tool call:', err);
+                // });
 
                 // Send an immediate stub response back to Gemini so it can continue
                 try {

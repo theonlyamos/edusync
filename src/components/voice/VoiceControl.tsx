@@ -6,16 +6,20 @@ interface VoiceControlProps {
   active: boolean;
   onError?: (error: string) => void;
   onToolCall?: (name: string, args: any) => void;
+  onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
 }
 
-export function VoiceControl({ active, onError, onToolCall }: VoiceControlProps) {
+export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
+    connectionStatus,
     error: _streamingError,
     startStreaming,
     stopStreaming,
     setToolCallListener,
+    sendText,
+    sendMedia,
   } = useAudioStreaming();
 
   // React to `active` prop changes
@@ -40,38 +44,89 @@ export function VoiceControl({ active, onError, onToolCall }: VoiceControlProps)
     setToolCallListener(onToolCall ?? (() => {}));
   }, [onToolCall, setToolCallListener]);
 
-  return (
-    <div className="flex flex-col gap-2 items-start">
-      {/* Streaming indicator & equalizer */}
-      {isStreaming && (
-        <div className="flex items-center gap-2 text-xs text-red-500">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span>Streaming…</span>
+  useEffect(() => {
+    onConnectionStatusChange?.(connectionStatus);
+  }, [connectionStatus, onConnectionStatusChange]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const anyEvent = e as CustomEvent<string>;
+      if (typeof anyEvent.detail === 'string' && anyEvent.detail.trim().length > 0) {
+        sendText(anyEvent.detail);
+      }
+    };
+    window.addEventListener('voice-send-text', handler as EventListener);
+    return () => window.removeEventListener('voice-send-text', handler as EventListener);
+  }, [sendText]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const anyEvent = e as CustomEvent<{ dataUrl: string; mimeType: string }>;
+      const payload = anyEvent.detail;
+      if (payload && typeof payload.dataUrl === 'string') {
+        const [prefix, b64] = payload.dataUrl.split(',');
+        const mime = payload.mimeType || (prefix?.match(/data:(.*?);base64/)
+          ? prefix.match(/data:(.*?);base64/)![1]
+          : 'image/png');
+        if (b64) sendMedia(b64, mime);
+      }
+    };
+    window.addEventListener('voice-send-media', handler as EventListener);
+    return () => window.removeEventListener('voice-send-media', handler as EventListener);
+  }, [sendMedia]);
+
+  const statusBadge = (
+    <div className="flex items-center gap-2 text-xs">
+      {connectionStatus === 'disconnected' && (
+        <div className="flex items-center gap-1 text-muted-foreground">
+          <span className="w-2 h-2 rounded-full bg-gray-300" />
+          <span>Disconnected</span>
         </div>
       )}
+      {connectionStatus === 'connecting' && (
+        <div className="flex items-center gap-1 text-amber-600">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <span>Connecting…</span>
+        </div>
+      )}
+      {connectionStatus === 'connected' && (
+        <div className="flex items-center gap-1 text-emerald-600">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span>Connected</span>
+        </div>
+      )}
+      {isStreaming && connectionStatus === 'connected' && (
+        <div className="flex items-center gap-1 text-red-600 ml-3">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <span>Streaming mic</span>
+        </div>
+      )}
+    </div>
+  );
 
-      {isSpeaking && (
-        <div className="relative w-20 h-20 flex items-center justify-center mt-2">
-          {/* Ripple rings */}
-          {[0,1,2].map((i) => (
+  return (
+    <div className="flex flex-col gap-2 items-start">
+      {statusBadge}
+      <div className={`relative mt-2 ${isSpeaking ? 'animate-glow' : ''} rounded-full`}> 
+        <div className="relative w-24 h-24 flex items-center justify-center">
+          {isSpeaking && [0,1,2].map((i) => (
             <span
               key={i}
-              className="absolute inset-0 rounded-full border-2 border-green-400 animate-ripple"
-              style={{ animationDelay: `${i * 0.4}s` }}
+              className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ripple"
+              style={{ animationDelay: `${i * 0.45}s` }}
             />
           ))}
-          {/* Inner equalizer */}
-          <div className="relative flex items-end gap-[3px] h-8">
-            {[0,1,2,3,4].map((i) => (
+          <div className={`flex items-end gap-[4px] h-10 ${isSpeaking ? '' : 'opacity-40'}`}>
+            {[0,1,2,3,4,5].map((i) => (
               <span
                 key={i}
-                className="w-[4px] bg-green-500 rounded-sm animate-equalizer"
-                style={{ animationDelay: `${i * 0.1}s` }}
+                className={`w-[5px] rounded-sm ${isSpeaking ? 'bg-emerald-500 animate-equalizer' : 'bg-muted-foreground'}`}
+                style={{ animationDelay: `${i * 0.08}s` }}
               />
             ))}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 } 

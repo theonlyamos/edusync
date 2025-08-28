@@ -64,10 +64,29 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        ripple: {
+          '0%': { transform: 'scale(0.85)', opacity: '0.6' },
+          '70%': { transform: 'scale(1.6)', opacity: '0.15' },
+          '100%': { transform: 'scale(1.8)', opacity: '0' },
+        },
+        equalizer: {
+          '0%, 100%': { transform: 'scaleY(0.2)' },
+          '20%': { transform: 'scaleY(0.6)' },
+          '40%': { transform: 'scaleY(0.35)' },
+          '60%': { transform: 'scaleY(0.9)' },
+          '80%': { transform: 'scaleY(0.5)' },
+        },
+        glow: {
+          '0%, 100%': { boxShadow: '0 0 0px 0 rgba(34,197,94,0.0)', transform: 'scale(1)' },
+          '50%': { boxShadow: '0 0 40px 10px rgba(34,197,94,0.25)', transform: 'scale(1.04)' },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        ripple: 'ripple 1.6s ease-out infinite',
+        equalizer: 'equalizer 1s ease-in-out infinite',
+        glow: 'glow 1.8s ease-in-out infinite',
       },
       typography: {
         DEFAULT: {

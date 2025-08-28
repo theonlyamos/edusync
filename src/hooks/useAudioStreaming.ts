@@ -5,6 +5,7 @@ interface AudioStreamingState {
     audioUrl: string | null;
     error: string;
     isSpeaking: boolean;
+    connectionStatus: 'disconnected' | 'connecting' | 'connected';
 }
 
 interface AudioStreamingActions {
@@ -12,6 +13,8 @@ interface AudioStreamingActions {
     stopStreaming: () => void;
     clearError: () => void;
     setToolCallListener: (cb: (name: string, args: any) => void) => void;
+    sendText: (text: string) => void;
+    sendMedia: (base64Data: string, mimeType: string) => void;
 }
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
@@ -19,6 +22,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
     const [isSpeaking, setIsSpeaking] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to hold mutable values that don't trigger re-renders
@@ -64,6 +68,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         console.log("Stopping stream...");
         setIsStreaming(false);
         isStreamingRef.current = false;
+        setConnectionStatus('disconnected');
 
         // If the WebSocket is open, send an 'end' message to the server
         if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
@@ -159,6 +164,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         setAudioUrl(null);
         setIsStreaming(true);
         isStreamingRef.current = true;
+        setConnectionStatus('connecting');
         let stream: MediaStream | null = null;
 
         try {
@@ -201,6 +207,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                             if (message.type === 'session-started' && message.sessionId === sessionId) {
                                 clearTimeout(timeout);
                                 await setupAudioWorklet(stream as MediaStream, newWs, sampleRate);
+                                setConnectionStatus('connected');
                                 resolve();
                             } else if (message.type === 'session-ended') {
                                 console.log('Server signalled session end:', message.reason);
@@ -250,11 +257,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
                     newWs.onerror = (err) => {
                         clearTimeout(timeout);
+                        setConnectionStatus('disconnected');
                         reject(new Error('WebSocket connection failed'))
                     };
 
                     newWs.onclose = () => {
                         clearTimeout(timeout);
+                        setConnectionStatus('disconnected');
                         if (isStreamingRef.current) {
                             reject(new Error('Connection closed prematurely.'));
                         }
@@ -269,6 +278,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             console.error('Failed to start streaming:', err);
             setError(`Failed to start streaming: ${err.message}`);
             stopStreaming(); // Use stopStreaming for full cleanup on failure
+            setConnectionStatus('disconnected');
         }
     }, [setupAudioWorklet, stopStreaming, cleanupAudioResources]);
 
@@ -277,6 +287,29 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     }, []);
 
     const clearError = useCallback(() => setError(''), []);
+
+    const sendText = useCallback((text: string) => {
+        try {
+            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
+                wsRef.current.send(JSON.stringify({ type: 'text', sessionId: sessionIdRef.current, text }));
+            } else {
+                setError('Not connected');
+            }
+        } catch (e: any) {
+            console.error('sendText failed:', e);
+            setError('Failed to send text');
+        }
+    }, []);
+
+    const sendMedia = useCallback((base64Data: string, mimeType: string) => {
+        try {
+            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
+                wsRef.current.send(JSON.stringify({ type: 'media', sessionId: sessionIdRef.current, data: base64Data, mimeType }));
+            }
+        } catch (e) {
+            console.error('sendMedia failed:', e);
+        }
+    }, []);
 
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
@@ -287,5 +320,5 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, isSpeaking, startStreaming, stopStreaming, clearError, setToolCallListener };
+    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, sendText, sendMedia };
 }
