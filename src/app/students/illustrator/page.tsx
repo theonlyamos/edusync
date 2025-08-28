@@ -44,6 +44,7 @@ export default function IllustratorPage() {
       const data = await res.json();
       setExplanation(data.explanation);
       setCode(data.code);
+      console.log(data.code)
       setLibrary(data.library);
     } catch (e: any) {
       setError(e.message || 'Unknown error');
@@ -79,6 +80,7 @@ export default function IllustratorPage() {
     console.log('Received tool call from Gemini:', name, args);
     setExplanation(args.explanation);
     setCode(args.code);
+    console.log(args.code)
     setLibrary(args.library);
   };
 

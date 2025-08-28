@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
 import { Schema } from 'zod';
+import path from 'path';
+import { promises as fs } from 'fs';
 
 // Polyfill WebSocket for Node.js if it doesn't exist
 if (typeof global !== 'undefined' && !global.WebSocket) {
@@ -17,6 +19,30 @@ export const runtime = 'nodejs';
 // In-memory store for active streaming sessions
 const activeSessions = new Map<string, any>();
 let wss: WebSocketServer | null = null;
+const TOOL_CALLS_DIR = path.join(process.cwd(), 'public', 'tool-calls');
+
+type ToolCallInfo = { id: string; name: string; args: unknown };
+
+function sanitizeFilename(input: string): string {
+    return input.replace(/[^a-z0-9-_]/gi, '_').slice(0, 64);
+}
+
+async function saveToolCall(sessionId: string, info: ToolCallInfo): Promise<void> {
+    await fs.mkdir(TOOL_CALLS_DIR, { recursive: true });
+    const timestamp = new Date();
+    const safeSession = sanitizeFilename(sessionId);
+    const safeName = sanitizeFilename(info.name || 'unknown');
+    const file = `${timestamp.toISOString().replace(/[:.]/g, '-')}_${safeSession}_${safeName}.json`;
+    const filePath = path.join(TOOL_CALLS_DIR, file);
+    const payload = {
+        sessionId,
+        id: info.id,
+        name: info.name,
+        args: info.args,
+        timestamp: timestamp.toISOString(),
+    };
+    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8');
+}
 
 const systemPrompt = `You are a friendly, knowledgeable, and creative AI tutor. Your main goal is to have a natural, encouraging conversation with high school students to help them learn.
 
@@ -181,7 +207,7 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
         const responseQueue: LiveServerMessage[] = [];
         const audioParts: string[] = [];
 
-        const model = 'models/gemini-2.5-flash-exp-native-audio-thinking-dialog';
+        const model = 'models/gemini-live-2.5-flash-preview';
 
         const displayVisualAidFn = {
             name: 'display_visual_aid',
@@ -195,7 +221,7 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
                     },
                     code: {
                         type: Type.STRING,
-                        description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React)."
+                        description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React). Do not add any comments to the code. Add proper line breaks to the code."
                     },
                     library: {
                         type: Type.STRING,
@@ -295,12 +321,18 @@ function processResponseQueue(sessionId: string) {
             for (const fn of message.toolCall.functionCalls) {
                 const info = { id: fn.id, name: fn.name, args: fn.args };
                 console.log('Gemini requested tool call:', info);
+
                 // Forward the tool call to the corresponding browser client
                 try {
                     ws.send(JSON.stringify({ type: 'tool-call', ...info }));
                 } catch (err) {
                     console.warn('Failed to forward tool call to client:', err);
                 }
+
+                // Persist the tool call to disk as JSON
+                saveToolCall(sessionId, info).catch((err) => {
+                    console.warn('Failed to persist tool call:', err);
+                });
 
                 // Send an immediate stub response back to Gemini so it can continue
                 try {
