@@ -214,6 +214,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                                 stopStreaming();
                             } else if (message.type === 'tool-call') {
                                 toolCallListenerRef.current?.(message.name, message.args);
+                            } else if (message.type === 'playback-interrupted') {
+                                if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+                                setIsSpeaking(false);
+                                if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
+                                    playbackCtxRef.current.close();
+                                }
+                                playbackCtxRef.current = null;
+                                nextPlaybackTimeRef.current = 0;
                             } else if (message.type === 'error') {
                                 clearTimeout(timeout);
                                 reject(new Error(message.error || 'Unknown server error during startup'));
