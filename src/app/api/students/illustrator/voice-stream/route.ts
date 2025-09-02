@@ -1,9 +1,6 @@
-import { NextRequest } from 'next/server';
 import { WebSocketServer } from 'ws';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
-import { Schema } from 'zod';
 import path from 'path';
-import { promises as fs } from 'fs';
 
 // Polyfill WebSocket for Node.js if it doesn't exist
 if (typeof global !== 'undefined' && !global.WebSocket) {
