@@ -20,6 +20,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     setToolCallListener,
     sendText,
     sendMedia,
+    sendViewport,
   } = useAudioStreaming();
 
   // React to `active` prop changes
@@ -47,6 +48,23 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const send = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      sendViewport(width, height, dpr);
+    };
+    send();
+    const resizeHandler = () => {
+      clearTimeout((resizeHandler as any)._t);
+      (resizeHandler as any)._t = setTimeout(send, 300);
+    };
+    window.addEventListener('resize', resizeHandler);
+    return () => window.removeEventListener('resize', resizeHandler);
+  }, [connectionStatus, sendViewport]);
 
   useEffect(() => {
     const handler = (e: Event) => {

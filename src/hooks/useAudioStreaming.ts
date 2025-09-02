@@ -15,6 +15,7 @@ interface AudioStreamingActions {
     setToolCallListener: (cb: (name: string, args: any) => void) => void;
     sendText: (text: string) => void;
     sendMedia: (base64Data: string, mimeType: string) => void;
+    sendViewport: (width: number, height: number, dpr: number) => void;
 }
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
@@ -309,6 +310,17 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         }
     }, []);
 
+    const sendViewport = useCallback((width: number, height: number, dpr: number) => {
+        const payload = `VISUAL_VIEWPORT ${JSON.stringify({ width, height, devicePixelRatio: dpr })}`;
+        try {
+            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
+                wsRef.current.send(JSON.stringify({ type: 'text', sessionId: sessionIdRef.current, text: payload }));
+            }
+        } catch (e) {
+            console.error('sendViewport failed:', e);
+        }
+    }, []);
+
     const sendMedia = useCallback((base64Data: string, mimeType: string) => {
         try {
             if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
@@ -328,5 +340,5 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, sendText, sendMedia };
+    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, sendText, sendMedia, sendViewport };
 }
