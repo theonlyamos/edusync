@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
 
 interface AudioStreamingState {
     isStreaming: boolean;
@@ -28,14 +29,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     // Refs to hold mutable values that don't trigger re-renders
     const isStreamingRef = useRef(false);
-    const sessionIdRef = useRef<string | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<AudioWorkletNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
     const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
+    const lastAttemptTimeRef = useRef<number>(0);
+    const geminiLiveSessionRef = useRef<any>(null);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -53,14 +54,16 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         streamRef.current?.getTracks().forEach(track => track.stop());
         streamRef.current = null;
 
-        // Close the WebSocket connection if it's open
-        if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
-            wsRef.current.close();
+        // Close Gemini Live session if it exists
+        if (geminiLiveSessionRef.current) {
+            try {
+                geminiLiveSessionRef.current.close();
+            } catch (e) {
+                console.warn('Failed to close Gemini Live session:', e);
+            }
+            geminiLiveSessionRef.current = null;
         }
-        wsRef.current = null;
 
-        // Clear the session ID
-        sessionIdRef.current = null;
         console.log('Cleaned up all audio resources.');
     }, []);
 
@@ -71,9 +74,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         isStreamingRef.current = false;
         setConnectionStatus('disconnected');
 
-        // If the WebSocket is open, send an 'end' message to the server
-        if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
-            wsRef.current.send(JSON.stringify({ type: 'end', sessionId: sessionIdRef.current }));
+        // Close the Gemini Live session if it exists
+        if (geminiLiveSessionRef.current) {
+            try {
+                geminiLiveSessionRef.current.close();
+            } catch (e) {
+                console.warn('Failed to close Gemini Live session during stop:', e);
+            }
         }
 
         // Close playback context
@@ -87,74 +94,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         cleanupAudioResources();
     }, [cleanupAudioResources]);
 
-    // Sets up the AudioWorklet to process and send microphone data
-    const setupAudioWorklet = useCallback(async (stream: MediaStream, ws: WebSocket, sampleRate: number) => {
-        const audioContext = new AudioContext({ sampleRate });
-        audioContextRef.current = audioContext;
-        const source = audioContext.createMediaStreamSource(stream);
 
-        try {
-            await audioContext.audioWorklet.addModule('/audio-processor.js');
-        } catch (e) {
-            console.error('Failed to add audio worklet module.', e);
-            throw new Error('Failed to load audio processor.');
-        }
-
-        const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
-
-        workletNode.port.onmessage = (event) => {
-            // Only send data if we are actively streaming and the WebSocket is open
-            if (!isStreamingRef.current || ws.readyState !== WebSocket.OPEN) return;
-
-            if (event.data.type === 'audioData') {
-                // Convert the raw float audio data to 16-bit PCM format
-                const float32Chunk = new Float32Array(event.data.data);
-                const pcmData = new Int16Array(float32Chunk.length);
-                for (let i = 0; i < float32Chunk.length; i++) {
-                    const sample = Math.max(-1, Math.min(1, float32Chunk[i]));
-                    pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767;
-                }
-                ws.send(pcmData.buffer);
-            } else {
-                // Continuous playback of WAV fragment
-                const arrayBuf = event.data as ArrayBuffer;
-
-                const playChunk = async () => {
-                    try {
-                        let ctx = playbackCtxRef.current;
-                        if (!ctx || ctx.state === 'closed') {
-                            ctx = new AudioContext({ sampleRate: 24000 });
-                            playbackCtxRef.current = ctx;
-                            nextPlaybackTimeRef.current = ctx.currentTime;
-                        }
-
-                        // decode WAV to AudioBuffer
-                        const audioBuffer = await ctx.decodeAudioData(arrayBuf.slice(0));
-
-                        const source = ctx.createBufferSource();
-                        source.buffer = audioBuffer;
-                        source.connect(ctx.destination);
-
-                        const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
-                        source.start(startAt);
-                        nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
-
-                        // Mark assistant speaking
-                        setIsSpeaking(true);
-                        if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-                        speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
-                    } catch (e) {
-                        console.error('Failed to play audio chunk', e);
-                    }
-                };
-
-                playChunk();
-            }
-        };
-
-        source.connect(workletNode);
-        processorRef.current = workletNode;
-    }, []);
 
     // Main function to start the streaming process
     const startStreaming = useCallback(async () => {
@@ -169,6 +109,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         let stream: MediaStream | null = null;
 
         try {
+            const now = Date.now();
+            if (now - lastAttemptTimeRef.current < 2500) {
+                throw new Error('Retrying too quickly – waiting before next attempt');
+            }
+            lastAttemptTimeRef.current = now;
             // --- Step 1: Get microphone access and sample rate ---
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true }
@@ -181,107 +126,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const sampleRate = desiredSampleRate;
             tempContext.close();
 
-            // --- Step 2 & 3: Connect, send start, and wait for confirmation ---
-            await new Promise<void>(async (resolve, reject) => {
-                try {
-                    const res = await fetch('/api/students/illustrator/voice-stream');
-                    const data = await res.json();
-
-                    const newWs = new WebSocket(`ws://localhost:${data.port}${data.path}`);
-                    newWs.binaryType = 'arraybuffer';
-                    wsRef.current = newWs;
-
-                    const sessionId = `session_${Date.now()}`;
-                    sessionIdRef.current = sessionId;
-
-                    const timeout = setTimeout(() => {
-                        reject(new Error('Session start timeout'));
-                    }, 20000);
-
-                    newWs.onopen = () => {
-                        newWs.send(JSON.stringify({ type: 'start', sessionId, sampleRate }));
-                    };
-
-                    newWs.onmessage = async (event: MessageEvent) => {
-                        if (typeof event.data === 'string') {
-                            const message = JSON.parse(event.data);
-                            if (message.type === 'session-started' && message.sessionId === sessionId) {
-                                clearTimeout(timeout);
-                                await setupAudioWorklet(stream as MediaStream, newWs, sampleRate);
-                                setConnectionStatus('connected');
-                                resolve();
-                            } else if (message.type === 'session-ended') {
-                                console.log('Server signalled session end:', message.reason);
-                                stopStreaming();
-                            } else if (message.type === 'tool-call') {
-                                toolCallListenerRef.current?.(message.name, message.args);
-                            } else if (message.type === 'playback-interrupted') {
-                                if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-                                setIsSpeaking(false);
-                                if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
-                                    playbackCtxRef.current.close();
-                                }
-                                playbackCtxRef.current = null;
-                                nextPlaybackTimeRef.current = 0;
-                            } else if (message.type === 'error') {
-                                clearTimeout(timeout);
-                                reject(new Error(message.error || 'Unknown server error during startup'));
-                            }
-                        } else {
-                            // Continuous playback of WAV fragment
-                            const arrayBuf = event.data as ArrayBuffer;
-
-                            const playChunk = async () => {
-                                try {
-                                    let ctx = playbackCtxRef.current;
-                                    if (!ctx || ctx.state === 'closed') {
-                                        ctx = new AudioContext({ sampleRate: 24000 });
-                                        playbackCtxRef.current = ctx;
-                                        nextPlaybackTimeRef.current = ctx.currentTime;
-                                    }
-
-                                    // decode WAV to AudioBuffer
-                                    const audioBuffer = await ctx.decodeAudioData(arrayBuf.slice(0));
-
-                                    const source = ctx.createBufferSource();
-                                    source.buffer = audioBuffer;
-                                    source.connect(ctx.destination);
-
-                                    const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
-                                    source.start(startAt);
-                                    nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
-
-                                    // Mark assistant speaking
-                                    setIsSpeaking(true);
-                                    if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-                                    speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
-                                } catch (e) {
-                                    console.error('Failed to play audio chunk', e);
-                                }
-                            };
-
-                            playChunk();
-                        }
-                    };
-
-                    newWs.onerror = (err) => {
-                        clearTimeout(timeout);
-                        setConnectionStatus('disconnected');
-                        reject(new Error('WebSocket connection failed'))
-                    };
-
-                    newWs.onclose = () => {
-                        clearTimeout(timeout);
-                        setConnectionStatus('disconnected');
-                        if (isStreamingRef.current) {
-                            reject(new Error('Connection closed prematurely.'));
-                        }
-                    };
-
-                } catch (err) {
-                    reject(err);
-                }
-            });
+            // --- Step 2 & 3: Use browser-based Gemini Live connection ---
+            await startGeminiLiveSession(stream, sampleRate);
 
         } catch (err: any) {
             console.error('Failed to start streaming:', err);
@@ -289,7 +135,250 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             stopStreaming(); // Use stopStreaming for full cleanup on failure
             setConnectionStatus('disconnected');
         }
-    }, [setupAudioWorklet, stopStreaming, cleanupAudioResources]);
+    }, [stopStreaming, cleanupAudioResources]);
+
+    // Browser-based Gemini Live connection
+    const startGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number) => {
+        try {
+            // Get ephemeral token
+            const tokenResponse = await fetch('/api/genai/ephemeral', { method: 'POST' });
+            if (!tokenResponse.ok) {
+                throw new Error('Failed to get ephemeral token');
+            }
+            const { token } = await tokenResponse.json();
+
+            const ai = new GoogleGenAI({
+                apiKey: token,
+                httpOptions: { apiVersion: 'v1alpha' }
+            });
+
+            // Configuration is locked server-side via liveConnectConstraints
+            // No need to pass config since it's pre-configured in the ephemeral token
+
+            const responseQueue: LiveServerMessage[] = [];
+            const audioParts: string[] = [];
+
+            const geminiSession = await ai.live.connect({
+                model: 'models/gemini-live-2.5-flash-preview',
+                callbacks: {
+                    onopen: () => {
+                        console.log('Gemini Live session opened');
+                        setConnectionStatus('connected');
+                    },
+                    onmessage: (message: LiveServerMessage) => {
+                        responseQueue.push(message);
+                        processGeminiResponseQueue(responseQueue, audioParts);
+                    },
+                    onerror: (e: ErrorEvent) => {
+                        console.error('Gemini Live session error:', e.message);
+                        setError(`Gemini error: ${e.message}`);
+                        setConnectionStatus('disconnected');
+                    },
+                    onclose: (e: CloseEvent) => {
+                        console.log('Gemini Live session closed:', e.reason);
+                        setConnectionStatus('disconnected');
+                    }
+                }
+            });
+
+            geminiLiveSessionRef.current = geminiSession;
+
+            // Set up audio capture and send to Gemini
+            const audioContext = new AudioContext({ sampleRate });
+            audioContextRef.current = audioContext;
+            const source = audioContext.createMediaStreamSource(stream);
+
+            try {
+                await audioContext.audioWorklet.addModule('/audio-processor.js');
+            } catch (e) {
+                console.error('Failed to add audio worklet module.', e);
+                throw new Error('Failed to load audio processor.');
+            }
+
+            const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
+
+            workletNode.port.onmessage = (event) => {
+                if (!isStreamingRef.current || !geminiLiveSessionRef.current) return;
+
+                if (event.data.type === 'audioData') {
+                    // Convert the raw float audio data to 16-bit PCM format
+                    const float32Chunk = new Float32Array(event.data.data);
+                    const pcmData = new Int16Array(float32Chunk.length);
+                    for (let i = 0; i < float32Chunk.length; i++) {
+                        const sample = Math.max(-1, Math.min(1, float32Chunk[i]));
+                        pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767;
+                    }
+
+                    // Convert to base64 for Gemini
+                    const uint8Array = new Uint8Array(pcmData.buffer);
+                    const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
+
+                    geminiLiveSessionRef.current.sendRealtimeInput({
+                        audio: {
+                            data: base64Audio,
+                            mimeType: `audio/pcm;rate=${sampleRate}`
+                        }
+                    });
+                }
+            };
+
+            source.connect(workletNode);
+            processorRef.current = workletNode;
+
+            // Send initial hello
+            geminiSession.sendRealtimeInput({ text: 'Hello' });
+
+        } catch (error: any) {
+            console.error('Failed to start Gemini Live session:', error);
+            throw error;
+        }
+    }, []);
+
+    // Process Gemini Live response queue
+    const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
+        const FRAGMENT_PARTS = 3;
+
+        while (responseQueue.length > 0) {
+            const message = responseQueue.shift();
+
+            if (message?.serverContent && (message as any).serverContent.interrupted) {
+                audioParts.length = 0;
+                setIsSpeaking(false);
+                if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
+                    playbackCtxRef.current.close();
+                }
+                playbackCtxRef.current = null;
+                nextPlaybackTimeRef.current = 0;
+                continue;
+            }
+
+            // Handle tool calls
+            if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
+                for (const fn of message.toolCall.functionCalls) {
+                    toolCallListenerRef.current?.(fn.name || '', fn.args);
+
+                    // Send response back to Gemini
+                    try {
+                        geminiLiveSessionRef.current?.sendToolResponse({
+                            functionResponses: [
+                                {
+                                    id: fn.id || '',
+                                    name: fn.name || '',
+                                    response: {
+                                        result: 'Tool is being called',
+                                        scheduling: FunctionResponseScheduling.SILENT
+                                    }
+                                }
+                            ]
+                        });
+                    } catch (err) {
+                        console.warn('Failed to send tool response back to Gemini:', err);
+                    }
+                }
+            }
+
+            // Handle audio data
+            if (message?.serverContent?.modelTurn?.parts) {
+                const part = message.serverContent.modelTurn.parts[0];
+                if (part?.inlineData?.data) {
+                    audioParts.push(part.inlineData.data);
+                }
+            }
+
+            const shouldFlush =
+                audioParts.length >= FRAGMENT_PARTS ||
+                (message?.serverContent?.turnComplete && audioParts.length > 0);
+
+            if (shouldFlush) {
+                playGeminiAudioChunks(audioParts.slice());
+                audioParts.length = 0;
+            }
+        }
+    }, []);
+
+    // Play audio chunks from Gemini
+    const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
+        try {
+            const pcmData = rawData.map(data => {
+                const binaryString = atob(data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes;
+            });
+
+            const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
+            const wavBuffer = convertToWav(rawData, 24000);
+
+            let ctx = playbackCtxRef.current;
+            if (!ctx || ctx.state === 'closed') {
+                ctx = new AudioContext({ sampleRate: 24000 });
+                playbackCtxRef.current = ctx;
+                nextPlaybackTimeRef.current = ctx.currentTime;
+            }
+
+            const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+
+            const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
+            source.start(startAt);
+            nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
+
+            setIsSpeaking(true);
+            if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
+            speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
+
+        } catch (e) {
+            console.error('Failed to play Gemini audio chunks:', e);
+        }
+    }, []);
+
+    // Helper function to convert PCM to WAV (reused from existing implementation)
+    const convertToWav = useCallback((rawData: string[], sampleRate: number): Buffer => {
+        const pcmData = rawData.map(data => {
+            const binaryString = atob(data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return Buffer.from(bytes);
+        });
+        const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
+
+        const options = {
+            numChannels: 1,
+            sampleRate: sampleRate,
+            bitsPerSample: 16,
+        };
+        const wavHeader = createWavHeader(totalDataLength, options);
+        return Buffer.concat([wavHeader, ...pcmData]);
+    }, []);
+
+    const createWavHeader = useCallback((dataLength: number, options: { numChannels: number; sampleRate: number; bitsPerSample: number }): Buffer => {
+        const { numChannels, sampleRate, bitsPerSample } = options;
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const buffer = Buffer.alloc(44);
+
+        buffer.write('RIFF', 0);
+        buffer.writeUInt32LE(36 + dataLength, 4);
+        buffer.write('WAVE', 8);
+        buffer.write('fmt ', 12);
+        buffer.writeUInt32LE(16, 16);
+        buffer.writeUInt16LE(1, 20);
+        buffer.writeUInt16LE(numChannels, 22);
+        buffer.writeUInt32LE(sampleRate, 24);
+        buffer.writeUInt32LE(byteRate, 28);
+        buffer.writeUInt16LE(blockAlign, 32);
+        buffer.writeUInt16LE(bitsPerSample, 34);
+        buffer.write('data', 36);
+        buffer.writeUInt32LE(dataLength, 40);
+
+        return buffer;
+    }, []);
 
     const setToolCallListener = useCallback((cb: (name: string, args: any) => void) => {
         toolCallListenerRef.current = cb;
@@ -299,8 +388,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     const sendText = useCallback((text: string) => {
         try {
-            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
-                wsRef.current.send(JSON.stringify({ type: 'text', sessionId: sessionIdRef.current, text }));
+            if (geminiLiveSessionRef.current) {
+                geminiLiveSessionRef.current.sendRealtimeInput({ text });
             } else {
                 setError('Not connected');
             }
@@ -313,8 +402,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const sendViewport = useCallback((width: number, height: number, dpr: number) => {
         const payload = `VISUAL_VIEWPORT ${JSON.stringify({ width, height, devicePixelRatio: dpr })}`;
         try {
-            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
-                wsRef.current.send(JSON.stringify({ type: 'text', sessionId: sessionIdRef.current, text: payload }));
+            if (geminiLiveSessionRef.current) {
+                geminiLiveSessionRef.current.sendRealtimeInput({ text: payload });
             }
         } catch (e) {
             console.error('sendViewport failed:', e);
@@ -323,8 +412,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     const sendMedia = useCallback((base64Data: string, mimeType: string) => {
         try {
-            if (wsRef.current?.readyState === WebSocket.OPEN && sessionIdRef.current) {
-                wsRef.current.send(JSON.stringify({ type: 'media', sessionId: sessionIdRef.current, data: base64Data, mimeType }));
+            if (geminiLiveSessionRef.current) {
+                geminiLiveSessionRef.current.sendRealtimeInput({
+                    media: { data: base64Data, mimeType }
+                });
             }
         } catch (e) {
             console.error('sendMedia failed:', e);
