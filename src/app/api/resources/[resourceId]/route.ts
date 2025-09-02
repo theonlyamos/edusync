@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(
@@ -16,12 +15,12 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const resource = await db.collection('resources').findOne({
-            _id: new ObjectId(resourceId)
-        });
+        const { data: resource, error } = await supabase
+            .from('resources')
+            .select('*')
+            .eq('id', resourceId)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!resource) {
             return new NextResponse('Resource not found', { status: 404 });
@@ -46,14 +45,18 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { error } = await supabase
+            .from('resources')
+            .delete()
+            .eq('id', resourceId);
+        if (error) throw error;
 
-        const result = await db.collection('resources').deleteOne({
-            _id: new ObjectId(resourceId)
-        });
-
-        if (result.deletedCount === 0) {
+        const { data: check } = await supabase
+            .from('resources')
+            .select('id')
+            .eq('id', resourceId)
+            .maybeSingle();
+        if (check) {
             return new NextResponse('Resource not found', { status: 404 });
         }
 

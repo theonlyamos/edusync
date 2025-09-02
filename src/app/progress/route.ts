@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { Progress } from '@/lib/models/Progress';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -11,12 +10,12 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await connectToDatabase();
-        const progress = await Progress.find({ 
-            studentId: session.user.id 
-        }).populate('lessonId');
-
-        return NextResponse.json(progress);
+        const { data, error } = await supabase
+            .from('progress')
+            .select('*, lesson:lessons(*)')
+            .eq('studentId', session.user.id);
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching progress:', error);
         return NextResponse.json(
@@ -35,33 +34,51 @@ export async function POST(request: Request) {
 
         const { lessonId, completionStatus, timeSpent, quizScore } = await request.json();
 
-        await connectToDatabase();
-        const progress = await Progress.findOneAndUpdate(
-            { 
-                studentId: session.user.id,
-                lessonId 
-            },
-            {
-                $set: {
-                    completionStatus,
-                    timeSpent,
-                    lastAccessed: new Date()
-                },
-                $push: quizScore ? {
-                    quizScores: {
-                        quizId: quizScore.quizId,
-                        score: quizScore.score,
-                        attemptDate: new Date()
-                    }
-                } : undefined
-            },
-            { 
-                new: true,
-                upsert: true 
-            }
-        );
+        const upsertPayload: any = {
+            studentId: session.user.id,
+            lessonId,
+            completionStatus,
+            timeSpent,
+            lastAccessed: new Date().toISOString()
+        };
 
-        return NextResponse.json(progress);
+        const { data: existing } = await supabase
+            .from('progress')
+            .select('id, quizScores')
+            .eq('studentId', session.user.id)
+            .eq('lessonId', lessonId)
+            .maybeSingle();
+
+        if (quizScore) {
+            const newScore = { quizId: quizScore.quizId, score: quizScore.score, attemptDate: new Date().toISOString() };
+            if (existing?.quizScores) {
+                upsertPayload.quizScores = [...existing.quizScores, newScore];
+            } else {
+                upsertPayload.quizScores = [newScore];
+            }
+        }
+
+        let saved;
+        if (existing) {
+            const { data, error } = await supabase
+                .from('progress')
+                .update(upsertPayload)
+                .eq('id', existing.id)
+                .select('*')
+                .maybeSingle();
+            if (error) throw error;
+            saved = data;
+        } else {
+            const { data, error } = await supabase
+                .from('progress')
+                .insert(upsertPayload)
+                .select('*')
+                .maybeSingle();
+            if (error) throw error;
+            saved = data;
+        }
+
+        return NextResponse.json(saved);
     } catch (error) {
         console.error('Error updating progress:', error);
         return NextResponse.json(

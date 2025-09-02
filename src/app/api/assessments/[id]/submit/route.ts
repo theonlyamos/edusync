@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Assessment, AssessmentResult } from '@/lib/models/Assessment';
+import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -16,10 +15,13 @@ export async function POST(
 
         const { answers, startedAt } = await req.json();
 
-        await connectToDatabase();
-
         // Get the assessment
-        const assessment = await Assessment.findById(params.id);
+        const { data: assessment, error: assessErr } = await supabase
+            .from('assessments')
+            .select('*')
+            .eq('id', params.id)
+            .maybeSingle();
+        if (assessErr) throw assessErr;
         if (!assessment) {
             return NextResponse.json(
                 { error: 'Assessment not found' },
@@ -28,10 +30,13 @@ export async function POST(
         }
 
         // Check if student has already submitted this assessment
-        const existingResult = await AssessmentResult.findOne({
-            assessmentId: params.id,
-            studentId: session.user.id
-        });
+        const { data: existingResult, error: existErr } = await supabase
+            .from('assessment_results')
+            .select('id')
+            .eq('assessmentId', params.id)
+            .eq('studentId', session.user.id)
+            .maybeSingle();
+        if (existErr) throw existErr;
 
         if (existingResult) {
             return NextResponse.json(
@@ -67,17 +72,22 @@ export async function POST(
         );
 
         // Create assessment result
-        const result = await AssessmentResult.create({
-            assessmentId: params.id,
-            studentId: session.user.id,
-            answers: gradedAnswers,
-            totalScore,
-            percentage,
-            status,
-            startedAt: new Date(startedAt),
-            submittedAt,
-            timeSpent
-        });
+        const { data: result, error } = await supabase
+            .from('assessment_results')
+            .insert({
+                assessmentId: params.id,
+                studentId: session.user.id,
+                answers: gradedAnswers,
+                totalScore,
+                percentage,
+                status,
+                startedAt: new Date(startedAt).toISOString(),
+                submittedAt: submittedAt.toISOString(),
+                timeSpent
+            })
+            .select('*')
+            .single();
+        if (error) throw error;
 
         return NextResponse.json({
             result,

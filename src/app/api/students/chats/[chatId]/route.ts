@@ -1,9 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
-import { Chat } from '@/lib/models/Chat';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
     request: NextRequest,
@@ -16,13 +14,13 @@ export async function GET(
         }
 
         const { chatId } = await params;
-
-        await connectToDatabase();
-
-        const chat = await Chat.findOne({
-            _id: new ObjectId(chatId),
-            userId: new ObjectId(session.user.id)
-        }).lean();
+        const { data: chat, error } = await supabase
+            .from('chats')
+            .select('*')
+            .eq('id', chatId)
+            .eq('userId', session.user.id)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!chat) {
             return new NextResponse('Chat not found', { status: 404 });
@@ -48,22 +46,16 @@ export async function PUT(
         const { chatId } = params;
         const { messages } = await request.json();
 
-        await connectToDatabase();
+        const { data, error } = await supabase
+            .from('chats')
+            .update({ messages, updatedAt: new Date().toISOString() })
+            .eq('id', chatId)
+            .eq('userId', session.user.id)
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
 
-        const result = await Chat.updateOne(
-            {
-                _id: new ObjectId(chatId),
-                userId: new ObjectId(session.user.id)
-            },
-            {
-                $set: {
-                    messages,
-                    updatedAt: new Date()
-                }
-            }
-        );
-
-        if (result.matchedCount === 0) {
+        if (!data) {
             return new NextResponse('Chat not found', { status: 404 });
         }
 
@@ -85,15 +77,19 @@ export async function DELETE(
         }
 
         const { chatId } = params;
+        const { error } = await supabase
+            .from('chats')
+            .delete()
+            .eq('id', chatId)
+            .eq('userId', session.user.id);
+        if (error) throw error;
 
-        await connectToDatabase();
-
-        const result = await Chat.deleteOne({
-            _id: new ObjectId(chatId),
-            userId: new ObjectId(session.user.id)
-        });
-
-        if (result.deletedCount === 0) {
+        const { data: check } = await supabase
+            .from('chats')
+            .select('id')
+            .eq('id', chatId)
+            .maybeSingle();
+        if (check) {
             return new NextResponse('Chat not found', { status: 404 });
         }
 

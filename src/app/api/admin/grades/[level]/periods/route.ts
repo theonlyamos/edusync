@@ -1,27 +1,26 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Grade } from '@/lib/models/Grade';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        await connectToDatabase();
+        const { data: timetable, error } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', params.level)
+            .maybeSingle();
+        if (error) throw error;
 
-        const grade = await Grade.findOne({ level: params.level })
-            .select('timetable.periods')
-            .populate('timetable.periods.teacher', 'name')
-            .lean();
-
-        if (!grade) {
+        if (!timetable) {
             return NextResponse.json(
                 { error: "Grade not found" },
                 { status: 404 }
             );
         }
 
-        return NextResponse.json(grade.timetable?.periods || []);
+        return NextResponse.json((timetable as any).periods || []);
     } catch (error) {
         console.error("Error fetching periods:", error);
         return NextResponse.json(
@@ -37,25 +36,27 @@ export async function POST(
 ) {
     try {
         const body = await request.json();
-        await connectToDatabase();
-
-        const updatedGrade = await Grade.findOneAndUpdate(
-            { level: params.level },
-            { $push: { 'timetable.periods': body } },
-            { new: true }
-        )
-            .select('timetable.periods')
-            .populate('timetable.periods.teacher', 'name')
-            .lean();
-
-        if (!updatedGrade) {
+        const { data: existing, error: err } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', params.level)
+            .maybeSingle();
+        if (err) throw err;
+        if (!existing) {
             return NextResponse.json(
                 { error: "Grade not found" },
                 { status: 404 }
             );
         }
 
-        return NextResponse.json(updatedGrade.timetable.periods);
+        const periods = [...(existing as any).periods || [], body];
+        const { error: updErr } = await supabase
+            .from('timetables')
+            .update({ periods })
+            .eq('grade', params.level);
+        if (updErr) throw updErr;
+
+        return NextResponse.json(periods);
     } catch (error) {
         console.error("Error creating period:", error);
         return NextResponse.json(

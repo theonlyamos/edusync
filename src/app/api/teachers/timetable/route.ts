@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -10,13 +10,10 @@ export async function GET(request: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Get all timetables
-        const timetables = await db.collection('timetables')
-            .find({})
-            .toArray();
+        const { data: timetables, error: tErr } = await supabase
+            .from('timetables')
+            .select('*');
+        if (tErr) throw tErr;
 
         // Get all periods from all grade levels
         const allPeriods: any[] = [];
@@ -54,11 +51,10 @@ export async function GET(request: Request) {
         allPeriods.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
         // Get the teacher's lessons
-        const lessons = await db.collection('lessons')
-            .find({
-                teacherId: session.user.id
-            })
-            .toArray();
+        const { data: lessons } = await supabase
+            .from('lessons')
+            .select('id, title, teacher')
+            .eq('teacher', session.user.id);
 
         return NextResponse.json({
             timeTable: filteredTimeTable,
@@ -87,13 +83,11 @@ export async function PUT(request: Request) {
             return new NextResponse('Grade level is required', { status: 400 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Get the current timetable for the specified grade
-        const currentTimetable = await db.collection('timetables').findOne({
-            level
-        });
+        const { data: currentTimetable } = await supabase
+            .from('timetables')
+            .select('*')
+            .eq('level', level)
+            .maybeSingle();
 
         // Merge the existing timetable with the teacher's updates
         const updatedSchedule = { ...(currentTimetable?.schedule || {}) };
@@ -107,21 +101,19 @@ export async function PUT(request: Request) {
             });
         });
 
-        // Update or create the timetable
-        await db.collection('timetables').updateOne(
-            { level },
-            {
-                $set: {
-                    schedule: updatedSchedule,
-                    updatedAt: new Date()
-                },
-                $setOnInsert: {
-                    level,
-                    createdAt: new Date()
-                }
-            },
-            { upsert: true }
-        );
+        const payload = { schedule: updatedSchedule, updatedAt: new Date().toISOString(), level } as any;
+        if (currentTimetable) {
+            const { error } = await supabase
+                .from('timetables')
+                .update(payload)
+                .eq('level', level);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase
+                .from('timetables')
+                .insert({ ...payload, createdAt: new Date().toISOString() });
+            if (error) throw error;
+        }
 
         return NextResponse.json({ success: true });
     } catch (error) {

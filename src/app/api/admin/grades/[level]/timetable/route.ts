@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Timetable } from '@/lib/models/Timetable';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        await connectToDatabase();
-
         const { level } = await params;
-
-        const timetable = await Timetable.findOne({ grade: level })
-            .populate('schedule.*.*.lessonId', 'title subject')
-            .populate('schedule.*.*.teacherId', 'name email')
-            .lean();
+        const { data: timetable, error } = await supabase
+            .from('timetables')
+            .select('*')
+            .eq('grade', level)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!timetable) {
             return NextResponse.json(
@@ -40,29 +38,35 @@ export async function PUT(
         const body = await request.json();
         const { level } = await params;
 
-        await connectToDatabase();
-
         const currentYear = new Date().getFullYear();
         const academicYear = `${currentYear}-${currentYear + 1}`;
 
-        const updatedTimetable = await Timetable.findOneAndUpdate(
-            { grade: level },
-            {
-                $set: {
-                    ...body,
-                    grade: level,
-                    academicYear,
-                    updatedAt: new Date()
-                }
-            },
-            {
-                new: true,
-                upsert: true
-            }
-        )
-            .populate('schedule.*.*.teacherId', 'name email')
-            .populate('schedule.*.*.lessonId', 'title subject')
-            .lean();
+        const payload = { ...body, grade: level, academicYear, updatedAt: new Date().toISOString() } as any;
+        const { data: existing } = await supabase
+            .from('timetables')
+            .select('id')
+            .eq('grade', level)
+            .maybeSingle();
+
+        let updatedTimetable;
+        if (existing) {
+            const { data, error } = await supabase
+                .from('timetables')
+                .update(payload)
+                .eq('grade', level)
+                .select('*')
+                .maybeSingle();
+            if (error) throw error;
+            updatedTimetable = data;
+        } else {
+            const { data, error } = await supabase
+                .from('timetables')
+                .insert(payload)
+                .select('*')
+                .maybeSingle();
+            if (error) throw error;
+            updatedTimetable = data;
+        }
 
         if (!updatedTimetable) {
             return NextResponse.json(
@@ -86,11 +90,14 @@ export async function DELETE(
     { params }: { params: { level: string } }
 ) {
     try {
-        await connectToDatabase();
-
         const { level } = await params;
-
-        const deletedTimetable = await Timetable.findOneAndDelete({ grade: level }).lean();
+        const { data: deletedTimetable, error } = await supabase
+            .from('timetables')
+            .delete()
+            .eq('grade', level)
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!deletedTimetable) {
             return NextResponse.json(

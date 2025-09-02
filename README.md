@@ -50,7 +50,7 @@ EduSync is an all-in-one, AI-powered educational platform designed to transform 
 
 - **Framework:** Next.js (Server-side and Client-side rendering)
 - **Frontend:** React, Tailwind CSS (with dark mode and utility-first design)
-- **Backend:** Node.js, MongoDB with Mongoose
+- **Backend:** Node.js, Supabase (Postgres)
 - **AI Services:** OpenAI integration for real-time content generation and tutoring
 - **Editor:** Monaco Editor for interactive coding and development exercises
 - **Visualization:** Recharts for dynamic charts and performance reports
@@ -107,9 +107,81 @@ EduSync
    NEXT_PUBLIC_API_URL=<your-api-url>
    OPENAI_API_KEY=<your-openai-api-key>
    TAVILY_API_KEY=<your-tavily-api-key>
-   MONGODB_URI=<your-mongodb-uri>
+   NEXT_PUBLIC_SUPABASE_URL=<your-supabase-url>
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+   SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
    NEXTAUTH_SECRET=<your-nextauth-secret>
    ```
+
+### Supabase Schema (example)
+
+Run these in Supabase SQL editor (adjust types as needed):
+
+```sql
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  email text unique not null,
+  password text not null,
+  name text not null,
+  role text not null check (role in ('student','teacher','admin')),
+  image text,
+  isActive boolean default true,
+  lastLogin timestamptz,
+  "createdAt" timestamptz default now(),
+  "updatedAt" timestamptz default now()
+);
+
+create table if not exists students (
+  user_id uuid primary key references users(id) on delete cascade,
+  grade text,
+  enrollment_date timestamptz default now(),
+  guardian_name text,
+  guardian_contact text,
+  "createdAt" timestamptz default now()
+);
+
+create view if not exists students_view as
+select
+  u.id,
+  u.email,
+  u.name,
+  u."isActive",
+  u."lastLogin",
+  s.user_id as "studentId",
+  s.grade,
+  s.enrollment_date as "enrollmentDate",
+  s.guardian_name as "guardianName",
+  s.guardian_contact as "guardianContact",
+  u."createdAt",
+  u."updatedAt"
+from students s
+join users u on u.id = s.user_id;
+
+create table if not exists teachers (
+  user_id uuid primary key references users(id) on delete cascade,
+  subjects jsonb,
+  grades jsonb,
+  qualifications jsonb,
+  specializations jsonb,
+  "createdAt" timestamptz default now()
+);
+
+create view if not exists teachers_view as
+select
+  u.id,
+  u.email,
+  u.name,
+  u."isActive",
+  u."lastLogin",
+  t.subjects,
+  t.grades,
+  t.qualifications,
+  t.specializations,
+  u."createdAt",
+  u."updatedAt"
+from teachers t
+join users u on u.id = t.user_id;
+```
 
 4. **Run the Development Server:**
 

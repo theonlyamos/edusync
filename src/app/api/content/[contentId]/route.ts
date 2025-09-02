@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(
@@ -16,12 +15,12 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const content = await db.collection('lessonContent').findOne({
-            _id: new ObjectId(contentId)
-        });
+        const { data: content, error } = await supabase
+            .from('lesson_content')
+            .select('*')
+            .eq('id', contentId)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!content) {
             return new NextResponse('Content not found', { status: 404 });
@@ -46,15 +45,14 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
         const { content } = await req.json();
-
-        const result = await db.collection('lessonContent').findOneAndUpdate(
-            { _id: new ObjectId(contentId) },
-            { $set: { content } },
-            { returnDocument: 'after' }
-        );
+        const { data: result, error } = await supabase
+            .from('lesson_content')
+            .update({ content })
+            .eq('id', contentId)
+            .select('*')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!result) {
             return new NextResponse('Content not found', { status: 404 });
@@ -79,14 +77,15 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { error } = await supabase
+            .from('lesson_content')
+            .delete()
+            .eq('id', contentId);
+        if (error) throw error;
 
-        const result = await db.collection('lessonContent').deleteOne({
-            _id: new ObjectId(contentId)
-        });
-
-        if (result.deletedCount === 0) {
+        // Note: Supabase doesn't return deletedCount directly; assume success if no error
+        const { data: check } = await supabase.from('lesson_content').select('id').eq('id', contentId).maybeSingle();
+        if (check) {
             return new NextResponse('Content not found', { status: 404 });
         }
 

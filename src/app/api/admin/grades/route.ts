@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 import { GRADE_LEVELS } from '@/lib/constants';
 
@@ -11,34 +11,23 @@ export async function GET(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        // Get statistics for each grade level
         const gradeStats = await Promise.all(GRADE_LEVELS.map(async (level) => {
-            // Count students in this grade
-            const studentCount = await db.collection('users').countDocuments({
-                role: 'student',
-                level
-            });
+            const { count: studentCount } = await supabase
+                .from('students')
+                .select('*', { count: 'exact', head: true })
+                .eq('grade', level);
 
-            // Count teachers assigned to this grade
-            const teacherCount = await db.collection('users').countDocuments({
-                role: 'teacher',
-                level
-            });
+            const { count: teacherCount } = await supabase
+                .from('teachers')
+                .select('*', { count: 'exact', head: true })
+                .contains('grades', [level]);
 
-            // Count lessons for this grade
-            const lessonCount = await db.collection('lessons').countDocuments({
-                gradeLevel: level
-            });
+            const { count: lessonCount } = await supabase
+                .from('lessons')
+                .select('*', { count: 'exact', head: true })
+                .eq('gradeLevel', level);
 
-            return {
-                level,
-                studentCount,
-                teacherCount,
-                lessonCount
-            };
+            return { level, studentCount: studentCount ?? 0, teacherCount: teacherCount ?? 0, lessonCount: lessonCount ?? 0 };
         }));
 
         return NextResponse.json(gradeStats);

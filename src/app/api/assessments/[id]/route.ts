@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Assessment } from '@/lib/models/Assessment';
+import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -15,10 +14,12 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await connectToDatabase();
-
-        const assessment = await Assessment.findById(params.id)
-            .populate('createdBy', 'name email');
+        const { data: assessment, error } = await supabase
+            .from('assessments')
+            .select('*, createdBy:users(name, email)')
+            .eq('id', params.id)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!assessment) {
             return NextResponse.json(
@@ -62,9 +63,12 @@ export async function PUT(
             isPublished
         } = await req.json();
 
-        await connectToDatabase();
-
-        const assessment = await Assessment.findById(params.id);
+        const { data: assessment, error: findErr } = await supabase
+            .from('assessments')
+            .select('id, createdBy')
+            .eq('id', params.id)
+            .maybeSingle();
+        if (findErr) throw findErr;
 
         if (!assessment) {
             return NextResponse.json(
@@ -75,7 +79,7 @@ export async function PUT(
 
         // Only allow creator or admin to update
         if (
-            assessment.createdBy.toString() !== session.user.id &&
+            String(assessment.createdBy) !== session.user.id &&
             session.user.role !== 'admin'
         ) {
             return NextResponse.json(
@@ -84,9 +88,9 @@ export async function PUT(
             );
         }
 
-        const updatedAssessment = await Assessment.findByIdAndUpdate(
-            params.id,
-            {
+        const { data: updatedAssessment, error } = await supabase
+            .from('assessments')
+            .update({
                 title,
                 description,
                 subject,
@@ -96,12 +100,14 @@ export async function PUT(
                 totalPoints,
                 passingScore,
                 questions,
-                dueDate: dueDate ? new Date(dueDate) : null,
+                dueDate: dueDate ? new Date(dueDate).toISOString() : null,
                 isPublished,
-                updatedAt: new Date()
-            },
-            { new: true }
-        ).populate('createdBy', 'name email');
+                updatedAt: new Date().toISOString()
+            })
+            .eq('id', params.id)
+            .select('*, createdBy:users(name, email)')
+            .maybeSingle();
+        if (error) throw error;
 
         return NextResponse.json(updatedAssessment);
     } catch (error: any) {
@@ -124,9 +130,12 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await connectToDatabase();
-
-        const assessment = await Assessment.findById(params.id);
+        const { data: assessment, error: findErr2 } = await supabase
+            .from('assessments')
+            .select('id, createdBy')
+            .eq('id', params.id)
+            .maybeSingle();
+        if (findErr2) throw findErr2;
 
         if (!assessment) {
             return NextResponse.json(
@@ -137,7 +146,7 @@ export async function DELETE(
 
         // Only allow creator or admin to delete
         if (
-            assessment.createdBy.toString() !== session.user.id &&
+            String(assessment.createdBy) !== session.user.id &&
             session.user.role !== 'admin'
         ) {
             return NextResponse.json(
@@ -146,7 +155,11 @@ export async function DELETE(
             );
         }
 
-        await Assessment.findByIdAndDelete(params.id);
+        const { error } = await supabase
+            .from('assessments')
+            .delete()
+            .eq('id', params.id);
+        if (error) throw error;
 
         return NextResponse.json({ message: 'Assessment deleted successfully' });
     } catch (error: any) {

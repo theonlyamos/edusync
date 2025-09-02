@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Assessment, AssessmentResult } from '@/lib/models/Assessment';
+import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -14,9 +13,12 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await connectToDatabase();
-
-        const assessment = await Assessment.findById(params.id);
+        const { data: assessment, error: assessErr } = await supabase
+            .from('assessments')
+            .select('id, createdBy')
+            .eq('id', params.id)
+            .maybeSingle();
+        if (assessErr) throw assessErr;
         if (!assessment) {
             return NextResponse.json(
                 { error: 'Assessment not found' },
@@ -27,28 +29,31 @@ export async function GET(
         // Check user role and permissions
         if (session.user.role === 'student') {
             // Students can only see their own results
-            const result = await AssessmentResult.findOne({
-                assessmentId: params.id,
-                studentId: session.user.id
-            }).populate('studentId', 'name email');
-
-            return NextResponse.json(result);
+            const { data: result, error } = await supabase
+                .from('assessment_results')
+                .select('*, student:users(name, email)')
+                .eq('assessmentId', params.id)
+                .eq('studentId', session.user.id)
+                .maybeSingle();
+            if (error) throw error;
+            return NextResponse.json(result ?? null);
         } else if (
             session.user.role === 'teacher' &&
-            assessment.createdBy.toString() === session.user.id
+            String(assessment.createdBy) === session.user.id
         ) {
             // Teachers can see all results for their assessments
-            const results = await AssessmentResult.find({
-                assessmentId: params.id
-            })
-                .populate('studentId', 'name email')
-                .sort({ submittedAt: -1 });
+            const { data: results, error } = await supabase
+                .from('assessment_results')
+                .select('*, student:users(name, email)')
+                .eq('assessmentId', params.id)
+                .order('submittedAt', { ascending: false });
+            if (error) throw error;
 
             // Calculate statistics
-            const totalSubmissions = results.length;
-            const averageScore = results.reduce((acc, curr) => acc + curr.percentage, 0) / totalSubmissions;
-            const passRate = (results.filter(r => r.status === 'passed').length / totalSubmissions) * 100;
-            const averageTimeSpent = results.reduce((acc, curr) => acc + curr.timeSpent, 0) / totalSubmissions;
+            const totalSubmissions = results?.length ?? 0;
+            const averageScore = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.percentage, 0) / totalSubmissions) : 0;
+            const passRate = totalSubmissions ? ((results!.filter((r: any) => r.status === 'passed').length / totalSubmissions) * 100) : 0;
+            const averageTimeSpent = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.timeSpent, 0) / totalSubmissions) : 0;
 
             return NextResponse.json({
                 results,
@@ -61,17 +66,18 @@ export async function GET(
             });
         } else if (session.user.role === 'admin') {
             // Admins can see all results
-            const results = await AssessmentResult.find({
-                assessmentId: params.id
-            })
-                .populate('studentId', 'name email')
-                .sort({ submittedAt: -1 });
+            const { data: results, error } = await supabase
+                .from('assessment_results')
+                .select('*, student:users(name, email)')
+                .eq('assessmentId', params.id)
+                .order('submittedAt', { ascending: false });
+            if (error) throw error;
 
             // Calculate statistics
-            const totalSubmissions = results.length;
-            const averageScore = results.reduce((acc, curr) => acc + curr.percentage, 0) / totalSubmissions;
-            const passRate = (results.filter(r => r.status === 'passed').length / totalSubmissions) * 100;
-            const averageTimeSpent = results.reduce((acc, curr) => acc + curr.timeSpent, 0) / totalSubmissions;
+            const totalSubmissions = results?.length ?? 0;
+            const averageScore = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.percentage, 0) / totalSubmissions) : 0;
+            const passRate = totalSubmissions ? ((results!.filter((r: any) => r.status === 'passed').length / totalSubmissions) * 100) : 0;
+            const averageTimeSpent = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.timeSpent, 0) / totalSubmissions) : 0;
 
             return NextResponse.json({
                 results,

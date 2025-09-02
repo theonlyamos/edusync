@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { Lesson } from '@/lib/models/Lesson';
-import { Student } from '@/lib/models/Student';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET() {
@@ -12,18 +10,24 @@ export async function GET() {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }
 
-        await connectToDatabase();
-
-        const student = await Student.findOne({ userId: session.user.id });
+        const { data: student } = await supabase
+            .from('students')
+            .select('grade')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
 
         if (!student || !student.grade) {
             return NextResponse.json({ message: 'Student record or grade not found' }, { status: 404 });
         }
 
         // Fetch lessons matching the student's grade
-        const lessons = await Lesson.find({ gradeLevel: student.grade }).sort({ createdAt: -1 });
-
-        return NextResponse.json(lessons);
+        const { data: lessons, error } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('gradeLevel', student.grade)
+            .order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(lessons ?? []);
     } catch (error) {
         console.error('Error fetching lessons:', error);
         return NextResponse.json(

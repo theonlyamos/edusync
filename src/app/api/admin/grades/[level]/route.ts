@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import { Grade } from "@/lib/models/Grade";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(
     request: Request,
     { params }: { params: { level: string } }
 ) {
     try {
-        await connectToDatabase();
-
         const { level } = await params;
-
-        const grade = await Grade.findOne({ level: level })
-            .populate('teachers', '-password')
-            .populate('students', '-password')
-            .lean();
+        const { data: grade, error } = await supabase
+            .from('grades')
+            .select('*, teachers:grade_teachers(*), students:grade_students(*)')
+            .eq('level', level)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!grade) {
             return NextResponse.json(
@@ -39,16 +37,13 @@ export async function PUT(
 ) {
     try {
         const body = await request.json();
-        await connectToDatabase();
-
-        const updatedGrade = await Grade.findOneAndUpdate(
-            { level: params.level },
-            { $set: body },
-            { new: true }
-        )
-            .populate('teachers', '-password')
-            .populate('students', '-password')
-            .lean();
+        const { data: updatedGrade, error } = await supabase
+            .from('grades')
+            .update(body)
+            .eq('level', params.level)
+            .select('*, teachers:grade_teachers(*), students:grade_students(*)')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!updatedGrade) {
             return NextResponse.json(
@@ -72,9 +67,13 @@ export async function DELETE(
     { params }: { params: { level: string } }
 ) {
     try {
-        await connectToDatabase();
-
-        const deletedGrade = await Grade.findOneAndDelete({ level: params.level }).lean();
+        const { data: deletedGrade, error } = await supabase
+            .from('grades')
+            .delete()
+            .eq('level', params.level)
+            .select('level')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!deletedGrade) {
             return NextResponse.json(

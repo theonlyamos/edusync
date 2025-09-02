@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET() {
@@ -10,23 +10,23 @@ export async function GET() {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const stats = await db.collection('studentStats').findOne(
-            { studentId: session.user.id }
-        ) || {
+        const { data: statsRaw } = await supabase
+            .from('student_stats')
+            .select('*')
+            .eq('studentId', session.user.id)
+            .maybeSingle();
+        const stats = statsRaw || {
             studentId: session.user.id,
             totalExercisesCompleted: 0,
             totalPointsEarned: 0,
-            recentScores: [],
+            recentScores: [] as number[],
             currentStreak: 0,
             averageScore: 0
         };
 
         // Calculate average score from recent scores
-        const averageScore = stats.recentScores.length > 0
-            ? Math.round(stats.recentScores.reduce((a: number, b: number) => a + b, 0) / stats.recentScores.length)
+        const averageScore = (stats.recentScores?.length ?? 0) > 0
+            ? Math.round((stats.recentScores as number[]).reduce((a: number, b: number) => a + b, 0) / (stats.recentScores as number[]).length)
             : 0;
 
         return NextResponse.json({

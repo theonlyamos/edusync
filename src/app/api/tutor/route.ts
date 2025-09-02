@@ -2,11 +2,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import OpenAI from 'openai';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { ObjectId } from 'mongodb';
-import { Student } from '@/lib/models/Student';
-import { Lesson } from '@/lib/models/Lesson';
-import { Chat } from '@/lib/models/Chat';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
@@ -59,10 +56,12 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        await connectToDatabase();
-
         // Get student's grade level
-        const student = await Student.findOne({ userId: session.user.id })
+        const { data: student } = await supabase
+            .from('students')
+            .select('grade')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
 
         if (!student?.grade) {
             return new NextResponse('Student grade level not found', { status: 400 });
@@ -76,8 +75,12 @@ export async function POST(req: Request) {
         // If lessonId is provided, get lesson details
         let lesson: any;
         if (lessonId) {
-            // Use Mongoose findOne
-            lesson = await Lesson.findOne({ _id: lessonId });
+            const { data } = await supabase
+                .from('lessons')
+                .select('title, subject, objectives')
+                .eq('id', lessonId)
+                .maybeSingle();
+            lesson = data;
         }
 
         const completion = await openai.chat.completions.create({
@@ -120,25 +123,28 @@ export async function POST(req: Request) {
         // If no chatId provided, create a new chat
         let newChatId;
         if (!chatId) {
-            // Use Chat model to create a new chat
-            const newChat = new Chat({
-                userId: new ObjectId(session.user.id), // Ensure userId is ObjectId
-                lessonId: lessonId ? new ObjectId(lessonId) : null, // Ensure lessonId is ObjectId
-                messages: [...messages, tutorMessage],
-                title: messages[0]?.content?.slice(0, 50) + '...',
-                // createdAt and updatedAt are handled by Mongoose defaults/hooks
-            });
-            const savedChat = await newChat.save();
-            newChatId = savedChat._id;
+            const now = new Date().toISOString();
+            const { data } = await supabase
+                .from('chats')
+                .insert({
+                    userId: session.user.id,
+                    lessonId: lessonId ?? null,
+                    messages: [...messages, tutorMessage],
+                    title: messages[0]?.content?.slice(0, 50) + '...',
+                    createdAt: now,
+                    updatedAt: now
+                })
+                .select('id')
+                .single();
+            newChatId = data?.id;
         } else {
-            // Use Chat model to update existing chat
-            await Chat.updateOne(
-                { _id: new ObjectId(chatId) }, // Ensure chatId is ObjectId
-                {
-                    $push: { messages: tutorMessage },
-                    $set: { updatedAt: new Date() } // Mongoose timestamp hook might handle this
-                }
-            );
+            await supabase
+                .from('chats')
+                .update({
+                    messages: [...messages, tutorMessage],
+                    updatedAt: new Date().toISOString()
+                })
+                .eq('id', chatId);
         }
 
         return NextResponse.json({
