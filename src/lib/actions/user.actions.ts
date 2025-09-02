@@ -1,9 +1,4 @@
-import { User } from "@/lib/models/User";
-import { Student } from "@/lib/models/Student";
-import { Teacher } from "@/lib/models/Teacher";
-import { Admin } from "@/lib/models/Admin";
-import { connectToDatabase } from "@/lib/db";
-import mongoose from "mongoose";
+import { supabase } from "@/lib/supabase";
 import bcrypt from "bcryptjs";
 
 interface CreateUserParams {
@@ -32,166 +27,131 @@ interface CreateAdminParams extends CreateUserParams {
 }
 
 export async function createStudent(params: CreateStudentParams) {
-    await connectToDatabase();
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        // Hash password
         const hashedPassword = await bcrypt.hash(params.password, 10);
+        const { data: user, error: userErr } = await supabase
+            .from('users')
+            .insert({ email: params.email, password: hashedPassword, name: params.name, role: 'student', createdAt: new Date().toISOString() })
+            .select('*')
+            .single();
+        if (userErr) throw userErr;
 
-        // Create user
-        const user = await User.create([{
-            email: params.email,
-            password: hashedPassword,
-            name: params.name,
-            role: 'student'
-        }], { session });
-
-        // Create student record
-        const student = await Student.create([{
-            userId: user[0]._id,
-            grade: params.grade,
-            guardianName: params.guardianName,
-            guardianContact: params.guardianContact
-        }], { session });
-
-        await session.commitTransaction();
-        return { user: user[0], student: student[0] };
+        const { data: student, error: studentErr } = await supabase
+            .from('students')
+            .insert({ user_id: user.id, grade: params.grade, guardianName: params.guardianName, guardianContact: params.guardianContact })
+            .select('*')
+            .single();
+        if (studentErr) throw studentErr;
+        return { user, student };
     } catch (error) {
-        await session.abortTransaction();
         throw error;
-    } finally {
-        session.endSession();
     }
 }
 
 export async function createTeacher(params: CreateTeacherParams) {
-    await connectToDatabase();
-
     try {
-        // Hash password
         const hashedPassword = await bcrypt.hash(params.password, 10);
+        const { data: user, error: userErr } = await supabase
+            .from('users')
+            .insert({ email: params.email, password: hashedPassword, name: params.name, role: 'teacher', createdAt: new Date().toISOString() })
+            .select('*')
+            .single();
+        if (userErr) throw userErr;
 
-        // Create user
-        const user = await User.create({
-            email: params.email,
-            password: hashedPassword,
-            name: params.name,
-            role: 'teacher'
-        });
-
-        // Create teacher record
-        const teacher = await Teacher.create({
-            userId: user._id,
-            subjects: params?.subjects || [],
-            grades: params?.grades || [],
-            qualifications: params?.qualifications || [],
-            specializations: params?.specializations || []
-        });
-
+        const { data: teacher, error: tErr } = await supabase
+            .from('teachers')
+            .insert({ user_id: user.id, subjects: params.subjects ?? [], grades: params.grades ?? [], qualifications: params.qualifications ?? [], specializations: params.specializations ?? [] })
+            .select('*')
+            .single();
+        if (tErr) throw tErr;
         return { user, teacher };
     } catch (error: any) {
-        if (error?.user?._id) {
-            await User.findByIdAndDelete(error.user._id);
-        }
+        // Best-effort rollback if user created but teacher failed
+        try {
+            const maybeUserId = (error?.user?._id) ?? undefined;
+            if (maybeUserId) {
+                await supabase.from('users').delete().eq('id', maybeUserId);
+            }
+        } catch { }
         throw error;
     }
 }
 
 export async function createAdmin(params: CreateAdminParams) {
-    await connectToDatabase();
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        // Hash password
         const hashedPassword = await bcrypt.hash(params.password, 10);
+        const { data: user, error: userErr } = await supabase
+            .from('users')
+            .insert({ email: params.email, password: hashedPassword, name: params.name, role: 'admin', createdAt: new Date().toISOString() })
+            .select('*')
+            .single();
+        if (userErr) throw userErr;
 
-        // Create user
-        const user = await User.create([{
-            email: params.email,
-            password: hashedPassword,
-            name: params.name,
-            role: 'admin'
-        }], { session });
-
-        // Create admin record
-        const admin = await Admin.create([{
-            userId: user[0]._id,
-            permissions: params.permissions || [],
-            isSuperAdmin: params.isSuperAdmin || false
-        }], { session });
-
-        await session.commitTransaction();
-        return { user: user[0], admin: admin[0] };
+        const { data: admin, error: aErr } = await supabase
+            .from('admins')
+            .insert({ user_id: user.id, permissions: params.permissions ?? [], isSuperAdmin: params.isSuperAdmin ?? false })
+            .select('*')
+            .single();
+        if (aErr) throw aErr;
+        return { user, admin };
     } catch (error) {
-        await session.abortTransaction();
         throw error;
-    } finally {
-        session.endSession();
     }
 }
 
 export async function getUserDetails(userId: string, role: string) {
-    await connectToDatabase();
-
-    const user = await User.findById(userId).lean();
+    const { data: user } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
     if (!user) return null;
 
-    let roleDetails = null;
-    switch (role) {
-        case 'student':
-            roleDetails = await Student.findOne({ userId }).lean();
-            break;
-        case 'teacher':
-            roleDetails = await Teacher.findOne({ userId }).lean();
-            break;
-        case 'admin':
-            roleDetails = await Admin.findOne({ userId }).lean();
-            break;
+    let roleDetails: any = null;
+    if (role === 'student') {
+        const { data } = await supabase.from('students').select('*').eq('user_id', userId).maybeSingle();
+        roleDetails = data;
+    } else if (role === 'teacher') {
+        const { data } = await supabase.from('teachers').select('*').eq('user_id', userId).maybeSingle();
+        roleDetails = data;
+    } else if (role === 'admin') {
+        const { data } = await supabase.from('admins').select('*').eq('user_id', userId).maybeSingle();
+        roleDetails = data;
     }
 
-    return {
-        ...user,
-        ...roleDetails
-    };
+    return { ...user, ...roleDetails };
 }
 
 export async function updateUserPassword(userId: string, newPassword: string) {
-    await connectToDatabase();
-
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: { password: hashedPassword } },
-        { new: true }
-    ).lean();
-
-    return updatedUser;
+    const { data, error } = await supabase
+        .from('users')
+        .update({ password: hashedPassword, updatedAt: new Date().toISOString() })
+        .eq('id', userId)
+        .select('*')
+        .maybeSingle();
+    if (error) throw error;
+    return data;
 }
 
 export async function deactivateUser(userId: string) {
-    await connectToDatabase();
-
-    const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: { isActive: false } },
-        { new: true }
-    ).lean();
-
-    return updatedUser;
+    const { data, error } = await supabase
+        .from('users')
+        .update({ isActive: false, updatedAt: new Date().toISOString() })
+        .eq('id', userId)
+        .select('*')
+        .maybeSingle();
+    if (error) throw error;
+    return data;
 }
 
 export async function activateUser(userId: string) {
-    await connectToDatabase();
-
-    const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: { isActive: true } },
-        { new: true }
-    ).lean();
-
-    return updatedUser;
+    const { data, error } = await supabase
+        .from('users')
+        .update({ isActive: true, updatedAt: new Date().toISOString() })
+        .eq('id', userId)
+        .select('*')
+        .maybeSingle();
+    if (error) throw error;
+    return data;
 } 

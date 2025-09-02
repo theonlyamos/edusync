@@ -4,9 +4,6 @@ import OpenAI from 'openai';
 import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase';
-import { Lesson } from '@/lib/models/Lesson';
-import { Content } from '@/lib/models/Content';
-import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 
 interface Question {

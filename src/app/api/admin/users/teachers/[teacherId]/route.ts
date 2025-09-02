@@ -1,9 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { User } from '@/lib/models/User';
-import { Teacher } from '@/lib/models/Teacher';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
     req: NextRequest,
@@ -19,48 +17,46 @@ export async function GET(
         }
 
         const { teacherId } = await params;
-        await connectToDatabase();
-
-        // Get user details
-        const userDoc = await User.findById(teacherId);
-        if (!userDoc) {
+        const { data: userRow } = await supabase
+            .from('users')
+            .select('id, email, name, role, isActive, createdAt, updatedAt')
+            .eq('id', teacherId)
+            .eq('role', 'teacher')
+            .maybeSingle();
+        if (!userRow) {
             return NextResponse.json(
                 { error: "Teacher not found" },
                 { status: 404 }
             );
         }
 
-        // Get teacher details
-        const teacherDoc = await Teacher.findOne({ userId: teacherId });
-        if (!teacherDoc) {
+        const { data: teacherRow } = await supabase
+            .from('teachers')
+            .select('*')
+            .eq('user_id', teacherId)
+            .maybeSingle();
+        if (!teacherRow) {
             return NextResponse.json(
                 { error: "Teacher details not found" },
                 { status: 404 }
             );
         }
 
-        // Convert Mongoose documents to plain objects
-        const user = userDoc.toObject();
-        const teacher = teacherDoc.toObject();
-
-        // Create a serializable object with all required fields
-        const serializedData = {
-            _id: user._id.toString(),
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            status: user.isActive ? 'active' : 'inactive',
-            createdAt: user.createdAt.toISOString(),
-            updatedAt: user.updatedAt.toISOString(),
-            userId: teacher.userId.toString(),
-            subjects: teacher.subjects || [],
-            grades: teacher.grades || [],
-            qualifications: teacher.qualifications || [],
-            specializations: teacher.specializations || [],
-            joinDate: teacher.joinDate.toISOString()
-        };
-
-        return NextResponse.json(serializedData);
+        return NextResponse.json({
+            _id: userRow.id,
+            email: userRow.email,
+            name: userRow.name,
+            role: userRow.role,
+            status: userRow.isActive ? 'active' : 'inactive',
+            createdAt: userRow.createdAt,
+            updatedAt: userRow.updatedAt,
+            userId: teacherRow.user_id,
+            subjects: teacherRow.subjects || [],
+            grades: teacherRow.grades || [],
+            qualifications: teacherRow.qualifications || [],
+            specializations: teacherRow.specializations || [],
+            joinDate: teacherRow.joinDate || userRow.createdAt
+        });
     } catch (error) {
         console.error('Error fetching teacher:', error);
         return NextResponse.json(
@@ -84,74 +80,53 @@ export async function PUT(
         }
 
         const body = await req.json();
-        await connectToDatabase();
 
         // Update user basic info
         const { name, email, subjects, grades, qualifications, specializations, status } = body;
 
         const { teacherId } = await params;
-        const userDoc = await User.findByIdAndUpdate(
-            teacherId,
-            {
-                $set: {
-                    name,
-                    email,
-                    isActive: status === 'active'
-                }
-            },
-            { new: true }
-        );
-
-        if (!userDoc) {
+        const { error: userErr } = await supabase
+            .from('users')
+            .update({ name, email, isActive: status === 'active', updatedAt: new Date().toISOString() })
+            .eq('id', teacherId)
+            .eq('role', 'teacher');
+        if (userErr) throw userErr;
+        const { data: userRow } = await supabase.from('users').select('*').eq('id', teacherId).maybeSingle();
+        if (!userRow) {
             return NextResponse.json(
                 { error: "Teacher not found" },
                 { status: 404 }
             );
         }
 
-        // Update teacher specific info
-        const teacherDoc = await Teacher.findOneAndUpdate(
-            { userId: teacherId },
-            {
-                $set: {
-                    subjects,
-                    grades,
-                    qualifications,
-                    specializations
-                }
-            },
-            { new: true }
-        );
-
-        if (!teacherDoc) {
+        const { data: teacherRow, error: teacherErr } = await supabase
+            .from('teachers')
+            .update({ subjects, grades, qualifications, specializations })
+            .eq('user_id', teacherId)
+            .select('*')
+            .maybeSingle();
+        if (teacherErr) throw teacherErr;
+        if (!teacherRow) {
             return NextResponse.json(
                 { error: "Teacher details not found" },
                 { status: 404 }
             );
         }
-
-        // Convert Mongoose documents to plain objects
-        const user = userDoc.toObject();
-        const teacher = teacherDoc.toObject();
-
-        // Create a serializable response
-        const serializedData = {
-            _id: user._id.toString(),
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            status: user.isActive ? 'active' : 'inactive',
-            createdAt: user.createdAt.toISOString(),
-            updatedAt: user.updatedAt.toISOString(),
-            userId: teacher.userId.toString(),
-            subjects: teacher.subjects || [],
-            grades: teacher.grades || [],
-            qualifications: teacher.qualifications || [],
-            specializations: teacher.specializations || [],
-            joinDate: teacher.joinDate.toISOString()
-        };
-
-        return NextResponse.json(serializedData);
+        return NextResponse.json({
+            _id: userRow.id,
+            email: userRow.email,
+            name: userRow.name,
+            role: userRow.role,
+            status: userRow.isActive ? 'active' : 'inactive',
+            createdAt: userRow.createdAt,
+            updatedAt: userRow.updatedAt,
+            userId: teacherRow.user_id,
+            subjects: teacherRow.subjects || [],
+            grades: teacherRow.grades || [],
+            qualifications: teacherRow.qualifications || [],
+            specializations: teacherRow.specializations || [],
+            joinDate: teacherRow.joinDate || userRow.createdAt
+        });
     } catch (error) {
         console.error('Error updating teacher:', error);
         return NextResponse.json(
@@ -174,27 +149,23 @@ export async function DELETE(
             );
         }
 
-        await connectToDatabase();
-
-        // Instead of deleting, deactivate the user
         const { teacherId } = await params;
-        const userDoc = await User.findByIdAndUpdate(
-            teacherId,
-            { $set: { isActive: false } },
-            { new: true }
-        );
-
-        if (!userDoc) {
+        const { data: userRow, error } = await supabase
+            .from('users')
+            .update({ isActive: false, updatedAt: new Date().toISOString() })
+            .eq('id', teacherId)
+            .eq('role', 'teacher')
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
+        if (!userRow) {
             return NextResponse.json(
                 { error: "Teacher not found" },
                 { status: 404 }
             );
         }
 
-        return NextResponse.json({
-            message: "Teacher deactivated successfully",
-            id: userDoc._id.toString()
-        });
+        return NextResponse.json({ message: "Teacher deactivated successfully", id: userRow.id });
     } catch (error) {
         console.error('Error deactivating teacher:', error);
         return NextResponse.json(

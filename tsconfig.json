@@ -31,6 +31,9 @@
       ],
       "next-auth/react": [
         "./src/lib/next-auth-react-shim.ts"
+      ],
+      "@/lib/models/*": [
+        "./src/types/db.ts"
       ]
     }
   },

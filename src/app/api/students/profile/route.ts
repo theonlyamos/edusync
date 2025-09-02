@@ -2,13 +2,9 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
-import { IStudent, Student } from '@/lib/models/Student';
-import { IUser, User } from '@/lib/models/User';
+// Removed legacy Mongo models; using Supabase view instead
 
-interface IPopulatedStudent extends Omit<IStudent, 'userId'> {
-    userId: Omit<IUser, 'password' | 'role'> | null; // userId will be the populated User object (or null)
-}
+// Using Supabase 'students_view' shape directly
 
 export async function GET(req: Request) {
     try {
