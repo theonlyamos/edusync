@@ -1,6 +1,7 @@
 'use client';
 
-import { SessionProvider } from 'next-auth/react';
+import { createBrowserClient } from '@supabase/ssr';
+import { createContext, useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 interface Props {
@@ -10,12 +11,19 @@ interface Props {
 // Create one QueryClient instance for the app
 const queryClient = new QueryClient();
 
+export const SupabaseBrowserClientContext = createContext<any>(null);
+
 export function NextAuthProvider({ children }: Props) {
+  const supabase = useMemo(() => {
+    return createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }, []);
+
   return (
-    <SessionProvider refetchInterval={0} refetchOnWindowFocus={true}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </SessionProvider>
+    <SupabaseBrowserClientContext.Provider value={supabase}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </SupabaseBrowserClientContext.Provider>
   );
-} 
+}

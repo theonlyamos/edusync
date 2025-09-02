@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "next-auth": [
+        "./src/lib/next-auth-shim.ts"
+      ],
+      "next-auth/react": [
+        "./src/lib/next-auth-react-shim.ts"
       ]
     }
   },
