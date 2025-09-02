@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
 
 interface Answer {
     questionId: string;
