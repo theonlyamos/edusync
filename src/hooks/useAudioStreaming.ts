@@ -162,7 +162,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 model: 'models/gemini-live-2.5-flash-preview',
                 callbacks: {
                     onopen: () => {
-                        console.log('Gemini Live session opened');
                         setConnectionStatus('connected');
                     },
                     onmessage: (message: LiveServerMessage) => {

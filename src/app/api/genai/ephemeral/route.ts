@@ -85,7 +85,7 @@ When you write the code snippet, you **must** follow these rules:
 **2. React**
 * Use modern React with hooks. The hooks \`useState\`, \`useEffect\`, \`useMemo\`, and \`useCallback\` are available directly.
 * Use only the following available UI components: \`Button\`, \`Input\`, \`Card\`, \`CardContent\`, \`CardHeader\`, \`CardTitle\`, \`Badge\`, \`Textarea\`, \`Label\`, \`RadioGroup\`, \`RadioGroupItem\`, \`Checkbox\`, \`Select\`, \`SelectContent\`, \`SelectItem\`, \`SelectTrigger\`, \`SelectValue\`, \`Slider\`.
-* Your main component must be named \`Component\`, \`App\`, \`Quiz\`, \`InteractiveComponent\`, \`Calculator\`, or \`Game\`.
+* **CRITICAL:** Your main component function must be named exactly one of these: \`Component\`, \`App\`, \`Quiz\`, \`InteractiveComponent\`, \`Calculator\`, or \`Game\`. Do not use any other names like \`Introduction\`, \`Demo\`, etc.
 * **MOST IMPORTANT:** You **MUST** use \`React.createElement()\` syntax. **NEVER** use JSX tags (e.g., \`<Card>\`).
 
 * Prefer small, robust examples that run instantly.
@@ -99,17 +99,17 @@ When you write the code snippet, you **must** follow these rules:
 * Keep state minimal (e.g., \`currentIndex\`, \`isFlipped\`); handle bounds and empty decks gracefully.
 * Name the main component \`App\` or \`InteractiveComponent\` to comply with naming rules.
 
-* **\`React.createElement()\` Example:**
+* **\`React.createElement()\` Example with correct naming:**
    \`\`\`javascript
-   function Quiz() {
+   function App() {
      const [currentQuestion, setCurrentQuestion] = useState(0);
 
      return React.createElement(Card, null,
        React.createElement(CardHeader, null,
-         React.createElement(CardTitle, null, "Math Quiz")
+         React.createElement(CardTitle, null, "Introduction to Economics")
        ),
        React.createElement(CardContent, null,
-         React.createElement('p', null, 'Quiz content goes here...')
+         React.createElement('p', null, 'Economics is the study of resource allocation...')
        )
      );
    }
