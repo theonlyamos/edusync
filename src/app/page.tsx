@@ -1,101 +1,240 @@
-import Image from "next/image";
+// AI-Powered Illustrative Explainer Page
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { toPng } from 'html-to-image';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { VoiceControl } from '@/components/voice/VoiceControl';
+import dynamic from 'next/dynamic';
+import { Mic } from 'lucide-react';
+
+const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
+const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
+const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
+
+type Message = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+function HomeComponent() {
+  const searchParams = useSearchParams();
+  const debugMode = searchParams.get('debug') === 'true';
+
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [code, setCode] = useState('');
+  const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
+  const [error, setError] = useState('');
+  const [show, setShow] = useState<'render' | 'code'>('render');
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const vizRef = useRef<HTMLDivElement | null>(null);
+  const isCapturingRef = useRef(false);
+
+  const handleAsk = async () => {
+    if (!input.trim()) return;
+    const newUserMessage: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, newUserMessage]);
+    try {
+      window.dispatchEvent(new CustomEvent('voice-send-text', { detail: input }));
+      setInput('');
+    } catch (e: any) {
+      setError(e.message || 'Unknown error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getLibraryDisplayName = () => {
+    switch (library) {
+      case 'p5': return 'p5.js';
+      case 'three': return 'Three.js';
+      case 'react': return 'React';
+      default: return 'Visualization';
+    }
+  };
+
+  const renderVisualization = () => {
+    if (!code || !library) return null;
+
+    switch (library) {
+      case 'react':
+        return <ReactRenderer code={code} />;
+      case 'p5':
+      case 'three':
+        return <LiveSketch code={code} library={library} />;
+      default:
+        return null;
+    }
+  };
+
+  const handleToolCall = (name: string, args: any) => {
+    if (args.explanation) {
+      const newAssistantMessage: Message = { role: 'assistant', content: args.explanation };
+      setMessages(prev => [...prev, newAssistantMessage]);
+    }
+    setCode(args.code);
+    setLibrary(args.library);
+  };
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const id = setInterval(() => {
+      const container = vizRef.current as HTMLElement | null;
+      if (!container || isCapturingRef.current) return;
+      isCapturingRef.current = true;
+      toPng(container, { pixelRatio: 1 })
+        .then((dataUrl) => {
+          window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
+        })
+        .catch(() => {})
+        .finally(() => {
+          isCapturingRef.current = false;
+        });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [connectionStatus, show, code, library]);
+
+  return (
+    <div className="flex h-screen bg-background">
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto py-6 px-4">
+          <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
+            {/* Left Panel - Chat Window */}
+            <div className="w-1/3 min-w-[350px] flex flex-col">
+              <Card className="flex-1 flex flex-col h-full">
+                <CardHeader>
+                  <CardTitle>AI Illustrative Explainer</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col overflow-hidden">
+                  {/* Message display area */}
+                  <div className="flex-1 overflow-y-auto mb-4 p-4 border rounded-md space-y-4">
+                    {messages.map((msg, index) => (
+                      <div key={index} className={`flex my-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`px-4 py-2 rounded-lg max-w-[80%] ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                          {msg.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Input area */}
+                  <div className="mt-auto flex flex-col gap-4">
+                    <Textarea
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAsk();
+                        }
+                      }}
+                      placeholder="Ask the AI to explain or illustrate a concept..."
+                      className="min-h-[60px]"
+                      disabled={isLoading || connectionStatus !== 'connected'}
+                    />
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-2">
+                        <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'}>
+                          {isLoading ? 'Generating...' : 'Ask AI'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={voiceActive ? 'secondary' : 'outline'}
+                          size="icon"
+                          onClick={() => setVoiceActive((prev) => !prev)}
+                          title={voiceActive ? 'Stop voice streaming' : 'Start voice streaming'}
+                        >
+                          <Mic className={`w-5 h-5 ${voiceActive ? 'text-red-500 animate-pulse' : 'text-green-600'}`} />
+                        </Button>
+                      </div>
+                      <VoiceControl
+                        active={voiceActive}
+                        onError={setError}
+                        onToolCall={handleToolCall}
+                        onConnectionStatusChange={setConnectionStatus}
+                      />
+                    </div>
+                    {error && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div className="text-red-700 text-sm">{error}</div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Panel - Preview/Code Editor */}
+            <div className="flex-1 flex flex-col"  ref={vizRef}>
+              {code && library ? (
+                <Card className="flex-1 flex flex-col">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
+                      {debugMode && (
+                        <ToggleGroup
+                          type="single"
+                          value={show}
+                          onValueChange={(v: string | undefined) => v && setShow(v as 'render' | 'code')}
+                        >
+                          <ToggleGroupItem value="render">Rendering</ToggleGroupItem>
+                          <ToggleGroupItem value="code">Code</ToggleGroupItem>
+                        </ToggleGroup>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col p-0">
+                    <div className="flex-1 p-6">
+                      {show === 'render' && (
+                        <div className="h-full">
+                          {renderVisualization()}
+                        </div>
+                      )}
+                      {show === 'code' && (
+                        <div className="h-full">
+                          <Editor
+                            data={{
+                              initialCode: code,
+                              language: library === 'react' ? 'javascript' : 'javascript',
+                              tests: [],
+                            }}
+                            onSubmit={() => {}}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="flex-1 flex items-center justify-center">
+                  <CardContent>
+                    <div className="text-center text-muted-foreground">
+                      <div className="text-lg mb-2">No visualization yet</div>
+                      <div className="text-sm">Ask a question to generate a visualization, quiz, or interactive component</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeComponent />
+    </Suspense>
   );
 }
