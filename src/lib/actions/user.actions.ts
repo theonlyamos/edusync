@@ -91,9 +91,8 @@ export async function createTeacher(params: CreateTeacherParams) {
         });
 
         return { user, teacher };
-    } catch (error) {
-        // If teacher creation fails, delete the user
-        if (error && 'user' in error) {
+    } catch (error: any) {
+        if (error?.user?._id) {
             await User.findByIdAndDelete(error.user._id);
         }
         throw error;

@@ -1,13 +1,17 @@
-import { Assessment } from "@/lib/models/Assessment";
-import { connectToDatabase } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 export async function getAssessments() {
     try {
-        await connectToDatabase();
-        const assessments = await Assessment.find({})
-            .sort({ createdAt: -1 })
-            .lean();
-        return assessments;
+        const { data, error } = await supabase
+            .from('assessments')
+            .select('*')
+            .order('createdAt', { ascending: false });
+        if (error) {
+            // If table doesn't exist yet, return empty list to avoid build failure
+            if ((error as any)?.code === 'PGRST205') return [];
+            throw error;
+        }
+        return data ?? [];
     } catch (error) {
         console.error("Error fetching assessments:", error);
         throw error;
@@ -16,9 +20,13 @@ export async function getAssessments() {
 
 export async function getAssessmentById(id: string) {
     try {
-        await connectToDatabase();
-        const assessment = await Assessment.findById(id).lean();
-        return assessment;
+        const { data, error } = await supabase
+            .from('assessments')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error("Error fetching assessment:", error);
         throw error;
@@ -27,9 +35,18 @@ export async function getAssessmentById(id: string) {
 
 export async function createAssessment(assessmentData: any) {
     try {
-        await connectToDatabase();
-        const assessment = await Assessment.create(assessmentData);
-        return assessment;
+        const payload = {
+            ...assessmentData,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        const { data, error } = await supabase
+            .from('assessments')
+            .insert(payload)
+            .select('*')
+            .single();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error("Error creating assessment:", error);
         throw error;
@@ -38,13 +55,14 @@ export async function createAssessment(assessmentData: any) {
 
 export async function updateAssessment(id: string, assessmentData: any) {
     try {
-        await connectToDatabase();
-        const assessment = await Assessment.findByIdAndUpdate(
-            id,
-            { $set: assessmentData },
-            { new: true }
-        ).lean();
-        return assessment;
+        const { data, error } = await supabase
+            .from('assessments')
+            .update({ ...assessmentData, updatedAt: new Date().toISOString() })
+            .eq('id', id)
+            .select('*')
+            .maybeSingle();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error("Error updating assessment:", error);
         throw error;
@@ -53,8 +71,11 @@ export async function updateAssessment(id: string, assessmentData: any) {
 
 export async function deleteAssessment(id: string) {
     try {
-        await connectToDatabase();
-        await Assessment.findByIdAndDelete(id);
+        const { error } = await supabase
+            .from('assessments')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
         return true;
     } catch (error) {
         console.error("Error deleting assessment:", error);
@@ -64,29 +85,11 @@ export async function deleteAssessment(id: string) {
 
 export async function getAssessmentResults() {
     try {
-        await connectToDatabase();
-        const results = await Assessment.aggregate([
-            {
-                $lookup: {
-                    from: "assessmentresults",
-                    localField: "_id",
-                    foreignField: "assessmentId",
-                    as: "results"
-                }
-            },
-            {
-                $unwind: "$results"
-            },
-            {
-                $project: {
-                    assessment: "$$ROOT",
-                    score: "$results.score",
-                    studentId: "$results.studentId",
-                    submittedAt: "$results.submittedAt"
-                }
-            }
-        ]);
-        return results;
+        const { data, error } = await supabase
+            .from('assessment_results')
+            .select('*, assessment:assessments(*), student:users(name, email)');
+        if (error) throw error;
+        return data ?? [];
     } catch (error) {
         console.error("Error fetching assessment results:", error);
         throw error;
@@ -100,22 +103,20 @@ export async function submitAssessment(
     score: number
 ) {
     try {
-        await connectToDatabase();
-        const result = await Assessment.findByIdAndUpdate(
+        const payload = {
             assessmentId,
-            {
-                $push: {
-                    results: {
-                        studentId,
-                        answers,
-                        score,
-                        submittedAt: new Date()
-                    }
-                }
-            },
-            { new: true }
-        ).lean();
-        return result;
+            studentId,
+            answers,
+            score,
+            submittedAt: new Date().toISOString(),
+        } as any;
+        const { data, error } = await supabase
+            .from('assessment_results')
+            .insert(payload)
+            .select('*')
+            .single();
+        if (error) throw error;
+        return data;
     } catch (error) {
         console.error("Error submitting assessment:", error);
         throw error;

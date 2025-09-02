@@ -3,8 +3,9 @@ import { supabase } from '@/lib/supabase';
 
 export async function GET(
     request: Request,
-    { params }: { params: { level: string } }
+    context: any
 ) {
+    const { params } = context as { params: { level: string } };
     try {
         const { data: timetable, error } = await supabase
             .from('timetables')
@@ -32,8 +33,9 @@ export async function GET(
 
 export async function POST(
     request: Request,
-    { params }: { params: { level: string } }
+    context: any
 ) {
+    const { params } = context as { params: { level: string } };
     try {
         const body = await request.json();
         const { data: existing, error: err } = await supabase

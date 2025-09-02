@@ -20,10 +20,11 @@ export async function GET(request: Request) {
         const filteredTimeTable: any = {};
 
         // Filter and collect all periods where this teacher is assigned
-        timetables.forEach(timetable => {
-            if (timetable?.schedule) {
-                Object.entries(timetable.schedule).forEach(([day, periods]) => {
-                    Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
+        (timetables ?? []).forEach((timetable: any) => {
+            const schedule = (timetable?.schedule as Record<string, any> | undefined);
+            if (schedule) {
+                Object.entries(schedule).forEach(([day, periods]) => {
+                    Object.entries(periods as Record<string, any>).forEach(([periodId, data]) => {
                         if (data.teacherId === session.user.id) {
                             if (!filteredTimeTable[day]) {
                                 filteredTimeTable[day] = {};
@@ -58,9 +59,9 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             timeTable: filteredTimeTable,
-            lessons: lessons.map(lesson => ({
+            lessons: (lessons ?? []).map(lesson => ({
                 ...lesson,
-                _id: lesson._id.toString()
+                _id: String((lesson as any)._id ?? lesson.id)
             })),
             periods: allPeriods
         });
@@ -94,8 +95,9 @@ export async function PUT(request: Request) {
         Object.entries(timeTable).forEach(([day, periods]: [string, any]) => {
             updatedSchedule[day] = updatedSchedule[day] || {};
             Object.entries(periods).forEach(([period, data]) => {
+                const objData = (data ?? {}) as Record<string, any>;
                 updatedSchedule[day][period] = {
-                    ...data,
+                    ...objData,
                     teacherId: session.user.id // Ensure teacherId is set correctly
                 };
             });

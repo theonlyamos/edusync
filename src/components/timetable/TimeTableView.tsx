@@ -34,7 +34,7 @@ interface Period {
 interface Teacher {
   _id: string;
   name: string;
-  subjects: string[];
+  subjects?: string[];
 }
 
 interface Lesson {

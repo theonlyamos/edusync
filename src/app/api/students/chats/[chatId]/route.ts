@@ -34,8 +34,8 @@ export async function GET(
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ chatId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -43,7 +43,7 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { chatId } = params;
+        const { chatId } = await params;
         const { messages } = await request.json();
 
         const { data, error } = await supabase
@@ -67,8 +67,8 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: Request,
-    { params }: { params: { chatId: string } }
+    request: NextRequest,
+    { params }: { params: Promise<{ chatId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -76,7 +76,7 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const { chatId } = params;
+        const { chatId } = await params;
         const { error } = await supabase
             .from('chats')
             .delete()

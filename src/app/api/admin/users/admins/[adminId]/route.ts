@@ -1,16 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
 export async function GET(
-    req: Request,
-    { params }: { params: { adminId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ adminId: string }> }
 ) {
     try {
         const { adminId } = await params;
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -35,12 +35,12 @@ export async function GET(
 }
 
 export async function PATCH(
-    req: Request,
-    { params }: { params: { adminId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ adminId: string }> }
 ) {
     try {
-        const adminId = await params.adminId;
-        const session = await getServerSession(authOptions);
+        const { adminId } = await params;
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -93,12 +93,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    req: Request,
-    { params }: { params: { adminId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ adminId: string }> }
 ) {
     try {
-        const adminId = await params.adminId;
-        const session = await getServerSession(authOptions);
+        const { adminId } = await params;
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

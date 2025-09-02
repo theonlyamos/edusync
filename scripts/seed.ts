@@ -1,87 +1,80 @@
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/lib/models/User";
-import { Grade } from "@/lib/models/Grade";
-import { Timetable } from "@/lib/models/Timetable";
 import bcrypt from "bcryptjs";
+import { createServerSupabase } from "../src/lib/supabase.server";
 
-async function seedUsers() {
+async function seedUsers(supabase: ReturnType<typeof createServerSupabase>) {
     try {
         // Create admin
         const adminPassword = await bcrypt.hash("admin123", 10);
-        const admin = await User.create({
-            name: "Admin User",
-            email: "admin@edusync.com",
-            password: adminPassword,
-            role: "admin"
-        });
+        const { data: admin, error: adminErr } = await supabase
+            .from('users')
+            .insert({ name: 'Admin User', email: 'admin@edusync.com', password: adminPassword, role: 'admin' })
+            .select('*')
+            .single();
+        if (adminErr) throw adminErr;
 
         // Create teachers
         const teacherPassword = await bcrypt.hash("teacher123", 10);
-        const teachers = await User.create([
-            {
-                name: "John Smith",
-                email: "john@edusync.com",
-                password: teacherPassword,
-                role: "teacher",
-                subject: "Mathematics"
-            },
-            {
-                name: "Sarah Wilson",
-                email: "sarah@edusync.com",
-                password: teacherPassword,
-                role: "teacher",
-                subject: "Science"
-            },
-            {
-                name: "Michael Brown",
-                email: "michael@edusync.com",
-                password: teacherPassword,
-                role: "teacher",
-                subject: "English"
-            }
-        ]);
+        const teacherRows = [
+            { name: 'John Smith', email: 'john@edusync.com', password: teacherPassword, role: 'teacher', subject: 'Mathematics' },
+            { name: 'Sarah Wilson', email: 'sarah@edusync.com', password: teacherPassword, role: 'teacher', subject: 'Science' },
+            { name: 'Michael Brown', email: 'michael@edusync.com', password: teacherPassword, role: 'teacher', subject: 'English' },
+        ];
+        const { data: teachers, error: teachersErr } = await supabase
+            .from('users')
+            .insert(teacherRows)
+            .select('*');
+        if (teachersErr) throw teachersErr;
 
         // Create students
         const studentPassword = await bcrypt.hash("student123", 10);
-        const students = await User.create([
-            {
-                name: "Alice Johnson",
-                email: "alice@edusync.com",
-                password: studentPassword,
-                role: "student",
-                grade: "Grade 10"
-            },
-            {
-                name: "Bob Williams",
-                email: "bob@edusync.com",
-                password: studentPassword,
-                role: "student",
-                grade: "Grade 10"
-            },
-            {
-                name: "Carol Davis",
-                email: "carol@edusync.com",
-                password: studentPassword,
-                role: "student",
-                grade: "Grade 11"
-            }
-        ]);
+        const studentRows = [
+            { name: 'Alice Johnson', email: 'alice@edusync.com', password: studentPassword, role: 'student', grade: 'Grade 10' },
+            { name: 'Bob Williams', email: 'bob@edusync.com', password: studentPassword, role: 'student', grade: 'Grade 10' },
+            { name: 'Carol Davis', email: 'carol@edusync.com', password: studentPassword, role: 'student', grade: 'Grade 11' },
+        ];
+        const { data: students, error: studentsErr } = await supabase
+            .from('users')
+            .insert(studentRows)
+            .select('*');
+        if (studentsErr) throw studentsErr;
 
         console.log("Users seeded successfully");
-        return { admin, teachers, students };
+        return { admin, teachers: teachers ?? [], students: students ?? [] };
     } catch (error) {
         console.error("Error seeding users:", error);
         throw error;
     }
 }
 
+async function seedGrades(supabase: ReturnType<typeof createServerSupabase>, teachers: any[], students: any[]) {
+    const data = [
+        {
+            level: 'Grade 10',
+            name: 'Grade 10',
+            subjects: ['Mathematics', 'Physics', 'Chemistry', 'Biology'],
+            teachers: teachers.map((t: any) => t.id ?? t._id?.toString()).filter(Boolean),
+            students: students.filter((s: any) => s.grade === 'Grade 10').map((s: any) => s.id ?? s._id?.toString()).filter(Boolean),
+        },
+        {
+            level: 'Grade 11',
+            name: 'Grade 11',
+            subjects: ['English Literature', 'Creative Writing', 'History', 'Arts'],
+            teachers: teachers.map((t: any) => t.id ?? t._id?.toString()).filter(Boolean),
+            students: students.filter((s: any) => s.grade === 'Grade 11').map((s: any) => s.id ?? s._id?.toString()).filter(Boolean),
+        },
+    ];
 
-async function seedTimetables(grades: any[], teachers: any[]) {
+    const { data: inserted, error } = await supabase.from('grades').insert(data).select('*');
+    if (error) throw error;
+    return inserted ?? [];
+}
+
+async function seedTimetables(supabase: ReturnType<typeof createServerSupabase>, grades: any[], teachers: any[]) {
     try {
         const currentYear = new Date().getFullYear();
         const academicYear = `${currentYear}-${currentYear + 1}`;
 
-        const timetables = await Timetable.create([
+        const { data: timetables, error } = await supabase.from('timetables').insert([
             {
                 grade: grades[0].level, // Grade 10
                 academicYear,
@@ -164,7 +157,8 @@ async function seedTimetables(grades: any[], teachers: any[]) {
                     }
                 ]
             }
-        ]);
+        ]).select('*');
+        if (error) throw error;
 
         console.log("Timetables seeded successfully");
         return timetables;
@@ -176,21 +170,19 @@ async function seedTimetables(grades: any[], teachers: any[]) {
 
 async function main() {
     try {
-        await connectToDatabase();
-
-        // Clear existing data
-        await User.deleteMany({});
-        await Grade.deleteMany({});
-        await Timetable.deleteMany({});
+        const supabase = createServerSupabase();
+        await supabase.from('timetables').delete().neq('grade', '');
+        await supabase.from('grades').delete().neq('level', '');
+        await supabase.from('users').delete().neq('email', '');
 
         // Seed users first
-        const { admin, teachers, students } = await seedUsers();
+        const { admin, teachers, students } = await seedUsers(supabase);
 
         // Then seed grades with references to users
-        const grades = await seedGrades(teachers, students);
+        const grades = await seedGrades(supabase, teachers, students);
 
         // Finally seed timetables
-        await seedTimetables(grades, teachers);
+        await seedTimetables(supabase, grades, teachers);
 
         console.log("Database seeded successfully");
         process.exit(0);

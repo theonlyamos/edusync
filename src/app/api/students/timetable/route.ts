@@ -65,9 +65,9 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             timeTable: timeTableWithDetails || {},
-            lessons: lessons.map(lesson => ({
+            lessons: (lessons ?? []).map(lesson => ({
                 ...lesson,
-                _id: lesson._id.toString()
+                _id: String((lesson as any)._id ?? lesson.id)
             })),
             periods
         });

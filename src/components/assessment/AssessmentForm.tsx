@@ -130,7 +130,7 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
 
   const removeQuestion = (index: number) => {
     const questions = form.getValues('questions');
-    form.setValue('questions', questions.filter((_, i) => i !== index));
+    form.setValue('questions', questions.filter((_: unknown, i: number) => i !== index));
   };
 
   return (

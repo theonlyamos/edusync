@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AssessmentTaker } from '@/components/assessment/AssessmentTaker';
@@ -35,8 +35,9 @@ interface Assessment {
 export default function TakeAssessmentPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const resolvedParams = use(params);
   const router = useRouter();
   const { toast } = useToast();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
@@ -50,7 +51,7 @@ export default function TakeAssessmentPage({
 
   const fetchAssessment = async () => {
     try {
-      const response = await fetch(`/api/assessments/${params.id}`);
+      const response = await fetch(`/api/assessments/${resolvedParams.id}`);
       if (!response.ok) throw new Error('Failed to fetch assessment');
 
       const data = await response.json();

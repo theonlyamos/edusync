@@ -1,12 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
 import { authOptions } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(
-    req: Request,
-    { params }: { params: { lessonId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -14,12 +13,13 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const lesson = await db.collection('lessons').findOne({
-            _id: new ObjectId(params.lessonId)
-        });
+        const { lessonId } = await params;
+        const { data: lesson, error } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('id', lessonId)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!lesson) {
             return new NextResponse('Lesson not found', { status: 404 });
@@ -33,8 +33,8 @@ export async function GET(
 }
 
 export async function PUT(
-    req: Request,
-    { params }: { params: { lessonId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -42,16 +42,16 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
         const updates = await req.json();
+        const { lessonId } = await params;
+        const { error } = await supabase
+            .from('lessons')
+            .update(updates)
+            .eq('id', lessonId);
+        if (error) throw error;
 
-        const result = await db.collection('lessons').updateOne(
-            { _id: new ObjectId(params.lessonId) },
-            { $set: updates }
-        );
-
-        if (result.matchedCount === 0) {
+        const { data: check } = await supabase.from('lessons').select('id').eq('id', lessonId).maybeSingle();
+        if (!check) {
             return new NextResponse('Lesson not found', { status: 404 });
         }
 
@@ -63,8 +63,8 @@ export async function PUT(
 }
 
 export async function DELETE(
-    req: Request,
-    { params }: { params: { lessonId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -72,22 +72,22 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { lessonId } = await params;
+        const { error } = await supabase
+            .from('lessons')
+            .delete()
+            .eq('id', lessonId);
+        if (error) throw error;
 
-        // Delete the lesson
-        const result = await db.collection('lessons').deleteOne({
-            _id: new ObjectId(params.lessonId)
-        });
-
-        if (result.deletedCount === 0) {
+        const { data: stillThere } = await supabase.from('lessons').select('id').eq('id', lessonId).maybeSingle();
+        if (stillThere) {
             return new NextResponse('Lesson not found', { status: 404 });
         }
 
-        // Delete associated content
-        await db.collection('lessonContent').deleteMany({
-            lessonId: new ObjectId(params.lessonId)
-        });
+        await supabase
+            .from('lesson_content')
+            .delete()
+            .eq('lessonId', lessonId);
 
         return NextResponse.json({ message: 'Lesson and associated content deleted successfully' });
     } catch (error) {

@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
-import { ObjectId } from 'mongodb';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
@@ -68,9 +67,6 @@ export async function POST(req: Request) {
         }
 
         const { messages, lessonId, chatId } = await req.json();
-
-        // Ensure connectToDatabase is called (assuming it establishes the Mongoose connection)
-        await connectToDatabase();
 
         // If lessonId is provided, get lesson details
         let lesson: any;

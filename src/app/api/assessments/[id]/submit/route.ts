@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 export async function POST(
-    req: Request,
-    { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -16,10 +16,11 @@ export async function POST(
         const { answers, startedAt } = await req.json();
 
         // Get the assessment
+        const { id } = await params;
         const { data: assessment, error: assessErr } = await supabase
             .from('assessments')
             .select('*')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle();
         if (assessErr) throw assessErr;
         if (!assessment) {
@@ -33,7 +34,7 @@ export async function POST(
         const { data: existingResult, error: existErr } = await supabase
             .from('assessment_results')
             .select('id')
-            .eq('assessmentId', params.id)
+            .eq('assessmentId', id)
             .eq('studentId', session.user.id)
             .maybeSingle();
         if (existErr) throw existErr;
@@ -75,7 +76,7 @@ export async function POST(
         const { data: result, error } = await supabase
             .from('assessment_results')
             .insert({
-                assessmentId: params.id,
+                assessmentId: id,
                 studentId: session.user.id,
                 answers: gradedAnswers,
                 totalScore,

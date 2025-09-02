@@ -32,16 +32,18 @@ interface PracticeExerciseProps {
   subject: string;
   topic: string;
   questions: Question[];
-  onRetry: () => void;
-  onGenerateNew: () => void;
+  onRetry?: () => void;
+  onGenerateNew?: () => void;
+  onComplete?: (score: number) => void;
 }
 
 export function PracticeExercise({
   subject,
   topic,
   questions,
-  onRetry,
-  onGenerateNew,
+  onRetry = () => {},
+  onGenerateNew = () => {},
+  onComplete,
 }: PracticeExerciseProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<(string | string[])[]>(() => 
@@ -189,6 +191,7 @@ export function PracticeExercise({
       });
       
       setCompleted(true);
+      onComplete?.(percentage);
     } catch (error) {
       console.error('Error calculating score:', error);
       toast({

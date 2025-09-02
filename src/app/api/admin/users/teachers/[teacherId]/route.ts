@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
@@ -6,8 +6,8 @@ import { User } from '@/lib/models/User';
 import { Teacher } from '@/lib/models/Teacher';
 
 export async function GET(
-    req: Request,
-    { params }: { params: { teacherId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -18,7 +18,7 @@ export async function GET(
             );
         }
 
-        const { teacherId } = params;
+        const { teacherId } = await params;
         await connectToDatabase();
 
         // Get user details
@@ -71,8 +71,8 @@ export async function GET(
 }
 
 export async function PUT(
-    req: Request,
-    { params }: { params: { teacherId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -89,8 +89,9 @@ export async function PUT(
         // Update user basic info
         const { name, email, subjects, grades, qualifications, specializations, status } = body;
 
+        const { teacherId } = await params;
         const userDoc = await User.findByIdAndUpdate(
-            params.teacherId,
+            teacherId,
             {
                 $set: {
                     name,
@@ -110,7 +111,7 @@ export async function PUT(
 
         // Update teacher specific info
         const teacherDoc = await Teacher.findOneAndUpdate(
-            { userId: params.teacherId },
+            { userId: teacherId },
             {
                 $set: {
                     subjects,
@@ -161,8 +162,8 @@ export async function PUT(
 }
 
 export async function DELETE(
-    req: Request,
-    { params }: { params: { teacherId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -176,8 +177,9 @@ export async function DELETE(
         await connectToDatabase();
 
         // Instead of deleting, deactivate the user
+        const { teacherId } = await params;
         const userDoc = await User.findByIdAndUpdate(
-            params.teacherId,
+            teacherId,
             { $set: { isActive: false } },
             { new: true }
         );

@@ -3,39 +3,29 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
-import { User } from "@/lib/models/User";
-import { Teacher } from "@/lib/models/Teacher";
-import { connectToDatabase } from "@/lib/db";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { UserPlus } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 
 async function getTeachers() {
     try {
-        await connectToDatabase();
-        
-        const users = await User.find({ role: "teacher" })
-            .select("-password")
-            .lean();
+        const { data, error } = await supabase
+            .from('teachers_view')
+            .select('*')
+            .order('createdAt', { ascending: false });
+        if (error) throw error;
 
-        const teacherDetails = await Promise.all(
-            users.map(async (user) => {
-                const teacher = await Teacher.findOne({ userId: user._id })
-                    .select("-createdAt -updatedAt")
-                    .lean();
-                return {
-                    ...user,
-                    ...teacher,
-                    id: user._id.toString(),
-                    userId: user._id.toString(),
-                    status: user.isActive ? "Active" : "Inactive",
-                    gradesList: teacher?.grades?.join(", ") || "Not assigned"
-                };
-            })
-        );
-
-        return teacherDetails;
+        return (data ?? []).map((row: any) => ({
+            id: String(row.id ?? row.user_id ?? row.userId ?? ''),
+            name: row.name ?? '',
+            email: row.email ?? '',
+            subject: Array.isArray(row.subjects) ? row.subjects.join(', ') : (row.subject ?? ''),
+            gradesList: Array.isArray(row.grades) ? row.grades.join(', ') : 'Not assigned',
+            status: row.isActive ? 'Active' : 'Inactive',
+            createdAt: row.createdAt ?? new Date().toISOString(),
+        }));
     } catch (error) {
         console.error("Error fetching teachers:", error);
         throw new Error("Failed to fetch teachers");
@@ -43,7 +33,7 @@ async function getTeachers() {
 }
 
 export default async function TeachersPage() {
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession();
 
     if (!session || session.user.role !== "admin") {
         redirect("/login");

@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(
-    req: Request,
-    context: { params: { contentId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ contentId: string }> }
 ) {
-    const { contentId } = await context.params;
+    const { contentId } = await params;
 
     try {
         const session = await getServerSession(authOptions);
@@ -34,10 +34,10 @@ export async function GET(
 }
 
 export async function PUT(
-    req: Request,
-    context: { params: { contentId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ contentId: string }> }
 ) {
-    const { contentId } = await context.params;
+    const { contentId } = await params;
 
     try {
         const session = await getServerSession(authOptions);
@@ -66,10 +66,10 @@ export async function PUT(
 }
 
 export async function DELETE(
-    req: Request,
-    context: { params: { contentId: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ contentId: string }> }
 ) {
-    const { contentId } = await context.params;
+    const { contentId } = await params;
 
     try {
         const session = await getServerSession(authOptions);

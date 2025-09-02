@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -13,10 +13,11 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { id } = await params;
         const { data: assessment, error: assessErr } = await supabase
             .from('assessments')
             .select('id, createdBy')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle();
         if (assessErr) throw assessErr;
         if (!assessment) {
@@ -32,7 +33,7 @@ export async function GET(
             const { data: result, error } = await supabase
                 .from('assessment_results')
                 .select('*, student:users(name, email)')
-                .eq('assessmentId', params.id)
+                .eq('assessmentId', id)
                 .eq('studentId', session.user.id)
                 .maybeSingle();
             if (error) throw error;
@@ -45,7 +46,7 @@ export async function GET(
             const { data: results, error } = await supabase
                 .from('assessment_results')
                 .select('*, student:users(name, email)')
-                .eq('assessmentId', params.id)
+                .eq('assessmentId', id)
                 .order('submittedAt', { ascending: false });
             if (error) throw error;
 
@@ -69,7 +70,7 @@ export async function GET(
             const { data: results, error } = await supabase
                 .from('assessment_results')
                 .select('*, student:users(name, email)')
-                .eq('assessmentId', params.id)
+                .eq('assessmentId', id)
                 .order('submittedAt', { ascending: false });
             if (error) throw error;
 

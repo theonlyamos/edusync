@@ -3,8 +3,9 @@ import { supabase } from "@/lib/supabase";
 
 export async function GET(
     request: Request,
-    { params }: { params: { level: string } }
+    context: any
 ) {
+    const { params } = context as { params: { level: string } };
     try {
         const { level } = await params;
         const { data: grade, error } = await supabase
@@ -33,8 +34,9 @@ export async function GET(
 
 export async function PUT(
     request: Request,
-    { params }: { params: { level: string } }
+    context: any
 ) {
+    const { params } = context as { params: { level: string } };
     try {
         const body = await request.json();
         const { data: updatedGrade, error } = await supabase
@@ -64,8 +66,9 @@ export async function PUT(
 
 export async function DELETE(
     request: Request,
-    { params }: { params: { level: string } }
+    context: any
 ) {
+    const { params } = context as { params: { level: string } };
     try {
         const { data: deletedGrade, error } = await supabase
             .from('grades')

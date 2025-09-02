@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 // Get a single assessment
 export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -14,10 +14,11 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { id } = await params;
         const { data: assessment, error } = await supabase
             .from('assessments')
             .select('*, createdBy:users(name, email)')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle();
         if (error) throw error;
 
@@ -40,8 +41,8 @@ export async function GET(
 
 // Update an assessment
 export async function PUT(
-    req: Request,
-    { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -63,10 +64,11 @@ export async function PUT(
             isPublished
         } = await req.json();
 
+        const { id } = await params;
         const { data: assessment, error: findErr } = await supabase
             .from('assessments')
             .select('id, createdBy')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle();
         if (findErr) throw findErr;
 
@@ -104,7 +106,7 @@ export async function PUT(
                 isPublished,
                 updatedAt: new Date().toISOString()
             })
-            .eq('id', params.id)
+            .eq('id', id)
             .select('*, createdBy:users(name, email)')
             .maybeSingle();
         if (error) throw error;
@@ -121,8 +123,8 @@ export async function PUT(
 
 // Delete an assessment
 export async function DELETE(
-    req: Request,
-    { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -130,10 +132,11 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const { id } = await params;
         const { data: assessment, error: findErr2 } = await supabase
             .from('assessments')
             .select('id, createdBy')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle();
         if (findErr2) throw findErr2;
 
@@ -158,7 +161,7 @@ export async function DELETE(
         const { error } = await supabase
             .from('assessments')
             .delete()
-            .eq('id', params.id);
+            .eq('id', id);
         if (error) throw error;
 
         return NextResponse.json({ message: 'Assessment deleted successfully' });

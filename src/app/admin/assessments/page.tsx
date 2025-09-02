@@ -2,9 +2,12 @@ import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
 import { getAssessments } from "@/lib/actions/assessment.actions";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import type { Assessment } from "@/types/assessment";
+
+export const dynamic = 'force-dynamic';
 
 export default async function AdminAssessmentsPage() {
-  const assessments = await getAssessments();
+  const assessments = await getAssessments() as unknown as Assessment[];
 
   return (
     <DashboardLayout role="admin">

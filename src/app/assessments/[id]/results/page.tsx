@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AssessmentResults } from '@/components/assessment/AssessmentResults';
@@ -52,8 +52,9 @@ interface Statistics {
 export default function AssessmentResultsPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const resolvedParams = use(params);
   const router = useRouter();
   const { toast } = useToast();
   const { data: session } = useSession();
@@ -70,14 +71,14 @@ export default function AssessmentResultsPage({
   const fetchData = async () => {
     try {
       // Fetch assessment details
-      const assessmentResponse = await fetch(`/api/assessments/${params.id}`);
+      const assessmentResponse = await fetch(`/api/assessments/${resolvedParams.id}`);
       if (!assessmentResponse.ok) throw new Error('Failed to fetch assessment');
       const assessmentData = await assessmentResponse.json();
       setAssessment(assessmentData);
 
       // Fetch results
       const resultsResponse = await fetch(
-        `/api/assessments/${params.id}/results`
+        `/api/assessments/${resolvedParams.id}/results`
       );
       if (!resultsResponse.ok) throw new Error('Failed to fetch results');
       const resultsData = await resultsResponse.json();
