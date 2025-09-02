@@ -1,95 +1,53 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/lib/models/User";
-import { Student } from "@/lib/models/Student";
+import { supabase } from "@/lib/supabase";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
     try {
-        await connectToDatabase();
+        const { data, error } = await supabase
+            .from('students_view')
+            .select('*')
+            .order('createdAt', { ascending: false });
 
-        const studentsWithUserData = await Student.find()
-            .populate({
-                path: 'userId',
-                model: User,
-                select: '-password -role'
-            })
-            .sort({ createdAt: -1 })
-            .lean();
-
-        const responseData = studentsWithUserData.map(student => {
-            if (!student.userId) {
-                console.warn(`User data missing for student record: ${student._id}`);
-                return { ...student, user: null };
-            }
-
-            const userDetails = student.userId as any;
-            return {
-                _id: userDetails._id,
-                email: userDetails.email,
-                name: userDetails.name,
-                isActive: userDetails.isActive,
-                lastLogin: userDetails.lastLogin,
-                studentId: student._id,
-                grade: student.grade,
-                enrollmentDate: student.enrollmentDate,
-                guardianName: student.guardianName,
-                guardianContact: student.guardianContact,
-                createdAt: userDetails.createdAt,
-                updatedAt: userDetails.updatedAt,
-            };
-        });
-
-        return NextResponse.json(responseData);
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error("Error fetching students with user data:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch students" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to fetch students" }, { status: 500 });
     }
 }
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { email, password, name, level: grade } = body;
+        const { email, password, name, level: grade } = body as { email: string; password: string; name: string; level: string };
 
-        await connectToDatabase();
-
-        const existingUser = await User.findOne({ email }).lean();
-        if (existingUser) {
-            return NextResponse.json(
-                { error: "Email already exists" },
-                { status: 400 }
-            );
-        }
+        const { data: existing, error: checkErr } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+        if (checkErr) throw checkErr;
+        if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const newUser = await User.create({
-            email,
-            password: hashedPassword,
-            name,
-            role: "student",
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
+        const { data: userRow, error: userErr } = await supabase
+            .from('users')
+            .insert({ email, password: hashedPassword, name, role: 'student' })
+            .select('*')
+            .single();
+        if (userErr) throw userErr;
 
-        await Student.create({
-            userId: newUser._id,
-            grade: grade,
-            enrollmentDate: new Date()
-        });
+        const { error: studentErr } = await supabase
+            .from('students')
+            .insert({ user_id: userRow.id, grade, enrollment_date: new Date().toISOString() });
+        if (studentErr) throw studentErr;
 
-        const { password: _, ...userWithoutPassword } = newUser.toObject();
-
+        const { password: _pw, ...userWithoutPassword } = userRow as any;
         return NextResponse.json(userWithoutPassword);
     } catch (error) {
         console.error("Error creating student:", error);
-        return NextResponse.json(
-            { error: "Failed to create student" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to create student" }, { status: 500 });
     }
-} 
+}

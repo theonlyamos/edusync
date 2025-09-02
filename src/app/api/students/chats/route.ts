@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { ObjectId } from 'mongodb';
-import { Chat } from '@/lib/models/Chat';
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
     try {
@@ -12,13 +10,14 @@ export async function GET() {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        await connectToDatabase();
+        const { data, error } = await supabase
+            .from('chats')
+            .select('*')
+            .eq('userId', session.user.id)
+            .order('updatedAt', { ascending: false });
+        if (error) throw error;
 
-        const chats = await Chat.find({ userId: new ObjectId(session.user.id) })
-            .sort({ updatedAt: -1 })
-            .lean();
-
-        return NextResponse.json(chats);
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching chats:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -34,17 +33,22 @@ export async function POST(req: Request) {
 
         const { lessonId, messages, title } = await req.json();
 
-        await connectToDatabase();
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+            .from('chats')
+            .insert({
+                userId: session.user.id,
+                lessonId: lessonId ?? null,
+                messages,
+                title,
+                createdAt: now,
+                updatedAt: now
+            })
+            .select('id')
+            .single();
+        if (error) throw error;
 
-        const chat = new Chat({
-            userId: new ObjectId(session.user.id),
-            lessonId: lessonId ? new ObjectId(lessonId) : null,
-            messages,
-            title
-        });
-        const savedChat = await chat.save();
-
-        return NextResponse.json({ chatId: savedChat._id });
+        return NextResponse.json({ chatId: data.id });
     } catch (error) {
         console.error('Error creating chat:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import { Lesson } from "@/lib/models/Lesson";
+import { supabase } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -18,22 +17,13 @@ export async function GET(request: Request) {
         const grade = searchParams.get('grade');
         const subject = searchParams.get('subject');
 
-        await connectToDatabase();
-
-        let query: any = {};
-        if (grade) query.grade = grade;
-        if (subject) query.subject = subject;
-
-        if (session.user.role === 'teacher') {
-            query.teacher = session.user.id;
-        }
-
-        const lessons = await Lesson.find(query)
-            .populate('teacher', 'name')
-            .sort({ createdAt: -1 })
-            .lean();
-
-        return NextResponse.json(lessons);
+        let query = supabase.from('lessons').select('*, teacher:users(name)');
+        if (grade) query = query.eq('grade', grade);
+        if (subject) query = query.eq('subject', subject);
+        if (session.user.role === 'teacher') query = query.eq('teacher', session.user.id);
+        const { data, error } = await query.order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error("Error fetching lessons:", error);
         return NextResponse.json(
@@ -54,19 +44,14 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        await connectToDatabase();
-
-        const lesson = await Lesson.create({
-            ...body,
-            teacher: session.user.id,
-            status: 'draft'
-        });
-
-        const populatedLesson = await Lesson.findById(lesson._id)
-            .populate('teacher', 'name')
-            .lean();
-
-        return NextResponse.json(populatedLesson);
+        const insert = { ...body, teacher: session.user.id, status: 'draft' } as any;
+        const { data, error } = await supabase
+            .from('lessons')
+            .insert(insert)
+            .select('*, teacher:users(name)')
+            .single();
+        if (error) throw error;
+        return NextResponse.json(data);
     } catch (error) {
         console.error("Error creating lesson:", error);
         return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
@@ -12,23 +12,21 @@ export async function POST(req: Request) {
 
         const { title, subject, gradeLevel, objectives, content } = await req.json();
 
-        const client = await connectToDatabase();
-        const db = client.db();
-        const lessonsCollection = db.collection('lessons');
-
-        const lesson = {
-            title,
-            subject,
-            gradeLevel,
-            objectives,
-            content,
-            teacherId: session.user.id,
-            teacherName: session.user.name,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        await lessonsCollection.insertOne(lesson);
+        const now = new Date().toISOString();
+        const { error } = await supabase
+            .from('lessons')
+            .insert({
+                title,
+                subject,
+                gradeLevel,
+                objectives,
+                content,
+                teacher: session.user.id,
+                teacherName: session.user.name,
+                createdAt: now,
+                updatedAt: now
+            });
+        if (error) throw error;
 
         return NextResponse.json({ message: 'Lesson created successfully' });
     } catch (error) {

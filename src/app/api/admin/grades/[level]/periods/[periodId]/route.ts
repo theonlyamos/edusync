@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Grade } from '@/lib/models/Grade';
-import mongoose from 'mongoose';
+import { supabase } from '@/lib/supabase';
 
 export async function PUT(
     request: Request,
@@ -9,39 +7,30 @@ export async function PUT(
 ) {
     try {
         const body = await request.json();
-        await connectToDatabase();
-
-        const updatedGrade = await Grade.findOneAndUpdate(
-            {
-                level: params.level,
-                'timetable.periods._id': new mongoose.Types.ObjectId(params.periodId)
-            },
-            {
-                $set: {
-                    'timetable.periods.$': {
-                        _id: new mongoose.Types.ObjectId(params.periodId),
-                        ...body
-                    }
-                }
-            },
-            { new: true }
-        )
-            .select('timetable.periods')
-            .populate('timetable.periods.teacher', 'name')
-            .lean();
-
-        if (!updatedGrade) {
+        const { data: existing, error } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', params.level)
+            .maybeSingle();
+        if (error) throw error;
+        if (!existing) {
             return NextResponse.json(
                 { error: "Grade or period not found" },
                 { status: 404 }
             );
         }
 
-        const updatedPeriod = updatedGrade.timetable.periods.find(
-            (p: any) => p._id.toString() === params.periodId
-        );
+        const periods = ([...(existing as any).periods] || []).map((p: any) => (
+            p.id === params.periodId || p._id === params.periodId ? { ...p, ...body, id: p.id || p._id } : p
+        ));
+        const { error: updErr } = await supabase
+            .from('timetables')
+            .update({ periods })
+            .eq('grade', params.level);
+        if (updErr) throw updErr;
 
-        return NextResponse.json(updatedPeriod);
+        const updatedPeriod = periods.find((p: any) => p.id === params.periodId || p._id === params.periodId);
+        return NextResponse.json(updatedPeriod || null);
     } catch (error) {
         console.error("Error updating period:", error);
         return NextResponse.json(
@@ -56,28 +45,25 @@ export async function DELETE(
     { params }: { params: { level: string; periodId: string } }
 ) {
     try {
-        await connectToDatabase();
-
-        const updatedGrade = await Grade.findOneAndUpdate(
-            { level: params.level },
-            {
-                $pull: {
-                    'timetable.periods': {
-                        _id: new mongoose.Types.ObjectId(params.periodId)
-                    }
-                }
-            },
-            { new: true }
-        )
-            .select('timetable.periods')
-            .lean();
-
-        if (!updatedGrade) {
+        const { data: existing, error } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', params.level)
+            .maybeSingle();
+        if (error) throw error;
+        if (!existing) {
             return NextResponse.json(
                 { error: "Grade not found" },
                 { status: 404 }
             );
         }
+
+        const periods = ([...(existing as any).periods] || []).filter((p: any) => (p.id ?? p._id) !== params.periodId);
+        const { error: updErr } = await supabase
+            .from('timetables')
+            .update({ periods })
+            .eq('grade', params.level);
+        if (updErr) throw updErr;
 
         return NextResponse.json({ message: "Period deleted successfully" });
     } catch (error) {

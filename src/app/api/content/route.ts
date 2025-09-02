@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -15,30 +14,13 @@ export async function GET(req: Request) {
         const lessonId = searchParams.get('lessonId');
         const type = searchParams.get('type');
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        let query: any = {};
-
-        // Add filters based on parameters
-        if (lessonId) {
-            query.lessonId = new ObjectId(lessonId);
-        }
-        if (type) {
-            query.type = type;
-        }
-
-        // For teachers, only return content they created
-        if (session.user.role === 'teacher') {
-            query.createdBy = session.user.id;
-        }
-
-        const content = await db.collection('lessonContent')
-            .find(query)
-            .sort({ createdAt: -1 })
-            .toArray();
-
-        return NextResponse.json(content);
+        let query = supabase.from('lesson_content').select('*');
+        if (lessonId) query = query.eq('lesson_id', lessonId);
+        if (type) query = query.eq('type', type);
+        if (session.user.role === 'teacher') query = query.eq('created_by', session.user.id);
+        const { data, error } = await query.order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching content:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -52,25 +34,16 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-        const data = await req.json();
-
-        const { lessonId, type, content } = data;
-
-        const result = await db.collection('lessonContent').insertOne({
-            lessonId: new ObjectId(lessonId),
-            type,
-            content,
-            createdAt: new Date().toISOString(),
-            createdBy: session.user.id
-        });
-
-        const createdContent = await db.collection('lessonContent').findOne({
-            _id: result.insertedId
-        });
-
-        return NextResponse.json(createdContent);
+        const payload = await req.json();
+        const { lessonId, type, content } = payload as { lessonId: string; type: string; content: any };
+        const insert = { lesson_id: lessonId, type, content, createdAt: new Date().toISOString(), created_by: session.user.id } as any;
+        const { data, error } = await supabase
+            .from('lesson_content')
+            .insert(insert)
+            .select('*')
+            .single();
+        if (error) throw error;
+        return NextResponse.json(data);
     } catch (error) {
         console.error('Error creating content:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

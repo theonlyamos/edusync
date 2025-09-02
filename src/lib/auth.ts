@@ -1,5 +1,4 @@
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/lib/models/User";
+import { supabase } from "@/lib/supabase";
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -17,9 +16,14 @@ export const authOptions: NextAuthOptions = {
                     return null;
                 }
 
-                await connectToDatabase();
-
-                const user = await User.findOne({ email: credentials.email }).lean();
+                const { data: user, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('email', credentials.email)
+                    .maybeSingle();
+                if (error || !user) {
+                    return null;
+                }
 
                 if (!user) {
                     return null;
@@ -31,29 +35,18 @@ export const authOptions: NextAuthOptions = {
                     return null;
                 }
 
-                return {
-                    id: user._id.toString(),
-                    email: user.email,
-                    name: user.name,
-                    role: user.role,
-                    image: user.image || null
-                };
+                return { id: String(user.id), email: user.email, name: user.name, role: user.role, image: user.image || null } as any;
             }
         })
     ],
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                await connectToDatabase();
-                const dbUser = await User.findById(user.id).lean();
-
-                if (dbUser) {
-                    token.id = dbUser._id.toString();
-                    token.email = dbUser.email;
-                    token.name = dbUser.name;
-                    token.role = dbUser.role;
-                    token.image = dbUser.image || null;
-                }
+                token.id = (user as any).id;
+                token.email = (user as any).email;
+                token.name = (user as any).name;
+                token.role = (user as any).role;
+                token.image = (user as any).image || null;
             }
             return token;
         },

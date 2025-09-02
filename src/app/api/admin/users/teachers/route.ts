@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/lib/models/User";
-import { Teacher } from "@/lib/models/Teacher";
-import { createTeacher } from "@/lib/actions/user.actions";
+import { supabase } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -16,27 +13,12 @@ export async function GET() {
             );
         }
 
-        await connectToDatabase();
-
-        // Get all teachers with their role-specific details
-        const users = await User.find({ role: "teacher" })
-            .select("-password")
-            .lean();
-
-        const teacherDetails = await Promise.all(
-            users.map(async (user) => {
-                const teacher = await Teacher.findOne({ userId: user._id })
-                    .select("-createdAt -updatedAt")
-                    .lean();
-                return {
-                    ...user,
-                    ...teacher,
-                    id: user._id
-                };
-            })
-        );
-
-        return NextResponse.json(teacherDetails);
+        const { data, error } = await supabase
+            .from('teachers_view')
+            .select('*')
+            .order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error("Error fetching teachers:", error);
         return NextResponse.json(
@@ -57,37 +39,40 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { email, password, name, subjects, grades, qualifications, specializations } = body;
+        const { email, password, name, subjects, grades, qualifications, specializations } = body as any;
 
-        await connectToDatabase();
+        const { data: existing, error: checkErr } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+        if (checkErr) throw checkErr;
+        if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
 
-        // Check if user already exists
-        const existingUser = await User.findOne({ email }).lean();
-        if (existingUser) {
-            return NextResponse.json(
-                { error: "Email already exists" },
-                { status: 400 }
-            );
-        }
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create teacher using the action
-        const result = await createTeacher({
-            email,
-            password,
-            name,
-            role: 'teacher',
-            subjects,
-            grades,
-            qualifications,
-            specializations
-        });
+        const { data: userRow, error: userErr } = await supabase
+            .from('users')
+            .insert({ email, password: hashedPassword, name, role: 'teacher' })
+            .select('*')
+            .single();
+        if (userErr) throw userErr;
 
-        // Remove password from response
-        const { password: _, ...teacherWithoutPassword } = result.user.toObject();
-        return NextResponse.json({
-            ...teacherWithoutPassword,
-            ...result.teacher.toObject()
-        });
+        const { data: teacherRow, error: teacherErr } = await supabase
+            .from('teachers')
+            .insert({
+                user_id: userRow.id,
+                subjects,
+                grades,
+                qualifications,
+                specializations
+            })
+            .select('*')
+            .single();
+        if (teacherErr) throw teacherErr;
+
+        const { password: _pw, ...userWithoutPassword } = userRow as any;
+        return NextResponse.json({ ...userWithoutPassword, ...teacherRow });
     } catch (error) {
         console.error("Error creating teacher:", error);
         return NextResponse.json(

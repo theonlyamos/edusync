@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
-import { ObjectId } from 'mongodb';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -14,38 +13,12 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const lessonId = searchParams.get('lessonId');
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        let query: any = {};
-
-        if (lessonId) {
-            try {
-                query.lessonId = lessonId;
-            } catch (error) {
-                console.error('Invalid lessonId format:', error);
-                return new NextResponse('Invalid lessonId', { status: 400 });
-            }
-        }
-
-        // For teachers, only show their own resources
-        if (session.user.role === 'teacher') {
-            query.createdBy = session.user.id;
-        }
-
-        const resources = await db.collection('resources')
-            .find(query)
-            .sort({ createdAt: -1 })
-            .toArray();
-
-        // Convert ObjectIds to strings in the response
-        const serializedResources = resources.map(resource => ({
-            ...resource,
-            _id: resource._id.toString(),
-            lessonId: resource.lessonId.toString()
-        }));
-
-        return NextResponse.json(serializedResources);
+        let query = supabase.from('resources').select('*');
+        if (lessonId) query = query.eq('lessonId', lessonId);
+        if (session.user.role === 'teacher') query = query.eq('createdBy', session.user.id);
+        const { data, error } = await query.order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching resources:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -59,22 +32,11 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
         const data = await req.json();
-        const { lessonId, title, description, type, fileUrl, filename, url, originalUrl } = data;
-
-        let objectIdLessonId;
-        try {
-            objectIdLessonId = new ObjectId(lessonId);
-        } catch (error) {
-            console.error('Invalid lessonId format:', error);
-            return new NextResponse('Invalid lessonId', { status: 400 });
-        }
+        const { lessonId, title, description, type, fileUrl, filename, url, originalUrl } = data as any;
 
         const resource = {
-            lessonId: objectIdLessonId,
+            lessonId,
             title,
             description,
             type,
@@ -84,16 +46,15 @@ export async function POST(req: Request) {
             originalUrl,
             createdBy: session.user.id,
             createdAt: new Date().toISOString()
-        };
+        } as any;
 
-        const result = await db.collection('resources').insertOne(resource);
-
-        // Return the created resource with string IDs
-        return NextResponse.json({
-            ...resource,
-            _id: result.insertedId.toString(),
-            lessonId: resource.lessonId.toString()
-        });
+        const { data: inserted, error } = await supabase
+            .from('resources')
+            .insert(resource)
+            .select('*')
+            .single();
+        if (error) throw error;
+        return NextResponse.json(inserted);
     } catch (error) {
         console.error('Error creating resource:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

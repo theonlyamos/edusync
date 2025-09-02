@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
@@ -15,22 +15,19 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
-
-        const admin = await db.collection('users').findOne(
-            { _id: new ObjectId(adminId), role: 'admin' },
-            { projection: { password: 0, role: 0 } }
-        );
+        const { data: admin, error } = await supabase
+            .from('users')
+            .select('id, email, name, image, isActive, lastLogin, createdAt, updatedAt')
+            .eq('id', adminId)
+            .eq('role', 'admin')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!admin) {
             return new NextResponse('Admin not found', { status: 404 });
         }
 
-        return NextResponse.json({
-            ...admin,
-            _id: admin._id.toString()
-        });
+        return NextResponse.json(admin);
     } catch (error) {
         console.error('Error fetching admin:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -62,37 +59,33 @@ export async function PATCH(
             return new NextResponse('No valid updates provided', { status: 400 });
         }
 
-        updateData.updatedAt = new Date();
-
-        const client = await connectToDatabase();
-        const db = client.db();
+        updateData.updatedAt = new Date().toISOString();
 
         // Check if email is already taken by another user
         if (updateData.email) {
-            const existingUser = await db.collection('users').findOne({
-                _id: { $ne: new ObjectId(adminId) },
-                email: updateData.email
-            });
-
-            if (existingUser) {
-                return new NextResponse('Email already in use', { status: 400 });
-            }
+            const { data: other } = await supabase
+                .from('users')
+                .select('id')
+                .eq('email', updateData.email)
+                .neq('id', adminId)
+                .maybeSingle();
+            if (other) return new NextResponse('Email already in use', { status: 400 });
         }
 
-        const result = await db.collection('users').findOneAndUpdate(
-            { _id: new ObjectId(adminId), role: 'admin' },
-            { $set: updateData },
-            { returnDocument: 'after', projection: { password: 0, role: 0 } }
-        );
+        const { data: result, error } = await supabase
+            .from('users')
+            .update(updateData)
+            .eq('id', adminId)
+            .eq('role', 'admin')
+            .select('id, email, name, image, isActive, lastLogin, createdAt, updatedAt')
+            .maybeSingle();
+        if (error) throw error;
 
         if (!result) {
             return new NextResponse('Admin not found', { status: 404 });
         }
 
-        return NextResponse.json({
-            ...result,
-            _id: result._id.toString()
-        });
+        return NextResponse.json(result);
     } catch (error) {
         console.error('Error updating admin:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -115,15 +108,15 @@ export async function DELETE(
             return new NextResponse('Cannot delete your own admin account', { status: 400 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', adminId)
+            .eq('role', 'admin');
+        if (error) throw error;
 
-        const result = await db.collection('users').deleteOne({
-            _id: new ObjectId(adminId),
-            role: 'admin'
-        });
-
-        if (result.deletedCount === 0) {
+        const { data: check } = await supabase.from('users').select('id').eq('id', adminId).maybeSingle();
+        if (check) {
             return new NextResponse('Admin not found', { status: 404 });
         }
 

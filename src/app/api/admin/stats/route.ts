@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 
 export async function GET(req: Request) {
@@ -10,27 +10,25 @@ export async function GET(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { count: totalStudents } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student');
 
-        // Get total students
-        const totalStudents = await db.collection('users').countDocuments({
-            role: 'student'
-        });
+        const { count: totalTeachers } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'teacher');
 
-        // Get total teachers
-        const totalTeachers = await db.collection('users').countDocuments({
-            role: 'teacher'
-        });
+        const { count: totalLessons } = await supabase
+            .from('lessons')
+            .select('*', { count: 'exact', head: true });
 
-        // Get total lessons
-        const totalLessons = await db.collection('lessons').countDocuments();
-
-        // Get active users (users who have logged in within the last 24 hours)
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const activeUsers = await db.collection('users').countDocuments({
-            lastLogin: { $gte: twentyFourHoursAgo }
-        });
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: activeUsers } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .gte('lastLogin', twentyFourHoursAgo);
 
         return NextResponse.json({
             totalStudents,

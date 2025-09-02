@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import OpenAI from 'openai';
 import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { Lesson } from '@/lib/models/Lesson';
 import { Content } from '@/lib/models/Content';
 import { zodResponseFormat } from 'openai/helpers/zod';
@@ -85,9 +85,12 @@ export async function POST(req: Request) {
 
         const { lessonId } = validation.data;
 
-        await connectToDatabase();
-
-        const lesson = await Lesson.findById(lessonId);
+        const { data: lesson, error } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('id', lessonId)
+            .maybeSingle();
+        if (error) throw error;
 
         if (!lesson) {
             return NextResponse.json({ message: 'Lesson not found' }, { status: 404 });
@@ -96,20 +99,20 @@ export async function POST(req: Request) {
         let lessonContent = '';
 
         // Fetch associated content using parentId and parentType
-        const contents = await Content.find({
-            parentId: lesson._id,
-            parentType: 'Lesson' // Specify the parent type we are looking for
-        });
+        const { data: contents } = await supabase
+            .from('lesson_content')
+            .select('type, content')
+            .eq('lesson_id', lesson.id);
 
         // Combine all content into context
         lessonContent = `
 Title: ${lesson.title}
 Subject: ${lesson.subject}
-Grade Level: ${lesson.grade}
-Objectives: ${lesson.objectives.join(', ')}
+Grade Level: ${lesson.gradeLevel || lesson.grade}
+Objectives: ${(lesson.objectives || []).join(', ')}
 
 Content:
-${contents.map((content) => `
+${(contents || []).map((content: any) => `
 Type: ${content.type}
 ${JSON.stringify(content.content, null, 2)}
 `).join('\n')}`;

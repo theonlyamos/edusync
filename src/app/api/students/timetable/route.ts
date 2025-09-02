@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { connectToDatabase } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { authOptions } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
@@ -11,45 +11,44 @@ export async function GET(request: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const client = await connectToDatabase();
-        const db = client.db();
+        const { data: studentRow, error: studentErr } = await supabase
+            .from('students_view')
+            .select('grade')
+            .eq('id', session.user.id)
+            .maybeSingle();
+        if (studentErr) throw studentErr;
 
-        // Get the student's grade level
-        const student = await db.collection('users').findOne({
-            _id: new ObjectId(session.user.id),
-            role: 'student'
-        });
-
-        if (!student?.level) {
+        if (!studentRow?.grade) {
             return NextResponse.json({ timeTable: {} });
         }
 
         // Get the timetable for the student's grade
-        const timetable = await db.collection('timetables').findOne({
-            level: student.level
-        });
+        const { data: timetable, error: tErr } = await supabase
+            .from('timetables')
+            .select('*')
+            .eq('grade', studentRow.grade)
+            .maybeSingle();
+        if (tErr) throw tErr;
 
         // Get all teachers for this grade
-        const teachers = await db.collection('users')
-            .find({
-                role: 'teacher'
-            })
-            .toArray();
+        const { data: teachers } = await supabase
+            .from('users')
+            .select('id, name')
+            .eq('role', 'teacher');
 
         // Get all lessons for this grade level
-        const lessons = await db.collection('lessons')
-            .find({
-                gradeLevel: student.level
-            })
-            .toArray();
+        const { data: lessons } = await supabase
+            .from('lessons')
+            .select('id, title, gradeLevel')
+            .eq('gradeLevel', studentRow.grade);
 
         // Add teacher names and lesson titles to the timetable
-        const timeTableWithDetails = { ...timetable?.schedule };
+        const timeTableWithDetails = { ...(timetable as any)?.schedule } as any;
         if (timeTableWithDetails) {
             Object.entries(timeTableWithDetails).forEach(([day, periods]: [string, any]) => {
                 Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
-                    const teacher = teachers.find(t => t._id.toString() === data.teacherId);
-                    const lesson = lessons.find(l => l._id.toString() === data.lessonId);
+                    const teacher = (teachers || []).find((t: any) => String(t.id) === data.teacherId);
+                    const lesson = (lessons || []).find((l: any) => String(l.id) === data.lessonId);
 
                     timeTableWithDetails[day][periodId] = {
                         ...data,
@@ -61,7 +60,7 @@ export async function GET(request: Request) {
         }
 
         // Sort periods by start time
-        const periods = timetable?.periods || [];
+        const periods = (timetable as any)?.periods || [];
         periods.sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
 
         return NextResponse.json({

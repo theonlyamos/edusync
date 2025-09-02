@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/db';
-import { Assessment } from '@/lib/models/Assessment';
+import { supabase } from '@/lib/supabase';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
@@ -25,9 +24,7 @@ export async function POST(req: Request) {
             dueDate
         } = await req.json();
 
-        await connectToDatabase();
-
-        const assessment = await Assessment.create({
+        const insert = {
             title,
             description,
             subject,
@@ -37,11 +34,16 @@ export async function POST(req: Request) {
             totalPoints,
             passingScore,
             questions,
-            dueDate: dueDate ? new Date(dueDate) : null,
+            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
             createdBy: session.user.id
-        });
-
-        return NextResponse.json(assessment);
+        } as any;
+        const { data, error } = await supabase
+            .from('assessments')
+            .insert(insert)
+            .select('*')
+            .single();
+        if (error) throw error;
+        return NextResponse.json(data);
     } catch (error: any) {
         console.error('Error creating assessment:', error);
         return NextResponse.json(
@@ -65,24 +67,15 @@ export async function GET(req: Request) {
         const type = searchParams.get('type');
         const isPublished = searchParams.get('isPublished');
 
-        const query: any = {};
-        if (subject) query.subject = subject;
-        if (gradeLevel) query.gradeLevel = gradeLevel;
-        if (type) query.type = type;
-        if (isPublished) query.isPublished = isPublished === 'true';
-
-        // If user is a teacher, only show their created assessments
-        if (session.user.role === 'teacher') {
-            query.createdBy = session.user.id;
-        }
-
-        await connectToDatabase();
-
-        const assessments = await Assessment.find(query)
-            .populate('createdBy', 'name email')
-            .sort({ createdAt: -1 });
-
-        return NextResponse.json(assessments);
+        let query = supabase.from('assessments').select('*, createdBy:users(name, email)');
+        if (subject) query = query.eq('subject', subject);
+        if (gradeLevel) query = query.eq('gradeLevel', gradeLevel);
+        if (type) query = query.eq('type', type);
+        if (isPublished) query = query.eq('isPublished', isPublished === 'true');
+        if (session.user.role === 'teacher') query = query.eq('createdBy', session.user.id);
+        const { data, error } = await query.order('createdAt', { ascending: false });
+        if (error) throw error;
+        return NextResponse.json(data ?? []);
     } catch (error: any) {
         console.error('Error fetching assessments:', error);
         return NextResponse.json(
