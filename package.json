@@ -50,6 +50,7 @@
     "react-remove-scroll": "^2.6.0",
     "react-textarea-autosize": "^8.5.9",
     "reactflow": "^11.11.4",
+    "recharts": "^3.1.2",
     "socket.io": "^4.8.1",
     "tailwind-merge": "^2.5.5",
     "three": "^0.172.0",

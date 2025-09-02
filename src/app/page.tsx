@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import dynamic from 'next/dynamic';
-import { Mic } from 'lucide-react';
+import { Mic, Send } from 'lucide-react';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -38,6 +38,7 @@ function HomeComponent() {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handleAsk = async () => {
     if (!input.trim()) return;
@@ -86,6 +87,13 @@ function HomeComponent() {
   };
 
   useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  useEffect(() => {
     if (connectionStatus !== 'connected') return;
     const id = setInterval(() => {
       const container = vizRef.current as HTMLElement | null;
@@ -115,8 +123,7 @@ function HomeComponent() {
                   <CardTitle>AI Illustrative Explainer</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col overflow-hidden">
-                  {/* Message display area */}
-                  <div className="flex-1 overflow-y-auto mb-4 p-4 border rounded-md space-y-4">
+                  <div ref={messagesContainerRef} className="flex-1 overflow-y-auto mb-4 p-4 border rounded-md space-y-4">
                     {messages.map((msg, index) => (
                       <div key={index} className={`flex my-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`px-4 py-2 rounded-lg max-w-[80%] ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
@@ -125,43 +132,44 @@ function HomeComponent() {
                       </div>
                     ))}
                   </div>
-                  {/* Input area */}
-                  <div className="mt-auto flex flex-col gap-4">
-                    <Textarea
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleAsk();
-                        }
-                      }}
-                      placeholder="Ask the AI to explain or illustrate a concept..."
-                      className="min-h-[60px]"
-                      disabled={isLoading || connectionStatus !== 'connected'}
-                    />
-                    <div className="flex items-center justify-between">
-                      <div className="flex gap-2">
-                        <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'}>
-                          {isLoading ? 'Generating...' : 'Ask AI'}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={voiceActive ? 'secondary' : 'outline'}
-                          size="icon"
-                          onClick={() => setVoiceActive((prev) => !prev)}
-                          title={voiceActive ? 'Stop voice streaming' : 'Start voice streaming'}
-                        >
-                          <Mic className={`w-5 h-5 ${voiceActive ? 'text-red-500 animate-pulse' : 'text-green-600'}`} />
-                        </Button>
+                  <div className="mt-auto flex flex-col gap-3">
+                    <div className="border rounded-2xl p-2 bg-background">
+                      <div className="flex items-end gap-2">
+                        <Textarea
+                          value={input}
+                          onChange={e => setInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleAsk();
+                            }
+                          }}
+                          placeholder="Ask the AI to explain or illustrate a concept..."
+                          className="flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 min-h-[48px] max-h-40"
+                          disabled={isLoading || connectionStatus !== 'connected'}
+                        />
+                        <div className="flex items-center gap-1 pb-1 pr-1">
+                          <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'} size="icon" variant="ghost">
+                            <Send className="w-5 h-5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={voiceActive ? 'secondary' : 'ghost'}
+                            size="icon"
+                            onClick={() => setVoiceActive((prev) => !prev)}
+                            title={voiceActive ? 'Stop voice streaming' : 'Start voice streaming'}
+                          >
+                            <Mic className={`w-5 h-5 ${voiceActive ? 'text-red-500 animate-pulse' : 'text-green-600'}`} />
+                          </Button>
+                        </div>
                       </div>
-                      <VoiceControl
-                        active={voiceActive}
-                        onError={setError}
-                        onToolCall={handleToolCall}
-                        onConnectionStatusChange={setConnectionStatus}
-                      />
                     </div>
+                    <VoiceControl
+                      active={voiceActive}
+                      onError={setError}
+                      onToolCall={handleToolCall}
+                      onConnectionStatusChange={setConnectionStatus}
+                    />
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="text-red-700 text-sm">{error}</div>
