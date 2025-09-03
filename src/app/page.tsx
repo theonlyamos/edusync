@@ -10,7 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import dynamic from 'next/dynamic';
-import { Mic, Send } from 'lucide-react';
+import { Mic, Send, StopCircle } from 'lucide-react';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -116,10 +116,10 @@ function HomeComponent() {
     <div className="flex h-screen bg-background">
       <div className="flex-1 overflow-y-auto">
         <div className="container mx-auto py-6 px-4">
-          <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
+          <div className="flex h-[calc(100vh-4rem)] gap-6 p-6 relative">
+            {!voiceActive && <StartButtonOverlay onStart={() => setVoiceActive(true)} />}
             {/* Left Panel - Chat Window */}
-            <div className="w-1/3 min-w-[350px] flex flex-col relative">
-              {!voiceActive && <StartButtonOverlay onStart={() => setVoiceActive(true)} />}
+            <div className="w-1/3 min-w-[350px] flex flex-col">
               <Card className="flex-1 flex flex-col h-full">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
@@ -154,6 +154,17 @@ function HomeComponent() {
                           <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'} size="icon" variant="ghost">
                             <Send className="w-5 h-5" />
                           </Button>
+                          {voiceActive && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setVoiceActive(false)}
+                              title="Stop voice streaming"
+                            >
+                              <StopCircle className="w-5 h-5 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
