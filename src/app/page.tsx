@@ -202,19 +202,6 @@ function HomeComponent() {
                             <ToggleGroupItem value="code">Code</ToggleGroupItem>
                           </ToggleGroup>
                         )}
-                        <div className="lg:hidden flex items-center gap-3">
-                          <span className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                          <Button
-                            type="button"
-                            size="icon"
-                            className="rounded-full bg-red-500 hover:bg-red-600 text-white w-9 h-9"
-                            onClick={() => setVoiceActive(false)}
-                            title="Disconnect"
-                          >
-                            <X className="w-5 h-5" />
-                          </Button>
-                          <Mic className="w-5 h-5 text-blue-500" />
-                        </div>
                       </div>
                     </div>
                   </CardHeader>
@@ -245,19 +232,7 @@ function HomeComponent() {
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>Visualization</CardTitle>
-                      <div className="lg:hidden flex items-center gap-3">
-                        <span className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                        <Button
-                          type="button"
-                          size="icon"
-                          className="rounded-full bg-red-500 hover:bg-red-600 text-white w-9 h-9"
-                          onClick={() => setVoiceActive(false)}
-                          title="Disconnect"
-                        >
-                          <X className="w-5 h-5" />
-                        </Button>
-                        <Mic className="w-5 h-5 text-blue-500" />
-                      </div>
+                      
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 flex items-center justify-center">
@@ -272,23 +247,25 @@ function HomeComponent() {
           </div>
         </div>
       </div>
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-transparent lg:hidden">
-        <div className="flex items-center justify-center py-3">
-          <div className="flex items-center gap-4">
-            <span className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-            <Button
-              type="button"
-              size="icon"
-              className="rounded-full bg-red-500 hover:bg-red-600 text-white w-12 h-12"
-              onClick={() => setVoiceActive(false)}
-              title="Disconnect"
-            >
-              <X className="w-6 h-6" />
-            </Button>
-            <Mic className="w-6 h-6 text-blue-500" />
+      {voiceActive && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-transparent lg:hidden">
+          <div className="flex items-center justify-center py-3">
+            <div className="flex items-center gap-4">
+              <span className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+              <Button
+                type="button"
+                size="icon"
+                className="rounded-full bg-red-500 hover:bg-red-600 text-white w-12 h-12"
+                onClick={() => setVoiceActive(false)}
+                title="Disconnect"
+              >
+                <X className="w-6 h-6" />
+              </Button>
+              <Mic className="w-6 h-6 text-blue-500" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
