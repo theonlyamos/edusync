@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
+import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import dynamic from 'next/dynamic';
 import { Mic, Send } from 'lucide-react';
 
@@ -117,7 +118,8 @@ function HomeComponent() {
         <div className="container mx-auto py-6 px-4">
           <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
             {/* Left Panel - Chat Window */}
-            <div className="w-1/3 min-w-[350px] flex flex-col">
+            <div className="w-1/3 min-w-[350px] flex flex-col relative">
+              {!voiceActive && <StartButtonOverlay onStart={() => setVoiceActive(true)} />}
               <Card className="flex-1 flex flex-col h-full">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
@@ -151,15 +153,6 @@ function HomeComponent() {
                         <div className="flex items-center gap-1 pb-1 pr-1">
                           <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'} size="icon" variant="ghost">
                             <Send className="w-5 h-5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={voiceActive ? 'secondary' : 'ghost'}
-                            size="icon"
-                            onClick={() => setVoiceActive((prev) => !prev)}
-                            title={voiceActive ? 'Stop voice streaming' : 'Start voice streaming'}
-                          >
-                            <Mic className={`w-5 h-5 ${voiceActive ? 'text-red-500 animate-pulse' : 'text-green-600'}`} />
                           </Button>
                         </div>
                       </div>

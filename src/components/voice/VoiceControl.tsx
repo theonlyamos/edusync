@@ -1,5 +1,5 @@
 import { useAudioStreaming } from '@/hooks/useAudioStreaming';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface VoiceControlProps {
   /** Whether mic streaming should be active */
@@ -22,6 +22,26 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     sendMedia,
     sendViewport,
   } = useAudioStreaming();
+  const [countdown, setCountdown] = useState(600);
+
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      const timer = setInterval(() => {
+        setCountdown(prevCountdown => {
+          if (prevCountdown <= 1) {
+            clearInterval(timer);
+            stopStreaming();
+            return 0;
+          }
+          return prevCountdown - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    } else {
+      setCountdown(600);
+    }
+  }, [connectionStatus, stopStreaming]);
 
   // React to `active` prop changes
   useEffect(() => {
@@ -108,9 +128,14 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
         </div>
       )}
       {connectionStatus === 'connected' && (
-        <div className="flex items-center gap-1 text-emerald-600">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Connected</span>
+        <div className="flex items-center gap-2 text-emerald-600">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Connected</span>
+          </div>
+          <span className="text-xs font-mono text-muted-foreground">
+            {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+          </span>
         </div>
       )}
       {isStreaming && connectionStatus === 'connected' && (
@@ -125,26 +150,9 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   return (
     <div className="flex flex-col gap-2 items-start">
       {statusBadge}
-      <div className={`relative mt-2 ${isSpeaking ? 'animate-glow' : ''} rounded-full`}> 
-        <div className="relative w-24 h-24 flex items-center justify-center">
-          {isSpeaking && [0,1,2].map((i) => (
-            <span
-              key={i}
-              className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ripple"
-              style={{ animationDelay: `${i * 0.45}s` }}
-            />
-          ))}
-          <div className={`flex items-end gap-[4px] h-10 ${isSpeaking ? '' : 'opacity-40'}`}>
-            {[0,1,2,3,4,5].map((i) => (
-              <span
-                key={i}
-                className={`w-[5px] rounded-sm ${isSpeaking ? 'bg-emerald-500 animate-equalizer' : 'bg-muted-foreground'}`}
-                style={{ animationDelay: `${i * 0.08}s` }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+      {isSpeaking && (
+        <div className="w-16 h-16 bg-blue-500 rounded-full pulse-orb" />
+      )}
     </div>
   );
 } 
