@@ -1,5 +1,6 @@
 import { useAudioStreaming } from '@/hooks/useAudioStreaming';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import AudioVisualizer from './AudioVisualizer';
 
 interface VoiceControlProps {
   /** Whether mic streaming should be active */
@@ -7,9 +8,10 @@ interface VoiceControlProps {
   onError?: (error: string) => void;
   onToolCall?: (name: string, args: any) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
+  onCountdownEnd?: () => void;
 }
 
-export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange }: VoiceControlProps) {
+export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -18,19 +20,25 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     startStreaming,
     stopStreaming,
     setToolCallListener,
+    setOnAudioDataListener,
     sendText,
     sendMedia,
     sendViewport,
   } = useAudioStreaming();
   const [countdown, setCountdown] = useState(600);
+  const countdownEndedRef = useRef(false);
+  const [audioData, setAudioData] = useState(new Float32Array(0));
 
   useEffect(() => {
     if (connectionStatus === 'connected') {
+      countdownEndedRef.current = false;
       const timer = setInterval(() => {
         setCountdown(prevCountdown => {
           if (prevCountdown <= 1) {
             clearInterval(timer);
             stopStreaming();
+            countdownEndedRef.current = true;
+            onCountdownEnd?.();
             return 0;
           }
           return prevCountdown - 1;
@@ -39,9 +47,11 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
 
       return () => clearInterval(timer);
     } else {
-      setCountdown(600);
+      if (!countdownEndedRef.current) {
+        setCountdown(600);
+      }
     }
-  }, [connectionStatus, stopStreaming]);
+  }, [connectionStatus, stopStreaming, onCountdownEnd]);
 
   // React to `active` prop changes
   useEffect(() => {
@@ -64,6 +74,10 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     setToolCallListener(onToolCall ?? (() => {}));
   }, [onToolCall, setToolCallListener]);
+
+  useEffect(() => {
+    setOnAudioDataListener(setAudioData);
+  }, [setOnAudioDataListener]);
 
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
@@ -148,11 +162,9 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   );
 
   return (
-    <div className="flex flex-col gap-2 items-start">
+    <div className="flex flex-col gap-2 items-start w-full">
+      {isSpeaking && <AudioVisualizer audioData={audioData} />}
       {statusBadge}
-      {isSpeaking && (
-        <div className="w-16 h-16 bg-blue-500 rounded-full pulse-orb" />
-      )}
     </div>
   );
 } 
