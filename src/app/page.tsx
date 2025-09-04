@@ -41,6 +41,8 @@ function HomeComponent() {
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const showOverlay = !voiceActive || (voiceActive && connectionStatus !== 'connected');
+
   const handleAsk = async () => {
     if (!input.trim()) return;
     const newUserMessage: Message = { role: 'user', content: input };
@@ -117,7 +119,7 @@ function HomeComponent() {
       <div className="flex-1 overflow-y-auto">
         <div className="container mx-auto py-6 px-4">
           <div className="flex h-[calc(100vh-4rem)] gap-4 p-4 lg:gap-6 lg:p-6 relative pb-20 lg:pb-0">
-            {!voiceActive && <StartButtonOverlay onStart={() => setVoiceActive(true)} />}
+            {showOverlay && <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />}
             {/* Left Panel - Chat Window */}
             <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col">
               <Card className="flex-1 flex flex-col h-full">
