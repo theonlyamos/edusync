@@ -144,13 +144,6 @@ function HomeComponent() {
                     ))}
                   </div>
                   <div className="mt-auto flex flex-col gap-3">
-                    <VoiceControl
-                      active={voiceActive}
-                      onError={setError}
-                      onToolCall={handleToolCall}
-                      onConnectionStatusChange={setConnectionStatus}
-                      onCountdownEnd={handleCountdownEnd}
-                    />
                     <div className="border rounded-2xl p-2 bg-background">
                       <div className="flex items-end gap-2">
                         <Textarea
@@ -184,6 +177,13 @@ function HomeComponent() {
                         </div>
                       </div>
                     </div>
+                    <VoiceControl
+                      active={voiceActive}
+                      onError={setError}
+                      onToolCall={handleToolCall}
+                      onConnectionStatusChange={setConnectionStatus}
+                      onCountdownEnd={handleCountdownEnd}
+                    />
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="text-red-700 text-sm">{error}</div>

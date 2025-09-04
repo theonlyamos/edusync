@@ -167,7 +167,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
 
   return (
     <div className="flex flex-col gap-2 items-start w-full">
-      {isSpeaking && <AudioVisualizer audioData={audioData} />}
+      {/* {isSpeaking && <AudioVisualizer audioData={audioData} />} */}
       {statusBadge}
     </div>
   );
