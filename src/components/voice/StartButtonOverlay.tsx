@@ -1,21 +1,32 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Play } from 'lucide-react';
+import { Power, Loader } from 'lucide-react';
 
 interface StartButtonOverlayProps {
   onStart: () => void;
+  connectionStatus: 'disconnected' | 'connecting' | 'connected';
 }
 
-export function StartButtonOverlay({ onStart }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus }: StartButtonOverlayProps) {
+  const isConnecting = connectionStatus === 'connecting';
+
   return (
-    <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10">
+    <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10">
       <Button
         onClick={onStart}
         size="lg"
         className="w-24 h-24 rounded-full"
+        disabled={isConnecting}
       >
-        <Play className="w-12 h-12" />
+        {isConnecting ? (
+          <Loader className="w-12 h-12 animate-spin" />
+        ) : (
+          <Power className="w-12 h-12" />
+        )}
       </Button>
+      <div className="mt-4 text-lg font-medium">
+        {isConnecting ? 'Connecting...' : 'Start Learning'}
+      </div>
     </div>
   );
 }
