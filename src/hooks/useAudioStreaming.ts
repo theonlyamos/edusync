@@ -14,7 +14,7 @@ interface AudioStreamingActions {
     stopStreaming: () => void;
     clearError: () => void;
     setToolCallListener: (cb: (name: string, args: any) => void) => void;
-    setOnAudioDataListener: (cb: (data: Float32Array) => void) => void;
+    setOnAudioDataListener: (cb: (data: Float32Array<ArrayBufferLike>) => void) => void;
     sendText: (text: string) => void;
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
@@ -35,8 +35,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const streamRef = useRef<MediaStream | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
-    const toolCallListenerRef = useRef<((name:string, args: any) => void) | null>(null);
-    const onAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
+    const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
+    const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
 
@@ -387,7 +387,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         toolCallListenerRef.current = cb;
     }, []);
 
-    const setOnAudioDataListener = useCallback((cb: (data: Float32Array) => void) => {
+    const setOnAudioDataListener = useCallback((cb: (data: Float32Array<ArrayBufferLike>) => void) => {
         onAudioDataListenerRef.current = cb;
     }, []);
 
