@@ -332,7 +332,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
             setIsSpeaking(true);
             if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-            speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 100);
+            speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 250);
 
         } catch (e) {
             console.error('Failed to play Gemini audio chunks:', e);

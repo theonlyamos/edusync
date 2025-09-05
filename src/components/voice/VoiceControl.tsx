@@ -166,9 +166,11 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   );
 
   return (
-    <div className="flex flex-col gap-2 items-start w-full">
-      {/* {isSpeaking && <AudioVisualizer audioData={audioData} />} */}
+    <div className="flex flex-col gap-2 w-full">
       {statusBadge}
+      <div className="w-full h-16">
+        {isSpeaking && <AudioVisualizer audioData={audioData} />}
+      </div>
     </div>
   );
 } 

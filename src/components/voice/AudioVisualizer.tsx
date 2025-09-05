@@ -48,7 +48,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData }) => {
     }
   }, [audioData]);
 
-  return <canvas ref={canvasRef} className="w-full h-16" />;
+  return <canvas ref={canvasRef} className="w-full h-full" />;
 };
 
 export default AudioVisualizer;
