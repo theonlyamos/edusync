@@ -12,6 +12,7 @@ interface VoiceControlProps {
 }
 
 export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd }: VoiceControlProps) {
+  console.log('VoiceControl rendered');
   const {
     isStreaming,
     isSpeaking,
@@ -21,6 +22,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     stopStreaming,
     setToolCallListener,
     setOnAudioDataListener,
+    setOnAiAudioDataListener,
     sendText,
     sendMedia,
     sendViewport,
@@ -28,6 +30,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
   const [audioData, setAudioData] = useState(new Float32Array(0));
+  const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
 
   useEffect(() => {
     if (connectionStatus === 'connected') {
@@ -82,6 +85,14 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
       setAudioData(convertedData);
     });
   }, [setOnAudioDataListener]);
+
+  useEffect(() => {
+    if (setOnAiAudioDataListener) {
+      setOnAiAudioDataListener((data: Float32Array) => {
+        setAiAudioData(data);
+      });
+    }
+  }, [setOnAiAudioDataListener]);
 
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
@@ -169,7 +180,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     <div className="flex flex-col gap-2 w-full">
       {statusBadge}
       <div className="w-full h-16">
-        {isSpeaking && <AudioVisualizer audioData={audioData} />}
+        {isSpeaking && <AudioVisualizer audioData={aiAudioData} />}
       </div>
     </div>
   );

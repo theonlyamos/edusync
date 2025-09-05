@@ -15,6 +15,7 @@ interface AudioStreamingActions {
     clearError: () => void;
     setToolCallListener: (cb: (name: string, args: any) => void) => void;
     setOnAudioDataListener: (cb: (data: Float32Array<ArrayBufferLike>) => void) => void;
+    setOnAiAudioDataListener: (cb: (data: Float32Array) => void) => void;
     sendText: (text: string) => void;
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
@@ -37,6 +38,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const nextPlaybackTimeRef = useRef<number>(0);
     const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
+    const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
 
@@ -322,6 +324,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
+            const float32Data = audioBuffer.getChannelData(0);
+            onAiAudioDataListenerRef.current?.(float32Data);
             const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(ctx.destination);
@@ -391,6 +395,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         onAudioDataListenerRef.current = cb;
     }, []);
 
+    const setOnAiAudioDataListener = useCallback((cb: (data: Float32Array) => void) => {
+        onAiAudioDataListenerRef.current = cb;
+    }, []);
+
     const clearError = useCallback(() => setError(''), []);
 
     const sendText = useCallback((text: string) => {
@@ -438,5 +446,5 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, setOnAudioDataListener, sendText, sendMedia, sendViewport };
+    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, setOnAudioDataListener, setOnAiAudioDataListener, sendText, sendMedia, sendViewport };
 }
