@@ -11,9 +11,10 @@ interface VoiceControlProps {
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
   mobileMode?: boolean;
+  onCountdownChange?: (countdown: number) => void;
 }
 
-export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false }: VoiceControlProps) {
+export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -102,6 +103,10 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
+
+  useEffect(() => {
+    onCountdownChange?.(countdown);
+  }, [countdown, onCountdownChange]);
 
   // Find mobile visualizer container - check when active and connected
   useEffect(() => {

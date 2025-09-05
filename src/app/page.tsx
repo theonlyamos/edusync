@@ -37,6 +37,7 @@ function HomeComponent() {
   const [show, setShow] = useState<'render' | 'code'>('render');
   const [voiceActive, setVoiceActive] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [countdown, setCountdown] = useState(600);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -192,6 +193,7 @@ function HomeComponent() {
                       onToolCall={handleToolCall}
                       onConnectionStatusChange={setConnectionStatus}
                       onCountdownEnd={handleCountdownEnd}
+                      onCountdownChange={setCountdown}
                     />
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
@@ -286,7 +288,9 @@ function HomeComponent() {
               >
                 <X className="w-6 h-6" />
               </Button>
-              <Mic className="w-6 h-6 text-blue-500" />
+              <span className="text-sm font-mono text-muted-foreground">
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </span>
             </div>
           </div>
         </div>
