@@ -51,13 +51,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const maxReconnectAttempts = 3;
     const reconnectAttemptsRef = useRef<number>(0);
 
-    // Helper function to check if session is ready for input
-    const isSessionReady = useCallback(() => {
-        return geminiLiveSessionRef.current &&
-            connectionStatus === 'connected' &&
-            isStreamingRef.current;
-    }, [connectionStatus]);
-
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
         // Disconnect and stop the audio processor
@@ -262,7 +255,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
 
             workletNode.port.onmessage = (event) => {
-                if (!isStreamingRef.current || !isSessionReady()) return;
+                if (!isStreamingRef.current || !geminiLiveSessionRef.current) return;
 
                 if (event.data.type === 'audioData') {
                     const float32Chunk = new Float32Array(event.data.data);
@@ -279,30 +272,20 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     const uint8Array = new Uint8Array(pcmData.buffer);
                     const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
 
-                    try {
-                        geminiLiveSessionRef.current.sendRealtimeInput({
-                            audio: {
-                                data: base64Audio,
-                                mimeType: `audio/pcm;rate=${sampleRate}`
-                            }
-                        });
-                    } catch (e) {
-                        console.warn('Failed to send audio data:', e);
-                    }
+                    geminiLiveSessionRef.current.sendRealtimeInput({
+                        audio: {
+                            data: base64Audio,
+                            mimeType: `audio/pcm;rate=${sampleRate}`
+                        }
+                    });
                 }
             };
 
             source.connect(workletNode);
             processorRef.current = workletNode;
 
-            // Send appropriate initial message based on session type
-            try {
-                const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
-                geminiSession.sendRealtimeInput({ text: initialMessage });
-                console.log(`Sent initial message: "${initialMessage}"`);
-            } catch (e) {
-                console.warn('Failed to send initial message:', e);
-            }
+            const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+            geminiSession.sendRealtimeInput({ text: initialMessage });
 
         } catch (error: any) {
             console.error('Failed to start Gemini Live session:', error);
@@ -518,44 +501,39 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     const sendText = useCallback((text: string) => {
         try {
-            if (isSessionReady()) {
+            if (geminiLiveSessionRef.current) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text });
             } else {
-                console.warn('Session not ready for text input');
                 setError('Not connected');
             }
         } catch (e: any) {
             console.error('sendText failed:', e);
             setError('Failed to send text');
         }
-    }, [isSessionReady]);
+    }, []);
 
     const sendViewport = useCallback((width: number, height: number, dpr: number) => {
         const payload = `VISUAL_VIEWPORT ${JSON.stringify({ width, height, devicePixelRatio: dpr })}`;
         try {
-            if (isSessionReady()) {
+            if (geminiLiveSessionRef.current) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text: payload });
-            } else {
-                console.warn('Session not ready for viewport data');
             }
         } catch (e) {
             console.error('sendViewport failed:', e);
         }
-    }, [isSessionReady]);
+    }, []);
 
     const sendMedia = useCallback((base64Data: string, mimeType: string) => {
         try {
-            if (isSessionReady()) {
+            if (geminiLiveSessionRef.current) {
                 geminiLiveSessionRef.current.sendRealtimeInput({
                     media: { data: base64Data, mimeType }
                 });
-            } else {
-                console.warn('Session not ready for media data');
             }
         } catch (e) {
             console.error('sendMedia failed:', e);
         }
-    }, [isSessionReady]);
+    }, []);
 
     const getAnalyser = useCallback(() => {
         return analyserRef.current;
