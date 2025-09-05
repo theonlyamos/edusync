@@ -129,6 +129,12 @@ When you write the code snippet, you **must** follow these rules:
                         speechConfig: {
                             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
                         },
+                        // Enable session resumption at the server level
+                        sessionResumption: {},
+                        // Enable context window compression for unlimited sessions
+                        contextWindowCompression: {
+                            slidingWindow: {}
+                        },
                         tools: [{
                             functionDeclarations: [{
                                 name: 'display_visual_aid',

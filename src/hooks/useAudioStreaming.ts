@@ -44,6 +44,20 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
 
+    // Session resumption state
+    const sessionResumptionHandleRef = useRef<string | null>(null);
+    const isManualDisconnectRef = useRef<boolean>(false);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const maxReconnectAttempts = 3;
+    const reconnectAttemptsRef = useRef<number>(0);
+
+    // Helper function to check if session is ready for input
+    const isSessionReady = useCallback(() => {
+        return geminiLiveSessionRef.current &&
+            connectionStatus === 'connected' &&
+            isStreamingRef.current;
+    }, [connectionStatus]);
+
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
         // Disconnect and stop the audio processor
@@ -69,13 +83,26 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
             geminiLiveSessionRef.current = null;
         }
+
+        // Clear reconnect timeout
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
     }, []);
 
     // Function to handle stopping the stream
     const stopStreaming = useCallback(() => {
+        // Mark as manual disconnect to prevent automatic reconnection
+        isManualDisconnectRef.current = true;
+
         setIsStreaming(false);
         isStreamingRef.current = false;
         setConnectionStatus('disconnected');
+
+        // Clear session resumption handle on manual disconnect
+        sessionResumptionHandleRef.current = null;
+        reconnectAttemptsRef.current = 0;
 
         // Close the Gemini Live session if it exists
         if (geminiLiveSessionRef.current) {
@@ -103,6 +130,9 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     // Main function to start the streaming process
     const startStreaming = useCallback(async () => {
         if (isStreamingRef.current) return;
+
+        // Reset manual disconnect flag when starting
+        isManualDisconnectRef.current = false;
 
         // Reset state
         setError('');
@@ -164,9 +194,17 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
             const geminiSession = await ai.live.connect({
                 model: 'models/gemini-live-2.5-flash-preview',
+                // Configuration is locked server-side via ephemeral token liveConnectConstraints
+                // But we can still pass the session resumption handle
+                config: sessionResumptionHandleRef.current ? {
+                    sessionResumption: { handle: sessionResumptionHandleRef.current }
+                } : undefined,
                 callbacks: {
                     onopen: () => {
                         setConnectionStatus('connected');
+                        // Reset reconnect attempts on successful connection
+                        reconnectAttemptsRef.current = 0;
+                        console.log('Gemini Live session opened', sessionResumptionHandleRef.current ? 'with resumption handle' : 'as new session');
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
@@ -178,8 +216,31 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         setConnectionStatus('disconnected');
                     },
                     onclose: (e: CloseEvent) => {
-                        console.log('Gemini Live session closed:', e.reason);
+                        console.log('Gemini Live session closed:', e.reason, 'Code:', e.code);
                         setConnectionStatus('disconnected');
+
+                        // Only attempt reconnection if:
+                        // 1. Not manually disconnected
+                        // 2. Still streaming
+                        // 3. Haven't exceeded max attempts
+                        // 4. Have a resumption handle or this is an unexpected closure
+                        if (!isManualDisconnectRef.current &&
+                            isStreamingRef.current &&
+                            reconnectAttemptsRef.current < maxReconnectAttempts &&
+                            (sessionResumptionHandleRef.current || e.code !== 1000)) {
+
+                            console.log('Attempting automatic reconnection...');
+                            reconnectAttemptsRef.current++;
+
+                            // Exponential backoff: 2s, 4s, 8s
+                            const delay = Math.pow(2, reconnectAttemptsRef.current) * 1000;
+
+                            reconnectTimeoutRef.current = setTimeout(() => {
+                                if (isStreamingRef.current && !isManualDisconnectRef.current) {
+                                    startGeminiLiveSession(streamRef.current!, sampleRate);
+                                }
+                            }, delay);
+                        }
                     }
                 }
             });
@@ -201,7 +262,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
 
             workletNode.port.onmessage = (event) => {
-                if (!isStreamingRef.current || !geminiLiveSessionRef.current) return;
+                if (!isStreamingRef.current || !isSessionReady()) return;
 
                 if (event.data.type === 'audioData') {
                     const float32Chunk = new Float32Array(event.data.data);
@@ -218,20 +279,30 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     const uint8Array = new Uint8Array(pcmData.buffer);
                     const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
 
-                    geminiLiveSessionRef.current.sendRealtimeInput({
-                        audio: {
-                            data: base64Audio,
-                            mimeType: `audio/pcm;rate=${sampleRate}`
-                        }
-                    });
+                    try {
+                        geminiLiveSessionRef.current.sendRealtimeInput({
+                            audio: {
+                                data: base64Audio,
+                                mimeType: `audio/pcm;rate=${sampleRate}`
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Failed to send audio data:', e);
+                    }
                 }
             };
 
             source.connect(workletNode);
             processorRef.current = workletNode;
 
-            // Send initial hello
-            geminiSession.sendRealtimeInput({ text: 'Hello' });
+            // Send appropriate initial message based on session type
+            try {
+                const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+                geminiSession.sendRealtimeInput({ text: initialMessage });
+                console.log(`Sent initial message: "${initialMessage}"`);
+            } catch (e) {
+                console.warn('Failed to send initial message:', e);
+            }
 
         } catch (error: any) {
             console.error('Failed to start Gemini Live session:', error);
@@ -245,6 +316,30 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
         while (responseQueue.length > 0) {
             const message = responseQueue.shift();
+
+            // Handle session resumption updates
+            if ((message as any)?.sessionResumptionUpdate) {
+                const update = (message as any).sessionResumptionUpdate;
+                if (update.resumable && update.newHandle) {
+                    sessionResumptionHandleRef.current = update.newHandle;
+                    console.log('Received new session resumption handle');
+                }
+                continue;
+            }
+
+            // Handle GoAway messages (connection will be terminated soon)
+            if ((message as any)?.goAway) {
+                const goAway = (message as any).goAway;
+                console.log('Received GoAway message, connection will terminate in:', goAway.timeLeft);
+                // The connection will close soon, but we have the resumption handle ready
+                continue;
+            }
+
+            // Handle generation complete messages
+            if (message?.serverContent && (message as any).serverContent.generationComplete) {
+                console.log('Generation complete');
+                continue;
+            }
 
             if (message?.serverContent && (message as any).serverContent.interrupted) {
                 audioParts.length = 0;
@@ -423,39 +518,44 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     const sendText = useCallback((text: string) => {
         try {
-            if (geminiLiveSessionRef.current) {
+            if (isSessionReady()) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text });
             } else {
+                console.warn('Session not ready for text input');
                 setError('Not connected');
             }
         } catch (e: any) {
             console.error('sendText failed:', e);
             setError('Failed to send text');
         }
-    }, []);
+    }, [isSessionReady]);
 
     const sendViewport = useCallback((width: number, height: number, dpr: number) => {
         const payload = `VISUAL_VIEWPORT ${JSON.stringify({ width, height, devicePixelRatio: dpr })}`;
         try {
-            if (geminiLiveSessionRef.current) {
+            if (isSessionReady()) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text: payload });
+            } else {
+                console.warn('Session not ready for viewport data');
             }
         } catch (e) {
             console.error('sendViewport failed:', e);
         }
-    }, []);
+    }, [isSessionReady]);
 
     const sendMedia = useCallback((base64Data: string, mimeType: string) => {
         try {
-            if (geminiLiveSessionRef.current) {
+            if (isSessionReady()) {
                 geminiLiveSessionRef.current.sendRealtimeInput({
                     media: { data: base64Data, mimeType }
                 });
+            } else {
+                console.warn('Session not ready for media data');
             }
         } catch (e) {
             console.error('sendMedia failed:', e);
         }
-    }, []);
+    }, [isSessionReady]);
 
     const getAnalyser = useCallback(() => {
         return analyserRef.current;
