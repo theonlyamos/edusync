@@ -19,6 +19,7 @@ interface AudioStreamingActions {
     sendText: (text: string) => void;
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
+    getAnalyser: () => AnalyserNode | null;
 }
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
@@ -36,6 +37,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const streamRef = useRef<MediaStream | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
+    const analyserRef = useRef<AnalyserNode | null>(null);
     const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
@@ -67,13 +69,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
             geminiLiveSessionRef.current = null;
         }
-
-        console.log('Cleaned up all audio resources.');
     }, []);
 
     // Function to handle stopping the stream
     const stopStreaming = useCallback(() => {
-        console.log("Stopping stream...");
         setIsStreaming(false);
         isStreamingRef.current = false;
         setConnectionStatus('disconnected');
@@ -92,6 +91,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             playbackCtxRef.current.close();
         }
         playbackCtxRef.current = null;
+        analyserRef.current = null;
         nextPlaybackTimeRef.current = 0;
 
         // Run the full cleanup for capture resources
@@ -253,6 +253,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     playbackCtxRef.current.close();
                 }
                 playbackCtxRef.current = null;
+                analyserRef.current = null;
                 nextPlaybackTimeRef.current = 0;
                 continue;
             }
@@ -323,20 +324,39 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 nextPlaybackTimeRef.current = ctx.currentTime;
             }
 
+            // Create or reuse analyser for visualization
+            if (!analyserRef.current || analyserRef.current.context !== ctx) {
+                analyserRef.current = ctx.createAnalyser();
+                analyserRef.current.fftSize = 256;
+                analyserRef.current.smoothingTimeConstant = 0.8;
+                analyserRef.current.connect(ctx.destination);
+            }
+
             const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
             const float32Data = audioBuffer.getChannelData(0);
             onAiAudioDataListenerRef.current?.(float32Data);
             const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
-            source.connect(ctx.destination);
+
+            // Always connect through analyser for visualization
+            source.connect(analyserRef.current);
 
             const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
             source.start(startAt);
             nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
 
             setIsSpeaking(true);
+            // Clear any existing timeout to prevent premature stopping
             if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-            speakingTimeoutRef.current = setTimeout(() => setIsSpeaking(false), audioBuffer.duration * 1000 + 250);
+
+            // Calculate when this chunk will finish playing
+            const endTime = (startAt + audioBuffer.duration - ctx.currentTime) * 1000 + 250;
+            speakingTimeoutRef.current = setTimeout(() => {
+                // Only stop speaking if we're not expecting more audio
+                if (nextPlaybackTimeRef.current <= ctx.currentTime + 0.1) {
+                    setIsSpeaking(false);
+                }
+            }, endTime);
 
         } catch (e) {
             console.error('Failed to play Gemini audio chunks:', e);
@@ -437,6 +457,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         }
     }, []);
 
+    const getAnalyser = useCallback(() => {
+        return analyserRef.current;
+    }, []);
+
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
         return () => {
@@ -446,5 +470,5 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, setOnAudioDataListener, setOnAiAudioDataListener, sendText, sendMedia, sendViewport };
+    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, setOnAudioDataListener, setOnAiAudioDataListener, sendText, sendMedia, sendViewport, getAnalyser };
 }

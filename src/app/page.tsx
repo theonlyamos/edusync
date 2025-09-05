@@ -48,6 +48,15 @@ function HomeComponent() {
     setMessages([]);
     setCode('');
     setLibrary(null);
+    setError('');
+  };
+
+  const handleVoiceStop = () => {
+    setVoiceActive(false);
+    setMessages([]);
+    setCode('');
+    setLibrary(null);
+    setError('');
   };
 
   const handleAsk = async () => {
@@ -163,17 +172,17 @@ function HomeComponent() {
                           <Button onClick={handleAsk} disabled={isLoading || !input.trim() || connectionStatus !== 'connected'} size="icon" variant="ghost">
                             <Send className="w-5 h-5" />
                           </Button>
-                          {voiceActive && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setVoiceActive(false)}
-                              title="Stop voice streaming"
-                            >
-                              <StopCircle className="w-5 h-5 text-red-500" />
-                            </Button>
-                          )}
+                                                     {voiceActive && (
+                             <Button
+                               type="button"
+                               variant="ghost"
+                               size="icon"
+                               onClick={handleVoiceStop}
+                               title="Stop voice streaming"
+                             >
+                               <StopCircle className="w-5 h-5 text-red-500" />
+                             </Button>
+                           )}
                         </div>
                       </div>
                     </div>
@@ -257,16 +266,22 @@ function HomeComponent() {
           </div>
         </div>
       </div>
-      {voiceActive && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-transparent lg:hidden">
-          <div className="flex items-center justify-center py-3">
+      {voiceActive && connectionStatus === 'connected' && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-sm border-t lg:hidden">
+          <div className="flex flex-col items-center py-3 px-4">
+            {/* Audio Visualizer - visualizer only, no audio initialization */}
+            <div className="w-full h-8 max-h-12 mb-3" id="mobile-visualizer-container">
+              {/* Visualizer will be rendered here by the main VoiceControl */}
+            </div>
+            
+            {/* Controls */}
             <div className="flex items-center gap-4">
-              <span className={`w-3 h-3 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+              <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <Button
                 type="button"
                 size="icon"
                 className="rounded-full bg-red-500 hover:bg-red-600 text-white w-12 h-12"
-                onClick={() => setVoiceActive(false)}
+                onClick={handleVoiceStop}
                 title="Disconnect"
               >
                 <X className="w-6 h-6" />

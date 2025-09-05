@@ -1,5 +1,6 @@
 import { useAudioStreaming } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
 
 interface VoiceControlProps {
@@ -9,10 +10,10 @@ interface VoiceControlProps {
   onToolCall?: (name: string, args: any) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
+  mobileMode?: boolean;
 }
 
-export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd }: VoiceControlProps) {
-  console.log('VoiceControl rendered');
+export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -26,11 +27,13 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     sendText,
     sendMedia,
     sendViewport,
+    getAnalyser,
   } = useAudioStreaming();
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
   const [audioData, setAudioData] = useState(new Float32Array(0));
   const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
+  const [mobileContainer, setMobileContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     if (connectionStatus === 'connected') {
@@ -89,7 +92,9 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     if (setOnAiAudioDataListener) {
       setOnAiAudioDataListener((data: Float32Array) => {
-        setAiAudioData(data);
+        // Convert to ensure consistent ArrayBuffer type
+        const convertedData = new Float32Array(data);
+        setAiAudioData(convertedData);
       });
     }
   }, [setOnAiAudioDataListener]);
@@ -97,6 +102,40 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
+
+  // Find mobile visualizer container - check when active and connected
+  useEffect(() => {
+    // Only look for container when it should exist (connected state)
+    if (!active || connectionStatus !== 'connected') {
+      // Clear container reference when not needed
+      if (mobileContainer) {
+        setMobileContainer(null);
+      }
+      return;
+    }
+    
+    const checkForContainer = () => {
+      const container = document.getElementById('mobile-visualizer-container');
+      if (container) {
+        console.log('Mobile visualizer container found');
+        setMobileContainer(container);
+        return true;
+      }
+      return false;
+    };
+    
+    // Check immediately
+    checkForContainer();
+    
+    // Also check periodically in case the container is added later
+    // This handles viewport resizing and delayed rendering
+    const interval = setInterval(() => {
+      checkForContainer();
+    }, 100);
+    
+    // Cleanup
+    return () => clearInterval(interval);
+  }, [active, connectionStatus]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
@@ -177,11 +216,22 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   );
 
   return (
-    <div className="flex flex-col gap-2 w-full">
-      {statusBadge}
-      <div className="w-full h-16">
-        {isSpeaking && <AudioVisualizer audioData={aiAudioData} />}
+    <>
+      {/* Desktop component - always render for status management, but hide on mobile */}
+      <div className="flex flex-col gap-2 w-full">
+        <div className="hidden lg:block">{statusBadge}</div>
+        <div className="w-full h-12 sm:h-16 hidden lg:block">
+          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
+        </div>
       </div>
-    </div>
+      
+      {/* Mobile/tablet visualizer via portal - shows when bottom panel is visible */}
+      {mobileContainer && createPortal(
+        <div className="w-full h-full lg:hidden">
+          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
+        </div>,
+        mobileContainer
+      )}
+    </>
   );
 } 
