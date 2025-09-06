@@ -12,14 +12,19 @@ interface VoiceControlProps {
   onCountdownEnd?: () => void;
   mobileMode?: boolean;
   onCountdownChange?: (countdown: number) => void;
+  onFeedbackFormChange?: (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => void;
+  onFeedbackSubmit?: (feedback: any) => Promise<void>;
+  onFeedbackClose?: () => void;
 }
 
-export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange }: VoiceControlProps) {
+export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
     connectionStatus,
     error: _streamingError,
+    showFeedbackForm,
+    feedbackTrigger,
     startStreaming,
     stopStreaming,
     setToolCallListener,
@@ -29,6 +34,8 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     sendMedia,
     sendViewport,
     getAnalyser,
+    closeFeedbackForm,
+    submitFeedback,
   } = useAudioStreaming();
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
@@ -107,6 +114,25 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     onCountdownChange?.(countdown);
   }, [countdown, onCountdownChange]);
+
+  useEffect(() => {
+    onFeedbackFormChange?.(showFeedbackForm, feedbackTrigger);
+  }, [showFeedbackForm, feedbackTrigger, onFeedbackFormChange]);
+
+  // Set up feedback callbacks
+  useEffect(() => {
+    if (onFeedbackSubmit) {
+      // Override the submitFeedback function if parent provides one
+      return;
+    }
+  }, [onFeedbackSubmit]);
+
+  useEffect(() => {
+    if (onFeedbackClose) {
+      // Override the closeFeedbackForm function if parent provides one
+      return;
+    }
+  }, [onFeedbackClose]);
 
   // Find mobile visualizer container - check when active and connected
   useEffect(() => {

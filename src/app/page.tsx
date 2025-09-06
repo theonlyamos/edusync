@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
+import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import dynamic from 'next/dynamic';
 import { Mic, Send, StopCircle, X } from 'lucide-react';
 
@@ -38,6 +39,8 @@ function HomeComponent() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [countdown, setCountdown] = useState(600);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +61,40 @@ function HomeComponent() {
     setCode('');
     setLibrary(null);
     setError('');
+  };
+
+  const handleFeedbackFormChange = (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
+    setShowFeedbackForm(show);
+    setFeedbackTrigger(trigger);
+  };
+
+  const handleFeedbackSubmit = async (feedback: FeedbackData) => {
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...feedback,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit feedback');
+      }
+
+      console.log('Feedback submitted successfully');
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+    }
+  };
+
+  const handleFeedbackClose = () => {
+    setShowFeedbackForm(false);
+    setFeedbackTrigger(null);
   };
 
   const handleAsk = async () => {
@@ -194,6 +231,9 @@ function HomeComponent() {
                       onConnectionStatusChange={setConnectionStatus}
                       onCountdownEnd={handleCountdownEnd}
                       onCountdownChange={setCountdown}
+                      onFeedbackFormChange={handleFeedbackFormChange}
+                      onFeedbackSubmit={handleFeedbackSubmit}
+                      onFeedbackClose={handleFeedbackClose}
                     />
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
@@ -268,6 +308,17 @@ function HomeComponent() {
           </div>
         </div>
       </div>
+      
+      {/* Feedback Form */}
+      {showFeedbackForm && feedbackTrigger && (
+        <FeedbackForm
+          isOpen={showFeedbackForm}
+          onClose={handleFeedbackClose}
+          onSubmit={handleFeedbackSubmit}
+          trigger={feedbackTrigger}
+        />
+      )}
+      
       {voiceActive && connectionStatus === 'connected' && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-sm border-t lg:hidden">
           <div className="flex flex-col items-center py-3 px-4">

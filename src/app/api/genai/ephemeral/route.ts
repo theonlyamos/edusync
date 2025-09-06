@@ -129,10 +129,11 @@ When you write the code snippet, you **must** follow these rules:
                         speechConfig: {
                             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
                         },
-                        contextWindowCompression: {
-                            slidingWindow: {}
-                        },
-                        sessionResumption: {},
+                        // Session resumption and context window compression commented out for feedback collection
+                        // contextWindowCompression: {
+                        //     slidingWindow: {}
+                        // },
+                        // sessionResumption: {},
                         tools: [{
                             functionDeclarations: [{
                                 name: 'display_visual_aid',

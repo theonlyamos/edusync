@@ -7,6 +7,8 @@ interface AudioStreamingState {
     error: string;
     isSpeaking: boolean;
     connectionStatus: 'disconnected' | 'connecting' | 'connected';
+    showFeedbackForm: boolean;
+    feedbackTrigger: 'manual_stop' | 'connection_reset' | 'error' | null;
 }
 
 interface AudioStreamingActions {
@@ -20,6 +22,8 @@ interface AudioStreamingActions {
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
     getAnalyser: () => AnalyserNode | null;
+    closeFeedbackForm: () => void;
+    submitFeedback: (feedback: any) => Promise<void>;
 }
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
@@ -28,6 +32,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const [error, setError] = useState('');
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+    const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+    const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
     const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to hold mutable values that don't trigger re-renders
@@ -43,10 +49,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
-    const sessionResumptionHandleRef = useRef<string | null>(null);
-    const isResumingSessionRef = useRef<boolean>(false);
+    // Session resumption - commented out for feedback collection
+    // const sessionResumptionHandleRef = useRef<string | null>(null);
+    // const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -74,11 +81,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             geminiLiveSessionRef.current = null;
         }
 
-        // Clear reconnect timeout
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-        }
+        // Clear reconnect timeout - commented out for feedback collection
+        // if (reconnectTimeoutRef.current) {
+        //     clearTimeout(reconnectTimeoutRef.current);
+        //     reconnectTimeoutRef.current = null;
+        // }
     }, []);
 
     // Function to handle stopping the stream
@@ -90,15 +97,19 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         isStreamingRef.current = false;
         setConnectionStatus('disconnected');
 
-        // Clear resumption handle when manually stopping
-        sessionResumptionHandleRef.current = null;
-        isResumingSessionRef.current = false;
+        // Show feedback form for manual stop
+        setFeedbackTrigger('manual_stop');
+        setShowFeedbackForm(true);
 
-        // Clear reconnect timeout
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-        }
+        // Clear resumption handle when manually stopping - commented out for feedback collection
+        // sessionResumptionHandleRef.current = null;
+        // isResumingSessionRef.current = false;
+
+        // Clear reconnect timeout - commented out for feedback collection
+        // if (reconnectTimeoutRef.current) {
+        //     clearTimeout(reconnectTimeoutRef.current);
+        //     reconnectTimeoutRef.current = null;
+        // }
 
         // Close the Gemini Live session if it exists
         if (geminiLiveSessionRef.current) {
@@ -191,14 +202,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const connectConfig: any = {
                 model: 'models/gemini-live-2.5-flash-preview',
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
-                // But we can still pass the session resumption handle
-                config: sessionResumptionHandleRef.current ? {
-                    sessionResumption: { handle: sessionResumptionHandleRef.current }
-                } : undefined,
+                // Session resumption commented out for feedback collection
+                // config: sessionResumptionHandleRef.current ? {
+                //     sessionResumption: { handle: sessionResumptionHandleRef.current }
+                // } : undefined,
                 callbacks: {
                     onopen: () => {
                         setConnectionStatus('connected');
-                        isResumingSessionRef.current = false;
+                        // isResumingSessionRef.current = false; // commented out for feedback collection
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
@@ -208,34 +219,45 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
-                        // Clear resumption handle on error
-                        sessionResumptionHandleRef.current = null;
+
+                        // Show feedback form for errors
+                        setFeedbackTrigger('error');
+                        setShowFeedbackForm(true);
+
+                        // Clear resumption handle on error - commented out for feedback collection
+                        // sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
                         console.log('Gemini Live session closed:', e.reason, 'Code:', e.code);
                         setConnectionStatus('disconnected');
 
-                        // Attempt to resume session if we have a handle and it's not a manual stop
-                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
-                            console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
-                            isResumingSessionRef.current = true;
-                            // Delay resumption slightly to avoid immediate reconnection
-                            reconnectTimeoutRef.current = setTimeout(() => {
-                                if (isStreamingRef.current && !isManualDisconnectRef.current) {
-                                    startGeminiLiveSession(streamRef.current!, 16000);
-                                }
-                            }, 1000);
+                        // Show feedback form for connection resets (if not manual disconnect)
+                        if (!isManualDisconnectRef.current && isStreamingRef.current) {
+                            setFeedbackTrigger('connection_reset');
+                            setShowFeedbackForm(true);
                         }
+
+                        // Session resumption commented out for feedback collection
+                        // if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
+                        //     console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
+                        //     isResumingSessionRef.current = true;
+                        //     // Delay resumption slightly to avoid immediate reconnection
+                        //     reconnectTimeoutRef.current = setTimeout(() => {
+                        //         if (isStreamingRef.current && !isManualDisconnectRef.current) {
+                        //             startGeminiLiveSession(streamRef.current!, 16000);
+                        //         }
+                        //     }, 1000);
+                        // }
                     }
                 }
             };
 
-            // Add session resumption config if we have a handle
-            if (sessionResumptionHandleRef.current) {
-                connectConfig.config = {
-                    sessionResumption: { handle: sessionResumptionHandleRef.current }
-                };
-            }
+            // Session resumption config commented out for feedback collection
+            // if (sessionResumptionHandleRef.current) {
+            //     connectConfig.config = {
+            //         sessionResumption: { handle: sessionResumptionHandleRef.current }
+            //     };
+            // }
 
             const geminiSession = await ai.live.connect(connectConfig);
 
@@ -285,8 +307,9 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             source.connect(workletNode);
             processorRef.current = workletNode;
 
-            const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
-            geminiSession.sendRealtimeInput({ text: initialMessage });
+            // Session resumption initial message commented out for feedback collection
+            // const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+            geminiSession.sendRealtimeInput({ text: 'Hello' });
 
         } catch (error: any) {
             console.error('Failed to start Gemini Live session:', error);
@@ -301,15 +324,15 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         while (responseQueue.length > 0) {
             const message = responseQueue.shift();
 
-            // Handle session resumption updates
-            if ((message as any)?.sessionResumptionUpdate) {
-                const update = (message as any).sessionResumptionUpdate;
-                if (update.resumable && update.newHandle) {
-                    console.log('Received new session resumption handle:', update.newHandle);
-                    sessionResumptionHandleRef.current = update.newHandle;
-                }
-                continue;
-            }
+            // Handle session resumption updates - commented out for feedback collection
+            // if ((message as any)?.sessionResumptionUpdate) {
+            //     const update = (message as any).sessionResumptionUpdate;
+            //     if (update.resumable && update.newHandle) {
+            //         console.log('Received new session resumption handle:', update.newHandle);
+            //         sessionResumptionHandleRef.current = update.newHandle;
+            //     }
+            //     continue;
+            // }
 
             // Handle GoAway messages
             if ((message as any)?.goAway) {
@@ -534,6 +557,37 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         return analyserRef.current;
     }, []);
 
+    const closeFeedbackForm = useCallback(() => {
+        setShowFeedbackForm(false);
+        setFeedbackTrigger(null);
+    }, []);
+
+    const submitFeedback = useCallback(async (feedback: any) => {
+        try {
+            // Submit feedback to your API endpoint
+            const response = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ...feedback,
+                    timestamp: new Date().toISOString(),
+                    userAgent: navigator.userAgent,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to submit feedback');
+            }
+
+            console.log('Feedback submitted successfully');
+        } catch (error) {
+            console.error('Failed to submit feedback:', error);
+            // Don't throw error to user - feedback is optional
+        }
+    }, []);
+
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
         return () => {
@@ -543,5 +597,25 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         };
     }, [stopStreaming]);
 
-    return { isStreaming, audioUrl, error, isSpeaking, connectionStatus, startStreaming, stopStreaming, clearError, setToolCallListener, setOnAudioDataListener, setOnAiAudioDataListener, sendText, sendMedia, sendViewport, getAnalyser };
+    return {
+        isStreaming,
+        audioUrl,
+        error,
+        isSpeaking,
+        connectionStatus,
+        showFeedbackForm,
+        feedbackTrigger,
+        startStreaming,
+        stopStreaming,
+        clearError,
+        setToolCallListener,
+        setOnAudioDataListener,
+        setOnAiAudioDataListener,
+        sendText,
+        sendMedia,
+        sendViewport,
+        getAnalyser,
+        closeFeedbackForm,
+        submitFeedback
+    };
 }
