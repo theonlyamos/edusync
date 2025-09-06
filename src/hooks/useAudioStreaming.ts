@@ -45,6 +45,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const geminiLiveSessionRef = useRef<any>(null);
     const sessionResumptionHandleRef = useRef<string | null>(null);
     const isResumingSessionRef = useRef<boolean>(false);
+    const isManualDisconnectRef = useRef<boolean>(false);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -91,6 +93,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         // Clear resumption handle when manually stopping
         sessionResumptionHandleRef.current = null;
         isResumingSessionRef.current = false;
+
+        // Clear reconnect timeout
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
 
         // Close the Gemini Live session if it exists
         if (geminiLiveSessionRef.current) {
@@ -208,12 +216,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         setConnectionStatus('disconnected');
 
                         // Attempt to resume session if we have a handle and it's not a manual stop
-                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current) {
+                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
                             console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
                             isResumingSessionRef.current = true;
                             // Delay resumption slightly to avoid immediate reconnection
-                            setTimeout(() => {
-                                if (isStreamingRef.current) {
+                            reconnectTimeoutRef.current = setTimeout(() => {
+                                if (isStreamingRef.current && !isManualDisconnectRef.current) {
                                     startGeminiLiveSession(streamRef.current!, 16000);
                                 }
                             }, 1000);
