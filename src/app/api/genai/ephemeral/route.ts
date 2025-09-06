@@ -115,7 +115,7 @@ When you write the code snippet, you **must** follow these rules:
    }
    \`\`\``;
 
-        // Create ephemeral token with locked configuration
+        // Create ephemeral token with locked configuration and session resumption
         const token = await (ai as any).authTokens.create({
             config: {
                 uses: 1,
@@ -129,12 +129,10 @@ When you write the code snippet, you **must** follow these rules:
                         speechConfig: {
                             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
                         },
-                        // Enable session resumption at the server level
-                        sessionResumption: {},
-                        // Enable context window compression for unlimited sessions
                         contextWindowCompression: {
                             slidingWindow: {}
                         },
+                        sessionResumption: {},
                         tools: [{
                             functionDeclarations: [{
                                 name: 'display_visual_aid',
