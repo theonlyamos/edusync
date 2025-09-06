@@ -43,6 +43,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
+    const sessionResumptionHandleRef = useRef<string | null>(null);
+    const isResumingSessionRef = useRef<boolean>(false);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -76,6 +78,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         setIsStreaming(false);
         isStreamingRef.current = false;
         setConnectionStatus('disconnected');
+
+        // Clear resumption handle when manually stopping
+        sessionResumptionHandleRef.current = null;
+        isResumingSessionRef.current = false;
 
         // Close the Gemini Live session if it exists
         if (geminiLiveSessionRef.current) {
@@ -162,11 +168,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const responseQueue: LiveServerMessage[] = [];
             const audioParts: string[] = [];
 
-            const geminiSession = await ai.live.connect({
+            const connectConfig: any = {
                 model: 'models/gemini-live-2.5-flash-preview',
                 callbacks: {
                     onopen: () => {
                         setConnectionStatus('connected');
+                        isResumingSessionRef.current = false;
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
@@ -176,13 +183,36 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
+                        // Clear resumption handle on error
+                        sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
                         console.log('Gemini Live session closed:', e.reason);
                         setConnectionStatus('disconnected');
+
+                        // Attempt to resume session if we have a handle and it's not a manual stop
+                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current) {
+                            console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
+                            isResumingSessionRef.current = true;
+                            // Delay resumption slightly to avoid immediate reconnection
+                            setTimeout(() => {
+                                if (isStreamingRef.current) {
+                                    startGeminiLiveSession(streamRef.current!, 16000);
+                                }
+                            }, 1000);
+                        }
                     }
                 }
-            });
+            };
+
+            // Add session resumption config if we have a handle
+            if (sessionResumptionHandleRef.current) {
+                connectConfig.config = {
+                    sessionResumption: { handle: sessionResumptionHandleRef.current }
+                };
+            }
+
+            const geminiSession = await ai.live.connect(connectConfig);
 
             geminiLiveSessionRef.current = geminiSession;
 
@@ -245,6 +275,24 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
         while (responseQueue.length > 0) {
             const message = responseQueue.shift();
+
+            // Handle session resumption updates
+            if ((message as any)?.sessionResumptionUpdate) {
+                const update = (message as any).sessionResumptionUpdate;
+                if (update.resumable && update.newHandle) {
+                    console.log('Received new session resumption handle:', update.newHandle);
+                    sessionResumptionHandleRef.current = update.newHandle;
+                }
+                continue;
+            }
+
+            // Handle GoAway messages
+            if ((message as any)?.goAway) {
+                const goAway = (message as any).goAway;
+                console.log('Received GoAway message, time left:', goAway.timeLeft);
+                // The connection will be terminated soon, but we have the resumption handle
+                continue;
+            }
 
             if (message?.serverContent && (message as any).serverContent.interrupted) {
                 audioParts.length = 0;
