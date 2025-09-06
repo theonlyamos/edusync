@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { X, Send, ThumbsUp, ThumbsDown, Meh } from 'lucide-react';
+import { Send, ThumbsUp, ThumbsDown, Meh, CheckCircle } from 'lucide-react';
 
 interface FeedbackFormProps {
   isOpen: boolean;
@@ -28,6 +28,25 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger }: FeedbackFor
   const [improvements, setImprovements] = useState('');
   const [wouldRecommend, setWouldRecommend] = useState<'yes' | 'no' | 'maybe'>('maybe');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Reset form state when opening
+  React.useEffect(() => {
+    if (isOpen && !isSubmitted) {
+      setRating('neutral');
+      setExperience('');
+      setImprovements('');
+      setWouldRecommend('maybe');
+      setIsSubmitting(false);
+    }
+  }, [isOpen, isSubmitted]);
+
+  // Reset submitted state when form closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      setIsSubmitted(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -45,7 +64,8 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger }: FeedbackFor
 
     try {
       await onSubmit(feedbackData);
-      onClose();
+      setIsSubmitted(true);
+      // Do not auto-close - let user reload page to try again
     } catch (error) {
       console.error('Failed to submit feedback:', error);
     } finally {
@@ -58,7 +78,7 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger }: FeedbackFor
       case 'manual_stop':
         return 'You stopped the voice session';
       case 'connection_reset':
-        return 'The connection was reset';
+        return 'Session ended';
       case 'error':
         return 'An error occurred';
       default:
@@ -79,25 +99,35 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger }: FeedbackFor
     }
   };
 
+  // Show success message if submitted
+  if (isSubmitted) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-8 px-6 text-center">
+            <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Thank you!</h2>
+            <p className="text-muted-foreground mb-4">
+              Your feedback has been submitted successfully. We appreciate you taking the time to help us improve.
+            </p>
+            <div className="text-sm text-muted-foreground">
+              Reload the page to try the app again.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>How was your experience?</CardTitle>
-              <Badge className={`mt-2 ${getTriggerColor()}`}>
-                {getTriggerMessage()}
-              </Badge>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </Button>
+          <div>
+            <CardTitle>How was your experience?</CardTitle>
+            <Badge className={`mt-2 ${getTriggerColor()}`}>
+              {getTriggerMessage()}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -186,21 +216,12 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger }: FeedbackFor
               </RadioGroup>
             </div>
 
-            {/* Submit Buttons */}
-            <div className="flex gap-2 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="flex-1"
-              >
-                Skip
-              </Button>
+            {/* Submit Button */}
+            <div className="pt-4">
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 flex items-center gap-2"
+                className="w-full flex items-center gap-2"
               >
                 {isSubmitting ? (
                   <>Submitting...</>
