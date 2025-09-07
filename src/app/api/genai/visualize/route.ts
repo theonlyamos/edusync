@@ -4,26 +4,26 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 const displayVisualAidFunctionDeclaration = {
-  name: 'display_visual_aid',
-  description: "Call this function to display a visual illustration to the student. The AI must generate the explanation, code, and library name itself before calling this function.",
-  parameters: {
-      type: Type.OBJECT,
-      properties: {
-          explanation: {
-              type: Type.STRING,
-              description: "The complete text explanation that will accompany the code."
-          },
-          code: {
-              type: Type.STRING,
-              description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React). Do not add any comments to the code. Add proper line breaks to the code."
-          },
-          library: {
-              type: Type.STRING,
-              description: "The name of the library used for the code. Must be one of 'p5', 'three', or 'react'."
-          }
-      },
-      required: ['explanation', 'code', 'library']
-  }
+    name: 'display_visual_aid',
+    description: "Call this function to display a visual illustration to the student. The AI must generate the explanation, code, and library name itself before calling this function.",
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            explanation: {
+                type: Type.STRING,
+                description: "The complete text explanation that will accompany the code."
+            },
+            code: {
+                type: Type.STRING,
+                description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React). Do not add any comments to the code. Add proper line breaks to the code."
+            },
+            library: {
+                type: Type.STRING,
+                description: "The name of the library used for the code. Must be one of 'p5', 'three', or 'react'."
+            }
+        },
+        required: ['explanation', 'code', 'library']
+    }
 };
 
 export async function POST(request: NextRequest) {
@@ -102,18 +102,24 @@ When you write the code snippet, you **must** follow these rules:
        )
      );
    }
-   \`\`\``;
+   \`\`\`
 
-        const response = await ai.getGenerativeModel({ model: 'gemini-1.5-pro' }).generateContent({
-            contents: [{ role: 'user', parts: [{ text: task_description }] }],
-            systemInstruction: systemPrompt,
-            tools: [{
-                functionDeclarations: [displayVisualAidFunctionDeclaration]
-            }],
+YOUR RESPONSE SHOULD ALWAYS INCLUDE A FUNCTION CALL TO display_visual_aid.
+   `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: task_description,
+            config: {
+                systemInstruction: systemPrompt,
+                tools: [{
+                    functionDeclarations: [displayVisualAidFunctionDeclaration]
+                }],
+            },
         });
 
-        if (response.response.candidates && response.response.candidates[0].content.parts[0].functionCall) {
-            const functionCall = response.response.candidates[0].content.parts[0].functionCall;
+        if (response.functionCalls && response.functionCalls.length > 0) {
+            const functionCall = response.functionCalls[0];
             return NextResponse.json(functionCall.args);
         } else {
             return NextResponse.json(

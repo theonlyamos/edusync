@@ -11,7 +11,7 @@ import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import dynamic from 'next/dynamic';
-import { Mic, Send, StopCircle, X } from 'lucide-react';
+import { Loader2, Mic, Send, StopCircle, X } from 'lucide-react';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -41,6 +41,7 @@ function HomeComponent() {
   const [countdown, setCountdown] = useState(600);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
+  const [generatingVisualization, setGeneratingVisualization] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -136,6 +137,7 @@ function HomeComponent() {
 
   const handleToolCall = async (name: string, args: any) => {
     if (name === 'generate_visualization_description') {
+      setGeneratingVisualization(true);
       try {
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
@@ -158,6 +160,8 @@ function HomeComponent() {
         setLibrary(vizData.library);
       } catch (e: any) {
         setError(e.message || 'Unknown error');
+      } finally {
+        setGeneratingVisualization(false);
       }
     }
   };
@@ -285,14 +289,14 @@ function HomeComponent() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-1 flex flex-col p-0">
+                  <CardContent className="flex-1 flex flex-col p-0 relative">
                     <div className="flex-1 p-6">
-                      {show === 'render' && (
+                      {show === 'render' && !generatingVisualization && (
                         <div className="h-full">
                           {renderVisualization()}
                         </div>
                       )}
-                      {show === 'code' && (
+                      {show === 'code' && !generatingVisualization && (
                         <div className="h-full">
                           <Editor
                             data={{
@@ -308,6 +312,21 @@ function HomeComponent() {
                   </CardContent>
                 </Card>
               ) : (
+                generatingVisualization ? (
+                  <Card className="flex-1 flex flex-col">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Visualization</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col items-center justify-center">
+                      <Loader2 className="w-10 h-10 animate-spin mr-2" />
+                      <div className="text-center text-muted-foreground">
+                        <div className="text-lg mb-2">Generating visualization...</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
                 <Card className="flex-1 flex flex-col">
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -322,6 +341,7 @@ function HomeComponent() {
                     </div>
                   </CardContent>
                 </Card>
+                )
               )}
             </div>
           </div>
