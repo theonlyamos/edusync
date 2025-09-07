@@ -134,13 +134,32 @@ function HomeComponent() {
     }
   };
 
-  const handleToolCall = (name: string, args: any) => {
-    if (args.explanation) {
-      const newAssistantMessage: Message = { role: 'assistant', content: args.explanation };
-      setMessages(prev => [...prev, newAssistantMessage]);
+  const handleToolCall = async (name: string, args: any) => {
+    if (name === 'generate_visualization_description') {
+      try {
+        const response = await fetch('/api/genai/visualize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ task_description: args.task_description }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate visualization');
+        }
+
+        const vizData = await response.json();
+        if (vizData.explanation) {
+          const newAssistantMessage: Message = { role: 'assistant', content: vizData.explanation };
+          setMessages(prev => [...prev, newAssistantMessage]);
+        }
+        setCode(vizData.code);
+        setLibrary(vizData.library);
+      } catch (e: any) {
+        setError(e.message || 'Unknown error');
+      }
     }
-    setCode(args.code);
-    setLibrary(args.library);
   };
 
   useEffect(() => {
