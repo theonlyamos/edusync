@@ -113,20 +113,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-
-
-        // Prepare user message with dimensions
         const dimensionsInfo = panel_dimensions
-            ? `\n\nPanel Dimensions: ${panel_dimensions.width}px wide × ${panel_dimensions.height}px tall`
+            ? `\n\nVisualization Panel Dimensions: ${panel_dimensions.width}px wide × ${panel_dimensions.height}px tall\nEnsure your visualization fits within these exact dimensions.`
             : '';
 
-        const userMessage = task_description + dimensionsInfo;
+        const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo;
 
         const completion = await openai.chat.completions.create({
             model: process.env.GROQ_MODEL as string,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                { role: 'user', content: userMessage }
+                { role: 'system', content: systemPromptWithDimensions },
+                { role: 'user', content: task_description }
             ],
             tools: [displayVisualAidFunctionDeclaration],
             temperature: 0.7,
