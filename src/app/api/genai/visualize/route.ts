@@ -20,10 +20,19 @@ const SYSTEM_PROMPT = `You are an expert in creating educational visualizations.
 ### Panel Dimensions
 
 * The visualization will be displayed in a panel with specific dimensions that will be provided.
-* Ensure your visualization fits well within these dimensions and is properly scaled.
-* For p5.js and Three.js: Use the provided width and height to set up your canvas size.
-* For React components: Design your layout to work well within the given dimensions.
+* Your visualization must either fit exactly within these dimensions OR be fully responsive.
+* For p5.js and Three.js: Use the provided width and height to set up your canvas size exactly, or make it responsive with percentage-based sizing.
+* For React components: Either design fixed layouts that fit the exact dimensions, or create responsive layouts using CSS that adapt to the container.
 * Consider leaving some padding/margin to ensure the content doesn't touch the edges.
+* Responsive visualizations should use CSS techniques like flexbox, grid, or percentage-based widths/heights to adapt to different screen sizes.
+
+### Topic Introduction
+
+* When a new topic is being introduced, always generate an introductory visualization that covers the fundamentals.
+* For introductory content, focus on fundamental concepts, basic definitions, and overview-style visualizations.
+* Make introductory visualizations approachable and foundational, avoiding complex details.
+* Use simple, clear examples that establish the core understanding of the topic.
+* Title and structure the content naturally - it doesn't need to follow a specific format.
 
 ### Explanation Rules
 
