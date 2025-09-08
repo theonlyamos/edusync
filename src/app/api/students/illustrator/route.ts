@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-  baseURL: process.env.GEMINI_OPENAI_BASE_URL,
+  baseURL: process.env.GEMINI_BASE_URL,
   apiKey: process.env.GEMINI_API_KEY,
 });
 
