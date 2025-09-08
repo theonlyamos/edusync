@@ -291,12 +291,22 @@ function HomeComponent() {
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col p-0 relative">
                     <div className="flex-1 p-6">
-                      {show === 'render' && !generatingVisualization && (
+                      {show === 'render' && (
+                        !generatingVisualization ? (
                         <div className="h-full">
                           {renderVisualization()}
                         </div>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center">
+                            <Loader2 className="w-10 h-10 animate-spin mr-2" />
+                            <div className="text-center text-muted-foreground">
+                              <div className="text-lg mb-2">Generating visualization...</div>
+                            </div>
+                          </div>
+                        )
                       )}
-                      {show === 'code' && !generatingVisualization && (
+                      {show === 'code' && (
+                        !generatingVisualization ? (
                         <div className="h-full">
                           <Editor
                             data={{
@@ -307,6 +317,14 @@ function HomeComponent() {
                             onSubmit={() => {}}
                           />
                         </div>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center">
+                            <Loader2 className="w-10 h-10 animate-spin mr-2" />
+                            <div className="text-center text-muted-foreground">
+                              <div className="text-lg mb-2">Generating visualization...</div>
+                            </div>
+                          </div>
+                        )
                       )}
                     </div>
                   </CardContent>

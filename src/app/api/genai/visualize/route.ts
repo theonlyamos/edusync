@@ -1,53 +1,13 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
 
-export const runtime = 'nodejs';
+const openai = new OpenAI({
+    baseURL: process.env.GROQ_BASE_URL,
+    apiKey: process.env.GROQ_API_KEY,
+});
 
-const displayVisualAidFunctionDeclaration = {
-    name: 'display_visual_aid',
-    description: "Call this function to display a visual illustration to the student. The AI must generate the explanation, code, and library name itself before calling this function.",
-    parameters: {
-        type: Type.OBJECT,
-        properties: {
-            explanation: {
-                type: Type.STRING,
-                description: "The complete text explanation that will accompany the code."
-            },
-            code: {
-                type: Type.STRING,
-                description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React). Do not add any comments to the code. Add proper line breaks to the code."
-            },
-            library: {
-                type: Type.STRING,
-                description: "The name of the library used for the code. Must be one of 'p5', 'three', or 'react'."
-            }
-        },
-        required: ['explanation', 'code', 'library']
-    }
-};
-
-export async function POST(request: NextRequest) {
-    try {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            return NextResponse.json(
-                { error: 'GEMINI_API_KEY environment variable not set' },
-                { status: 500 }
-            );
-        }
-
-        const ai = new GoogleGenAI({ apiKey });
-
-        const { task_description } = await request.json();
-
-        if (!task_description) {
-            return NextResponse.json(
-                { error: 'task_description is required' },
-                { status: 400 }
-            );
-        }
-
-        const systemPrompt = `You are an expert in creating educational visualizations. Your task is to generate code and explanations for visual aids based on a given task description.
+const SYSTEM_PROMPT = `You are an expert in creating educational visualizations. Your task is to generate code and explanations for visual aids based on a given task description.
 
 ### Design and Aesthetics
 
@@ -72,7 +32,7 @@ When you write the code snippet, you **must** follow these rules:
 * Do NOT include HTML or any surrounding boilerplate.
 
 **2. React**
-* Use modern React with hooks. The hooks \`useState\`, \`useEffect\`, \`useMemo\`, and \`useCallback\` are available directly.
+* Use modern React with hooks. The hooks \`useState\`, \`useEffect\`, \`useMemo\`, and \`useCallback\` are available directly. Do not import them.
 * Use only the following available UI components: \`Button\`, \`Input\`, \`Card\`, \`CardContent\`, \`CardHeader\`, \`CardTitle\`, \`Badge\`, \`Textarea\`, \`Label\`, \`RadioGroup\`, \`RadioGroupItem\`, \`Checkbox\`, \`Select\`, \`SelectContent\`, \`SelectItem\`, \`SelectTrigger\`, \`SelectValue\`, \`Slider\`.
 * **CRITICAL:** Your main component function must be named exactly one of these: \`Component\`, \`App\`, \`Quiz\`, \`InteractiveComponent\`, \`Calculator\`, or \`Game\`. Do not use any other names like \`Introduction\`, \`Demo\`, etc.
 * **MOST IMPORTANT:** You **MUST** use \`React.createElement()\` syntax. **NEVER** use JSX tags (e.g., \`<Card>\`).
@@ -107,25 +67,76 @@ When you write the code snippet, you **must** follow these rules:
 YOUR RESPONSE SHOULD ALWAYS INCLUDE A FUNCTION CALL TO display_visual_aid.
    `;
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
-            contents: task_description,
-            config: {
-                systemInstruction: systemPrompt,
-                tools: [{
-                    functionDeclarations: [displayVisualAidFunctionDeclaration]
-                }],
+const displayVisualAidFunctionDeclaration = {
+    type: 'function' as const,
+    function: {
+        name: 'display_visual_aid',
+        description: "Call this function to display a visual illustration to the student. The AI must generate the explanation, code, and library name itself before calling this function.",
+        parameters: {
+            type: 'object',
+            properties: {
+                explanation: {
+                    type: 'string',
+                    description: "The complete text explanation that will accompany the code."
+                },
+                code: {
+                    type: 'string',
+                    description: "The complete, runnable code snippet for the chosen library (p5.js, Three.js, or React). Do not add any comments to the code. Add proper line breaks to the code."
+                },
+                library: {
+                    type: 'string',
+                    description: "The name of the library used for the code. Must be one of 'p5', 'three', or 'react'."
+                }
             },
+            required: ['explanation', 'code', 'library']
+        }
+    }
+};
+
+export async function POST(request: NextRequest) {
+    try {
+
+        const { task_description } = await request.json();
+
+        if (!task_description) {
+            return NextResponse.json(
+                { error: 'task_description is required' },
+                { status: 400 }
+            );
+        }
+
+
+
+        const completion = await openai.chat.completions.create({
+            model: process.env.GROQ_MODEL as string,
+            messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'user', content: task_description }
+            ],
+            tools: [displayVisualAidFunctionDeclaration],
+            temperature: 0.7,
+            max_tokens: 16384,
         });
 
-        if (response.functionCalls && response.functionCalls.length > 0) {
-            const functionCall = response.functionCalls[0];
-            return NextResponse.json(functionCall.args);
-        } else {
-            return NextResponse.json(
-                { error: 'No function call found in the response.' },
-                { status: 500 }
-            );
+        const message = completion.choices?.[0]?.message as any;
+
+        if (message?.tool_calls && message.tool_calls.length > 0) {
+            const toolCall: any = message.tool_calls.find((t: any) => t.type === 'function' && t.function?.name === 'display_visual_aid')
+                ?? message.tool_calls.find((t: any) => t.type === 'function')
+                ?? message.tool_calls[0];
+            try {
+                const args = JSON.parse(toolCall?.function?.arguments || '{}');
+                return NextResponse.json(args);
+            } catch {
+                return NextResponse.json({ error: 'Tool call arguments were not valid JSON.' }, { status: 500 });
+            }
+        }
+
+        try {
+            const result = JSON.parse(message?.content || '{}');
+            return NextResponse.json({ ...result, _source: 'content' });
+        } catch {
+            return NextResponse.json({ error: 'AI response was not valid JSON.' }, { status: 500 });
         }
 
     } catch (error: any) {
