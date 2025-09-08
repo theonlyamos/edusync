@@ -17,6 +17,14 @@ const SYSTEM_PROMPT = `You are an expert in creating educational visualizations.
 * Keep visuals self-contained and lightweight; avoid heavy borders and excessive animation.
 * Use only the allowed UI components (e.g., \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardContent\`, \`Button\`, \`Badge\`) to compose modern-looking sections.
 
+### Panel Dimensions
+
+* The visualization will be displayed in a panel with specific dimensions that will be provided.
+* Ensure your visualization fits well within these dimensions and is properly scaled.
+* For p5.js and Three.js: Use the provided width and height to set up your canvas size.
+* For React components: Design your layout to work well within the given dimensions.
+* Consider leaving some padding/margin to ensure the content doesn't touch the edges.
+
 ### Explanation Rules
 
 * Adapt to the learner's level (beginner to advanced) and avoid unnecessary jargon.
@@ -96,7 +104,7 @@ const displayVisualAidFunctionDeclaration = {
 export async function POST(request: NextRequest) {
     try {
 
-        const { task_description } = await request.json();
+        const { task_description, panel_dimensions } = await request.json();
 
         if (!task_description) {
             return NextResponse.json(
@@ -107,11 +115,18 @@ export async function POST(request: NextRequest) {
 
 
 
+        // Prepare user message with dimensions
+        const dimensionsInfo = panel_dimensions
+            ? `\n\nPanel Dimensions: ${panel_dimensions.width}px wide × ${panel_dimensions.height}px tall`
+            : '';
+
+        const userMessage = task_description + dimensionsInfo;
+
         const completion = await openai.chat.completions.create({
             model: process.env.GROQ_MODEL as string,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
-                { role: 'user', content: task_description }
+                { role: 'user', content: userMessage }
             ],
             tools: [displayVisualAidFunctionDeclaration],
             temperature: 0.7,

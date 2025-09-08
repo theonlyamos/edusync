@@ -139,12 +139,27 @@ function HomeComponent() {
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
       try {
+        // Get panel dimensions
+        const panelElement = vizRef.current;
+        let panelDimensions = { width: 800, height: 600 }; // Default dimensions
+        
+        if (panelElement) {
+          const rect = panelElement.getBoundingClientRect();
+          panelDimensions = {
+            width: Math.floor(rect.width),
+            height: Math.floor(rect.height)
+          };
+        }
+
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ task_description: args.task_description }),
+          body: JSON.stringify({ 
+            task_description: args.task_description,
+            panel_dimensions: panelDimensions
+          }),
         });
 
         if (!response.ok) {
