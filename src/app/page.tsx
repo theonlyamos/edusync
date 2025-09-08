@@ -208,12 +208,16 @@ function HomeComponent() {
 
   return (
     <div className="flex h-screen bg-background">
-      <div className="flex-1 overflow-y-auto">
-        <div className="container mx-auto py-6 px-4">
-          <div className="flex h-[calc(100vh-4rem)] gap-4 p-4 lg:gap-6 lg:p-6 relative pb-20 lg:pb-0">
-            {showOverlay && <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />}
-            {/* Left Panel - Chat Window */}
-            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col">
+      <div className="flex-1 relative">
+        <div className="h-full">
+          <div className="flex h-full relative">
+            {showOverlay && (
+              <div className="fixed inset-0 z-50">
+                <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />
+              </div>
+            )}
+            {/* Left Panel - Chat Window - Fixed */}
+            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col fixed left-0 top-0 h-full z-10 bg-background p-6">
               <Card className="flex-1 flex flex-col h-full">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
@@ -284,7 +288,7 @@ function HomeComponent() {
             </div>
 
             {/* Right Panel - Preview/Code Editor */}
-            <div className="flex-1 flex flex-col"  ref={vizRef}>
+            <div className="flex-1 flex flex-col ml-0 lg:ml-[33.333333%] lg:min-w-0 p-6 overflow-y-auto"  ref={vizRef}>
               {code && library ? (
                 <Card className="flex-1 flex flex-col">
                   <CardHeader>
@@ -392,7 +396,7 @@ function HomeComponent() {
       )}
       
       {voiceActive && connectionStatus === 'connected' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-sm border-t lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-50  border-t lg:hidden">
           <div className="flex flex-col items-center py-3 px-4">
             {/* Audio Visualizer - visualizer only, no audio initialization */}
             <div className="w-full h-8 max-h-12 mb-3" id="mobile-visualizer-container">
