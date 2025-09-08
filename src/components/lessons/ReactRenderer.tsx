@@ -11,6 +11,28 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { 
+  LineChart, 
+  BarChart, 
+  PieChart, 
+  AreaChart, 
+  ScatterChart, 
+  RadarChart, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer, 
+  Line, 
+  Bar, 
+  Area, 
+  Pie, 
+  Cell, 
+  Scatter, 
+  RadialBar, 
+  RadialBarChart 
+} from 'recharts';
 
 interface ReactRendererProps {
   code: string;
@@ -50,6 +72,26 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code }) => {
         'SelectTrigger',
         'SelectValue',
         'Slider',
+        'LineChart',
+        'BarChart',
+        'PieChart',
+        'AreaChart',
+        'ScatterChart',
+        'RadarChart',
+        'XAxis',
+        'YAxis',
+        'CartesianGrid',
+        'Tooltip',
+        'Legend',
+        'ResponsiveContainer',
+        'Line',
+        'Bar',
+        'Area',
+        'Pie',
+        'Cell',
+        'Scatter',
+        'RadialBar',
+        'RadialBarChart',
         `
         ${code}
         
@@ -87,7 +129,27 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code }) => {
         SelectItem,
         SelectTrigger,
         SelectValue,
-        Slider
+        Slider,
+        LineChart,
+        BarChart,
+        PieChart,
+        AreaChart,
+        ScatterChart,
+        RadarChart,
+        XAxis,
+        YAxis,
+        CartesianGrid,
+        Tooltip,
+        Legend,
+        ResponsiveContainer,
+        Line,
+        Bar,
+        Area,
+        Pie,
+        Cell,
+        Scatter,
+        RadialBar,
+        RadialBarChart
       );
 
       setIsLoading(false);
