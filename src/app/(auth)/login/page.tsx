@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { signIn, useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
+import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const supabase = useContext(SupabaseBrowserClientContext);
+  const session = useContext(SupabaseSessionContext);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<'authenticated' | 'unauthenticated' | 'loading'>(session ? 'authenticated' : 'unauthenticated');
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -41,27 +43,26 @@ export default function LoginPage() {
     const password = formData.get('password') as string;
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        toast({
-          title: 'Error',
-          description: result.error,
-          variant: 'destructive',
-        });
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      setStatus('authenticated');
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'An error occurred during login',
+        description: (error as any)?.message ?? 'An error occurred during login',
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleOAuth = async (provider: 'google') => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+      if (error) throw error;
+    } catch (error) {
+      toast({ title: 'Error', description: (error as any)?.message ?? 'OAuth failed', variant: 'destructive' });
     }
   };
 
@@ -125,6 +126,11 @@ export default function LoginPage() {
             ) : (
               'Sign in'
             )}
+          </Button>
+
+          <div className="text-center text-sm text-muted-foreground">or</div>
+          <Button type="button" variant="outline" className="w-full" onClick={() => handleOAuth('google')} disabled={isLoading}>
+            Continue with Google
           </Button>
         </form>
       </div>

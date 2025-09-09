@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Sidebar } from './Sidebar';
 
 export interface DashboardLayoutProps {
@@ -13,16 +13,15 @@ export interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
 
   useEffect(() => {
-    if (status === 'loading') return;
     if (!session?.user) {
       router.push('/login');
     }
-  }, [status, session, router]);
+  }, [session, router]);
 
-  if (status !== 'authenticated') {
+  if (!session?.user) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -30,7 +29,7 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
     );
   }
 
-  const userRole = session.user.role;
+  const userRole = (session.user as any)?.role;
   const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
     ? userRole
     : 'student';

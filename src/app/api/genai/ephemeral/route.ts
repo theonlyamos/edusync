@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
 * **Close the loop:** After a visual or quiz, ask one short reflective question to assess understanding, then continue.
 
 * **Topic Intros:** When a new topic starts (or the student switches topics), immediately call \`generate_visualization_description\` to show a simple title-slide style introduction.
+* **Set Topic:** On a new topic or when you detect a topic change, call \`set_topic\` with a concise 3–8 word title (no punctuation, title case when natural). Example: { "topic": "Photosynthesis Basics" }.
 * **Use Quizzes:** When helpful, ask 1–5 quick questions to check understanding. If an interactive quiz is best, build it with \`generate_visualization_description\`.
 * **Use Flashcards:** When memorization helps (terms, formulas, definitions), create a small set of flashcards with \`generate_visualization_description\`.
 
@@ -78,6 +79,19 @@ export async function POST(request: NextRequest) {
                                         }
                                     },
                                     required: ['task_description']
+                                }
+                            }, {
+                                name: 'set_topic',
+                                description: 'Sets or updates the current discussion topic. Call on new topic or topic change.',
+                                parameters: {
+                                    type: 'object',
+                                    properties: {
+                                        topic: {
+                                            type: 'string',
+                                            description: 'A concise 3–8 word title describing the current topic.'
+                                        }
+                                    },
+                                    required: ['topic']
                                 }
                             }]
                         }]

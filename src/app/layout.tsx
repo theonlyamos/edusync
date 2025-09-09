@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { NextAuthProvider } from "../components/providers/NextAuthProvider";
+import { SupabaseAuthProvider } from "../components/providers/SupabaseAuthProvider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -19,10 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <NextAuthProvider>
+        <SupabaseAuthProvider>
           {children}
           <Toaster />
-        </NextAuthProvider>
+        </SupabaseAuthProvider>
       </body>
     </html>
   );

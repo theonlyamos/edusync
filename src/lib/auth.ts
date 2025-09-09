@@ -34,5 +34,3 @@ export async function getServerSession(): Promise<null | { user: { id: string; e
         },
     };
 }
-
-// Removed legacy NextAuthOptions definition to avoid duplicate `authOptions` and next-auth coupling.

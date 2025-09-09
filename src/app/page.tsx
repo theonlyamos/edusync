@@ -12,6 +12,7 @@ import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import dynamic from 'next/dynamic';
 import { Loader2, Mic, Send, StopCircle, X } from 'lucide-react';
+import axios from 'axios';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -42,13 +43,19 @@ function HomeComponent() {
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
   const [generatingVisualization, setGeneratingVisualization] = useState(false);
+  const [topic, setTopic] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   const showOverlay = !voiceActive || (voiceActive && connectionStatus !== 'connected');
 
-  const handleCountdownEnd = () => {
+  const handleCountdownEnd = async () => {
+    if (currentSessionId) {
+      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch {}
+      setCurrentSessionId(null);
+    }
     setVoiceActive(false);
     setMessages([]);
     setCode('');
@@ -56,7 +63,11 @@ function HomeComponent() {
     setError('');
   };
 
-  const handleVoiceStop = () => {
+  const handleVoiceStop = async () => {
+    if (currentSessionId) {
+      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch {}
+      setCurrentSessionId(null);
+    }
     setVoiceActive(false);
     setMessages([]);
     setCode('');
@@ -173,11 +184,34 @@ function HomeComponent() {
         }
         setCode(vizData.code);
         setLibrary(vizData.library);
+        if (currentSessionId) {
+          try {
+            await axios.post('/api/learning/visualizations', {
+              session_id: currentSessionId,
+              library: vizData.library,
+              explanation: vizData.explanation,
+              code: vizData.code,
+              panel_dimensions: panelDimensions,
+              data: null,
+            });
+          } catch {}
+        }
       } catch (e: any) {
         setError(e.message || 'Unknown error');
       } finally {
         setGeneratingVisualization(false);
       }
+    }
+    if (name === 'set_topic') {
+      try {
+        const t = typeof args?.topic === 'string' ? args.topic.trim() : '';
+        if (t) {
+          setTopic(t);
+          if (currentSessionId) {
+            try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t }); } catch {}
+          }
+        }
+      } catch {}
     }
   };
 
@@ -205,6 +239,26 @@ function HomeComponent() {
     }, 1000);
     return () => clearInterval(id);
   }, [connectionStatus, show, code, library]);
+
+  useEffect(() => {
+    if (connectionStatus === 'connected' && voiceActive && !currentSessionId) {
+      (async () => {
+        try {
+          const res = await axios.post('/api/learning/sessions', { session_id: null, session_handle: null, topic });
+          setCurrentSessionId(res.data.id as string);
+        } catch {}
+      })();
+    }
+  }, [connectionStatus, voiceActive, currentSessionId, topic]);
+
+  useEffect(() => {
+    if (connectionStatus === 'disconnected' && currentSessionId) {
+      (async () => {
+        try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'disconnected', ended: true }); } catch {}
+        setCurrentSessionId(null);
+      })();
+    }
+  }, [connectionStatus, currentSessionId]);
 
   return (
     <div className="flex h-screen bg-background">
@@ -396,7 +450,7 @@ function HomeComponent() {
       )}
       
       {voiceActive && connectionStatus === 'connected' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50  border-t lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t lg:hidden">
           <div className="flex flex-col items-center py-3 px-4">
             {/* Audio Visualizer - visualizer only, no audio initialization */}
             <div className="w-full h-8 max-h-12 mb-3" id="mobile-visualizer-container">
@@ -404,7 +458,7 @@ function HomeComponent() {
             </div>
             
             {/* Controls */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4"> 
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <Button
                 type="button"
