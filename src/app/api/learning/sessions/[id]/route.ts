@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const session = await getServerSession()
         if (!session || !session.user) {
@@ -11,6 +11,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
         const body = await request.json().catch(() => ({}))
         const supabase = createServerSupabase()
+
+        const { id } = await params
 
         const updates: any = {}
         if (typeof body.topic === 'string') updates.topic = body.topic
@@ -22,7 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const { data: existing, error: fetchErr } = await supabase
             .from('learning_sessions')
             .select('id, user_id')
-            .eq('id', params.id)
+            .eq('id', id)
             .maybeSingle()
 
         if (fetchErr || !existing) {
@@ -35,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const { error } = await supabase
             .from('learning_sessions')
             .update(updates)
-            .eq('id', params.id)
+            .eq('id', id)
 
         if (error) {
             return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
