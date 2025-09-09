@@ -26,26 +26,26 @@ create index if not exists learning_sessions_user_id_idx on public.learning_sess
 
 alter table public.learning_sessions enable row level security;
 
-create policy if not exists "learning_sessions_select_own"
+create policy "learning_sessions_select_own"
   on public.learning_sessions for select
   to authenticated
-  using (auth.uid() = user_id);
+  using (auth.uid()::uuid = user_id);
 
-create policy if not exists "learning_sessions_insert_own"
+create policy "learning_sessions_insert_own"
   on public.learning_sessions for insert
   to authenticated
-  with check (auth.uid() = user_id);
+  with check (auth.uid()::uuid = user_id);
 
-create policy if not exists "learning_sessions_update_own"
+create policy "learning_sessions_update_own"
   on public.learning_sessions for update
   to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (auth.uid()::uuid = user_id)
+  with check (auth.uid()::uuid = user_id);
 
-create policy if not exists "learning_sessions_delete_own"
+create policy "learning_sessions_delete_own"
   on public.learning_sessions for delete
   to authenticated
-  using (auth.uid() = user_id);
+  using (auth.uid()::uuid = user_id);
 
 drop trigger if exists set_updated_at on public.learning_sessions;
 create trigger set_updated_at
@@ -69,54 +69,54 @@ create index if not exists learning_visualizations_session_id_idx on public.lear
 
 alter table public.learning_visualizations enable row level security;
 
-create policy if not exists "learning_visualizations_select_own"
+create policy "learning_visualizations_select_own"
   on public.learning_visualizations for select
   to authenticated
   using (
     exists (
       select 1
       from public.learning_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
+      where s.id = public.learning_visualizations.session_id and s.user_id = (select auth.uid())::uuid
     )
   );
 
-create policy if not exists "learning_visualizations_insert_own"
+create policy "learning_visualizations_insert_own"
   on public.learning_visualizations for insert
   to authenticated
   with check (
     exists (
       select 1
       from public.learning_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
+      where s.id = public.learning_visualizations.session_id and s.user_id = (select auth.uid())::uuid
     )
   );
 
-create policy if not exists "learning_visualizations_update_own"
+create policy "learning_visualizations_update_own"
   on public.learning_visualizations for update
   to authenticated
   using (
     exists (
       select 1
       from public.learning_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
+      where s.id = public.learning_visualizations.session_id and s.user_id = (select auth.uid())::uuid
     )
   )
   with check (
     exists (
       select 1
       from public.learning_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
+      where s.id = public.learning_visualizations.session_id and s.user_id = (select auth.uid())::uuid
     )
   );
 
-create policy if not exists "learning_visualizations_delete_own"
+create policy "learning_visualizations_delete_own"
   on public.learning_visualizations for delete
   to authenticated
   using (
     exists (
       select 1
       from public.learning_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
+      where s.id = public.learning_visualizations.session_id and s.user_id = (select auth.uid())::uuid
     )
   );
 
