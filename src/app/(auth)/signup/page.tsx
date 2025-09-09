@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
   const supabase = useContext(SupabaseBrowserClientContext);
   const session = useContext(SupabaseSessionContext);
@@ -42,15 +42,59 @@ export default function LoginPage() {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
+    const confirmPassword = formData.get('confirmPassword') as string;
+    const name = formData.get('name') as string;
+
+    if (password !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: 'Error',
+        description: 'Password must be at least 6 characters',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name,
+            role: 'student' // Default role
+          }
+        }
+      });
+
       if (error) throw error;
-      setStatus('authenticated');
+
+      if (data.user && !data.session) {
+        toast({
+          title: 'Check your email',
+          description: 'We sent you a confirmation link to complete your registration.',
+        });
+      } else {
+        toast({
+          title: 'Account created',
+          description: 'Welcome! Your account has been created successfully.',
+        });
+        setStatus('authenticated');
+      }
     } catch (error) {
       toast({
         title: 'Error',
-        description: (error as any)?.message ?? 'An error occurred during login',
+        description: (error as any)?.message ?? 'An error occurred during signup',
         variant: 'destructive',
       });
     } finally {
@@ -60,7 +104,16 @@ export default function LoginPage() {
 
   const handleOAuth = async (provider: 'google') => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+      const { data, error } = await supabase.auth.signInWithOAuth({ 
+        provider, 
+        options: { 
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
+        } 
+      });
       if (error) throw error;
     } catch (error) {
       toast({ title: 'Error', description: (error as any)?.message ?? 'OAuth failed', variant: 'destructive' });
@@ -90,14 +143,26 @@ export default function LoginPage() {
       
       <div className="w-full max-w-md space-y-8 px-4 relative z-10">
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
           <p className="text-sm text-muted-foreground">
-            Sign in to your account
+            Get started with your learning journey
           </p>
         </div>
 
         <div className="backdrop-blur-sm bg-white/70 dark:bg-slate-800/70 p-8 rounded-2xl shadow-xl border border-white/20 dark:border-slate-700/50">
           <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Full Name</Label>
+            <Input
+              id="name"
+              name="name"
+              type="text"
+              placeholder="Enter your full name"
+              required
+              disabled={isLoading}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -116,9 +181,23 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="Create a password"
               required
               disabled={isLoading}
+              minLength={6}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              placeholder="Confirm your password"
+              required
+              disabled={isLoading}
+              minLength={6}
             />
           </div>
 
@@ -129,11 +208,11 @@ export default function LoginPage() {
           >
             {isLoading ? (
               <>
-                <span className="mr-2">Signing in</span>
+                <span className="mr-2">Creating account</span>
                 <div className="w-4 h-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
               </>
             ) : (
-              'Sign in'
+              'Create account'
             )}
           </Button>
 
@@ -155,9 +234,9 @@ export default function LoginPage() {
           </Button>
           
           <div className="text-center text-sm">
-            <span className="text-muted-foreground">Don't have an account? </span>
-            <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up
+            <span className="text-muted-foreground">Already have an account? </span>
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Sign in
             </Link>
           </div>
         </form>
@@ -165,4 +244,4 @@ export default function LoginPage() {
       </div>
     </div>
   );
-} 
+}
