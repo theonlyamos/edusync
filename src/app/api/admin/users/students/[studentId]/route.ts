@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 // Removed legacy Mongo models; using Supabase tables/views
 
 // Supabase payloads returned directly
@@ -12,7 +11,7 @@ export async function GET(
 ) {
     try {
         const { studentId } = await params; // This is the User ID
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -37,7 +36,7 @@ export async function PATCH(
 ) {
     try {
         const { studentId } = await params;
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -107,7 +106,7 @@ export async function DELETE(
 ) {
     try {
         const { studentId } = await params;
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

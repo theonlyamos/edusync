@@ -241,7 +241,7 @@ function HomeComponent() {
   }, [connectionStatus, show, code, library]);
 
   useEffect(() => {
-    if (connectionStatus === 'connected' && voiceActive && !currentSessionId) {
+    if (connectionStatus === 'connected' && voiceActive && currentSessionId) {
       (async () => {
         try {
           const res = await axios.post('/api/learning/sessions', { session_id: null, session_handle: null, topic });

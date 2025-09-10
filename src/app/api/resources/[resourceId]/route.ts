@@ -1,7 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
-import { authOptions } from '@/lib/auth';
 
 export async function GET(
     req: NextRequest,
@@ -10,7 +9,7 @@ export async function GET(
     const { resourceId } = await params;
 
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -40,7 +39,7 @@ export async function DELETE(
     const { resourceId } = await params;
 
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

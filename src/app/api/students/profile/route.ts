@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 // Removed legacy Mongo models; using Supabase view instead
 
 // Using Supabase 'students_view' shape directly
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'student') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

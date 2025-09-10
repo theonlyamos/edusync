@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from '@/lib/auth';
 import OpenAI from 'openai';
-import { authOptions } from '@/lib/auth';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
@@ -10,7 +9,7 @@ const openai = new OpenAI({
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

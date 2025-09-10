@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 
 interface Answer {
     questionId: string;
@@ -17,7 +16,7 @@ interface Question {
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'student') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

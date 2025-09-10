@@ -1,7 +1,6 @@
 import { Server as SocketServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 
 interface CollaborationSession {
   sessionId: string;
@@ -30,7 +29,7 @@ export class CollaborationServer {
 
   private setupSocketHandlers() {
     this.io.on('connection', async (socket) => {
-      const session = await getServerSession(authOptions);
+      const session = await getServerSession();
       if (!session) {
         socket.disconnect();
         return;

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 
@@ -50,7 +49,7 @@ Remember to:
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'student') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

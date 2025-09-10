@@ -1,6 +1,5 @@
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";

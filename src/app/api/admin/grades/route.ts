@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabase';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import { GRADE_LEVELS } from '@/lib/constants';
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }

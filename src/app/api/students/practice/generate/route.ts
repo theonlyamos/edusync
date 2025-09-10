@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from '@/lib/auth';
 import OpenAI from 'openai';
-import { authOptions } from '@/lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
@@ -68,7 +67,7 @@ const generatePracticeSchema = z.object({
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'student') {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }

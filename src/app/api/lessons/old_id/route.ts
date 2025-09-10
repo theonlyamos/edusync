@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getServerSession } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 export async function GET(
@@ -8,7 +7,7 @@ export async function GET(
     { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -37,7 +36,7 @@ export async function PUT(
     { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
@@ -67,7 +66,7 @@ export async function DELETE(
     { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
