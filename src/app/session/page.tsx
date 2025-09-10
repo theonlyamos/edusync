@@ -1,7 +1,7 @@
 // AI-Powered Illustrative Explainer Page
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,8 +10,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import dynamic from 'next/dynamic';
 import { Loader2, Mic, Send, StopCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import SessionLayout from './layout';
+import dynamic from 'next/dynamic';
 import axios from 'axios';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
@@ -23,9 +25,6 @@ type Message = {
   content: string;
 };
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import SessionLayout from './session/layout';
 
 function HomeComponent() {
   const searchParams = useSearchParams();
@@ -332,17 +331,17 @@ function HomeComponent() {
   }, [connectionStatus, currentSessionId]);
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background relative">
       <div className="flex-1 relative">
         <div className="h-full">
           <div className="flex h-full relative">
             {showOverlay && (
-              <div className="fixed inset-0 z-50">
+              <div className="absolute inset-0 z-30">
                 <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />
               </div>
             )}
-            {/* Left Panel - Chat Window - Fixed */}
-            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col fixed left-0 top-0 h-full z-10 bg-background p-6">
+            {/* Left Panel - Chat Window */}
+            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col bg-background p-6">
               <Card className="flex-1 flex flex-col h-full">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
@@ -413,7 +412,7 @@ function HomeComponent() {
             </div>
 
             {/* Right Panel - Preview/Code Editor */}
-            <div className="flex-1 flex flex-col ml-0 lg:ml-[33.333333%] lg:min-w-0 p-6 overflow-y-auto"  ref={vizRef}>
+            <div className="flex-1 flex flex-col ml-0 lg:min-w-0 p-6 overflow-y-auto"  ref={vizRef}>
               {code && library ? (
                 <Card className="flex-1 flex flex-col">
                   <CardHeader>
@@ -563,10 +562,8 @@ function HomeComponent() {
 
 export default function Home() {
   return (
-    <SessionLayout>
       <Suspense fallback={<div>Loading...</div>}>
         <HomeComponent />
       </Suspense>
-    </SessionLayout>
   );
 }

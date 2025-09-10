@@ -17,7 +17,8 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'authenticated' | 'unauthenticated' | 'loading'>(session ? 'authenticated' : 'unauthenticated');
-  const redirectedFrom = searchParams.get('redirectedFrom');
+  const redirectedFromRaw = searchParams.get('redirectedFrom');
+  const redirectedFrom = redirectedFromRaw ? decodeURIComponent(redirectedFromRaw) : null;
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -70,9 +71,7 @@ export default function LoginPage() {
 
   const handleOAuth = async (provider: 'google') => {
     try {
-      const redirectTo = redirectedFrom
-        ? `${window.location.origin}?redirectedFrom=${encodeURIComponent(redirectedFrom)}`
-        : window.location.origin;
+      const redirectTo = `${window.location.origin}/login?redirectedFrom=${encodeURIComponent(redirectedFrom || '/session')}`;
       const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) throw error;
     } catch (error) {

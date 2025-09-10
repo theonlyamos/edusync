@@ -28,9 +28,15 @@ export function SupabaseAuthProvider({ children }: Props) {
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
+    const redirectedFromRaw = url.searchParams.get('redirectedFrom');
+    const redirectedFrom = redirectedFromRaw ? decodeURIComponent(redirectedFromRaw) : null;
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(() => {
         url.searchParams.delete('code');
+        if (redirectedFrom) {
+          window.location.replace(redirectedFrom);
+          return;
+        }
         window.history.replaceState({}, '', url.toString());
       }).catch(() => {});
     }
