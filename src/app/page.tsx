@@ -333,13 +333,13 @@ export default function Home() {
       {/* Demo Section */}
       <section id="demo" className="relative container mx-auto px-4 py-24 overflow-hidden">
         <div className="absolute inset-0 -z-10">
-          <Image
-            src="/hero_image.jpg"
-            alt="AI Learning Demo Background"
-            fill
-            sizes="100vw"
-            className="object-cover saturate-150 contrast-125 brightness-110"
-          />
+           <Image
+             src="/hero_image.jpg"
+             alt="AI Learning Demo Background"
+             fill
+             sizes="100vw"
+             className="object-cover saturate-150 contrast-125 brightness-110 scale-x-[-1]"
+           />
           <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
         </div>
         <div className="text-center mb-16">
