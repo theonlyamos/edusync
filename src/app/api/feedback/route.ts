@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase.server';
+import { getServerSession } from '@/lib/auth';
 
 interface FeedbackData {
     rating: 'positive' | 'neutral' | 'negative';
-    experience?: string;
+    experience: string; // Now required
     improvements?: string;
     wouldRecommend: 'yes' | 'no' | 'maybe';
     trigger: 'manual_stop' | 'connection_reset' | 'error';
@@ -16,12 +17,21 @@ interface FeedbackData {
 
 export async function POST(request: NextRequest) {
     try {
+        // Check authentication
+        const session = await getServerSession();
+        if (!session?.user) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 }
+            );
+        }
+
         const feedback: FeedbackData = await request.json();
 
         // Validate required fields
-        if (!feedback.rating || !feedback.wouldRecommend || !feedback.trigger) {
+        if (!feedback.rating || !feedback.wouldRecommend || !feedback.trigger || !feedback.experience?.trim()) {
             return NextResponse.json(
-                { error: 'Missing required fields: rating, wouldRecommend, or trigger' },
+                { error: 'Missing required fields: rating, wouldRecommend, trigger, or experience' },
                 { status: 400 }
             );
         }
@@ -31,8 +41,9 @@ export async function POST(request: NextRequest) {
 
         // Prepare data for database insertion
         const dbData = {
+            user_id: session.user.id, // Add user_id from session
             rating: feedback.rating,
-            experience: feedback.experience || null,
+            experience: feedback.experience.trim(), // Required field, already validated
             improvements: feedback.improvements || null,
             would_recommend: feedback.wouldRecommend,
             trigger_type: feedback.trigger,

@@ -331,7 +331,13 @@ function HomeComponent() {
   }, [connectionStatus, currentSessionId]);
 
   return (
-    <div className="flex h-screen bg-background relative">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-purple-400/20 to-pink-600/20 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-cyan-400/10 to-blue-600/10 rounded-full blur-3xl"></div>
+      </div>
       <div className="flex-1 relative">
         <div className="h-full">
           <div className="flex h-full relative">
@@ -341,8 +347,8 @@ function HomeComponent() {
               </div>
             )}
             {/* Left Panel - Chat Window */}
-            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col bg-background p-6">
-              <Card className="flex-1 flex flex-col h-full">
+            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col p-6">
+              <Card className="flex-1 flex flex-col h-full backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
                 </CardHeader>
@@ -414,7 +420,7 @@ function HomeComponent() {
             {/* Right Panel - Preview/Code Editor */}
             <div className="flex-1 flex flex-col ml-0 lg:min-w-0 p-6 overflow-y-auto"  ref={vizRef}>
               {code && library ? (
-                <Card className="flex-1 flex flex-col">
+                <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
@@ -484,7 +490,7 @@ function HomeComponent() {
                 </Card>
               ) : (
                 generatingVisualization ? (
-                  <Card className="flex-1 flex flex-col">
+                  <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle>Visualization</CardTitle>
@@ -498,7 +504,7 @@ function HomeComponent() {
                     </CardContent>
                   </Card>
                 ) : (
-                <Card className="flex-1 flex flex-col">
+                <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>Visualization</CardTitle>
@@ -519,14 +525,17 @@ function HomeComponent() {
         </div>
       </div>
       
-      {/* Feedback Form */}
+      {/* Feedback Form - positioned relative to main content only */}
       {showFeedbackForm && feedbackTrigger && (
-        <FeedbackForm
-          isOpen={showFeedbackForm}
-          onClose={handleFeedbackClose}
-          onSubmit={handleFeedbackSubmit}
-          trigger={feedbackTrigger}
-        />
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <FeedbackForm
+            isOpen={showFeedbackForm}
+            onClose={handleFeedbackClose}
+            onSubmit={handleFeedbackSubmit}
+            trigger={feedbackTrigger}
+            noOverlay={true}
+          />
+        </div>
       )}
       
       {voiceActive && connectionStatus === 'connected' && (

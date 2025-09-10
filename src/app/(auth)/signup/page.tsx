@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import Image from 'next/image';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -133,7 +134,17 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+      {/* Header with back to home link */}
+      <header className="absolute top-0 left-0 right-0 z-20 p-6">
+        <Link href="/" className="inline-flex items-center gap-3 group">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+            <Image src="/globe.svg" alt="Insyte logo" width={20} height={20} className="brightness-0 invert" />
+          </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Insyte</span>
+        </Link>
+      </header>
+
       {/* Background decorative elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-full blur-3xl"></div>
@@ -141,7 +152,8 @@ export default function SignupPage() {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-cyan-400/10 to-blue-600/10 rounded-full blur-3xl"></div>
       </div>
       
-      <div className="w-full max-w-md space-y-8 px-4 relative z-10">
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-full max-w-md space-y-8 px-4 relative z-10">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight">Create your account</h1>
           <p className="text-sm text-muted-foreground">
@@ -240,6 +252,7 @@ export default function SignupPage() {
             </Link>
           </div>
         </form>
+        </div>
         </div>
       </div>
     </div>

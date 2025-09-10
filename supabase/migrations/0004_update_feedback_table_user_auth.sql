@@ -1,8 +1,18 @@
--- Create feedback table in Supabase for storing user feedback from voice AI sessions
--- Run this in your Supabase SQL Editor
+-- Migration to update feedback table for user authentication
+-- 1. Add user_id column
+-- 2. Change id from BIGSERIAL to UUID
+-- 3. Make experience field required
+-- 4. Update RLS policies
 
--- Create the feedback table
-CREATE TABLE IF NOT EXISTS public.feedback (
+-- First, drop existing policies
+DROP POLICY IF EXISTS "Allow feedback inserts" ON public.feedback;
+DROP POLICY IF EXISTS "Allow feedback reads for admin" ON public.feedback;
+
+-- Drop existing trigger and function if they exist
+DROP TRIGGER IF EXISTS update_feedback_updated_at ON public.feedback;
+
+-- Create a new feedback table with the correct structure
+CREATE TABLE IF NOT EXISTS public.feedback_new (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- User reference (required for authenticated feedback)
@@ -30,6 +40,17 @@ CREATE TABLE IF NOT EXISTS public.feedback (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Copy existing data from old table to new table (if any exists)
+-- Note: This will only work if there's existing data and we can map it to users
+-- For now, we'll skip copying since we don't have user mapping for existing feedback
+-- INSERT INTO public.feedback_new (rating, experience, improvements, would_recommend, trigger_type, user_agent, timestamp, session_duration_seconds, connection_count, error_message, created_at, updated_at)
+-- SELECT rating, experience, improvements, would_recommend, trigger_type, user_agent, timestamp, session_duration_seconds, connection_count, error_message, created_at, updated_at
+-- FROM public.feedback;
+
+-- Drop the old table and rename the new one
+DROP TABLE IF EXISTS public.feedback;
+ALTER TABLE public.feedback_new RENAME TO feedback;
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON public.feedback(user_id);
@@ -62,8 +83,9 @@ CREATE POLICY "Admins can read all feedback" ON public.feedback
 
 -- Add comments for documentation
 COMMENT ON TABLE public.feedback IS 'Stores user feedback from voice AI sessions including ratings, experiences, and contextual information';
-COMMENT ON COLUMN public.feedback.rating IS 'Overall user rating: positive, neutral, or negative';
+COMMENT ON COLUMN public.feedback.id IS 'Unique UUID identifier for the feedback entry';
 COMMENT ON COLUMN public.feedback.user_id IS 'Reference to the user who submitted the feedback';
+COMMENT ON COLUMN public.feedback.rating IS 'Overall user rating: positive, neutral, or negative';
 COMMENT ON COLUMN public.feedback.experience IS 'Free-form text describing user experience (required)';
 COMMENT ON COLUMN public.feedback.improvements IS 'User suggestions for improvements (optional)';
 COMMENT ON COLUMN public.feedback.would_recommend IS 'Whether user would recommend to others: yes, no, or maybe';
@@ -74,7 +96,7 @@ COMMENT ON COLUMN public.feedback.session_duration_seconds IS 'How long the sess
 COMMENT ON COLUMN public.feedback.connection_count IS 'Number of connection attempts in session (optional)';
 COMMENT ON COLUMN public.feedback.error_message IS 'Error message if trigger was error (optional)';
 
--- Create a function to automatically update the updated_at timestamp
+-- Recreate the function to automatically update the updated_at timestamp
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN

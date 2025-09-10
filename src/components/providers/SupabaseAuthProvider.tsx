@@ -32,12 +32,11 @@ export function SupabaseAuthProvider({ children }: Props) {
     const redirectedFrom = redirectedFromRaw ? decodeURIComponent(redirectedFromRaw) : null;
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(() => {
-        url.searchParams.delete('code');
         if (redirectedFrom) {
           window.location.replace(redirectedFrom);
           return;
         }
-        window.history.replaceState({}, '', url.toString());
+        window.location.replace('/session');
       }).catch(() => {});
     }
   }, [supabase]);
