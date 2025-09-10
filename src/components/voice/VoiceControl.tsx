@@ -148,7 +148,6 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     const checkForContainer = () => {
       const container = document.getElementById('mobile-visualizer-container');
       if (container) {
-        console.log('Mobile visualizer container found');
         setMobileContainer(container);
         return true;
       }

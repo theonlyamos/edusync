@@ -228,7 +228,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         // sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
-                        console.log('Gemini Live session closed:', e.reason, 'Code:', e.code);
                         setConnectionStatus('disconnected');
 
                         // Show feedback form for connection resets (if not manual disconnect)
