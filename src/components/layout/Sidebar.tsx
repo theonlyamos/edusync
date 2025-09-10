@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { signOut } from 'next-auth/react';
-import React, { ReactElement, useState, useEffect } from 'react';
+import React, { ReactElement, useState, useEffect, useContext } from 'react';
+import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAuthProvider';
 import {
   Book,
   GraduationCap,
@@ -180,6 +180,8 @@ interface SidebarProps {
 
 export function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = useContext(SupabaseBrowserClientContext);
   // Sidebar collapse state
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
@@ -316,7 +318,11 @@ export function Sidebar({ role }: SidebarProps) {
           variant="ghost"
           size={collapsed ? 'icon' : 'default'}
           className={cn("w-full text-red-500 hover:bg-red-500 hover:text-white", { "justify-center": collapsed, "justify-start": !collapsed })}
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={async () => {
+            await supabase?.auth.signOut();
+            const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : '';
+            router.replace(`/login${back}`);
+          }}
         >
           {collapsed
             ? <LogOut className="h-8 w-8" />
