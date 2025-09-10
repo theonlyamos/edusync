@@ -1,8 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
-
 export async function POST(request: NextRequest) {
     try {
         const apiKey = process.env.GEMINI_API_KEY;

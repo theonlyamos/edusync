@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
-export const runtime = 'nodejs';
-
 interface FeedbackData {
     rating: 'positive' | 'neutral' | 'negative';
     experience?: string;

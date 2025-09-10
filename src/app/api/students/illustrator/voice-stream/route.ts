@@ -11,8 +11,6 @@ if (typeof global !== 'undefined' && !global.WebSocket) {
     }
 }
 
-export const runtime = 'nodejs';
-
 // In-memory store for active streaming sessions
 const activeSessions = new Map<string, any>();
 let wss: WebSocketServer | null = null;

@@ -14,8 +14,6 @@ if (typeof global !== 'undefined') {
     }
 }
 
-export const runtime = 'nodejs';
-
 // Store active sessions
 const activeSessions = new Map<string, any>();
 

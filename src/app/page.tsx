@@ -11,7 +11,7 @@ import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import dynamic from 'next/dynamic';
-import { Loader2, Mic, Send, StopCircle, X } from 'lucide-react';
+import { Loader2, Mic, Send, StopCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
@@ -35,6 +35,9 @@ function HomeComponent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
+  type Visualization = { code: string; library: 'p5' | 'three' | 'react'; explanation?: string; taskDescription?: string; panelDimensions?: { width: number; height: number } };
+  const [visualizations, setVisualizations] = useState<Visualization[]>([]);
+  const [currentVizIndex, setCurrentVizIndex] = useState<number>(-1);
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
   const [voiceActive, setVoiceActive] = useState(false);
@@ -60,6 +63,8 @@ function HomeComponent() {
     setMessages([]);
     setCode('');
     setLibrary(null);
+    setVisualizations([]);
+    setCurrentVizIndex(-1);
     setError('');
   };
 
@@ -72,6 +77,8 @@ function HomeComponent() {
     setMessages([]);
     setCode('');
     setLibrary(null);
+    setVisualizations([]);
+    setCurrentVizIndex(-1);
     setError('');
   };
 
@@ -137,7 +144,7 @@ function HomeComponent() {
 
     switch (library) {
       case 'react':
-        return <ReactRenderer code={code} />;
+        return <ReactRenderer code={code} onError={handleRendererError} />;
       case 'p5':
       case 'three':
         return <LiveSketch code={code} library={library} />;
@@ -184,6 +191,11 @@ function HomeComponent() {
         }
         setCode(vizData.code);
         setLibrary(vizData.library);
+        setVisualizations(prev => {
+          const next = [...prev, { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: args.task_description, panelDimensions }];
+          setCurrentVizIndex(next.length - 1);
+          return next;
+        });
         if (currentSessionId) {
           try {
             await axios.post('/api/learning/visualizations', {
@@ -213,6 +225,62 @@ function HomeComponent() {
         }
       } catch {}
     }
+  };
+
+  const handleRendererError = async (errMsg: string) => {
+    try {
+      setError(errMsg);
+      if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
+      setGeneratingVisualization(true);
+      const panelElement = vizRef.current;
+      let panelDimensions = { width: 800, height: 600 };
+      if (panelElement) {
+        const rect = panelElement.getBoundingClientRect();
+        panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
+      }
+      const taskDescription = visualizations[currentVizIndex]?.taskDescription;
+      if (!taskDescription) return;
+      const response = await fetch('/api/genai/visualize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_description: taskDescription, panel_dimensions: panelDimensions })
+      });
+      if (!response.ok) throw new Error('Failed to regenerate visualization');
+      const vizData = await response.json();
+      setVisualizations(prev => {
+        const next = [...prev];
+        next[currentVizIndex] = { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription, panelDimensions };
+        return next;
+      });
+      setCode(vizData.code);
+      setLibrary(vizData.library);
+      if (vizData.explanation) {
+        setMessages(prev => [...prev, { role: 'assistant', content: vizData.explanation }]);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to regenerate visualization');
+    } finally {
+      setGeneratingVisualization(false);
+    }
+  };
+
+  const canPrev = currentVizIndex > 0;
+  const canNext = currentVizIndex >= 0 && currentVizIndex < visualizations.length - 1;
+  const goPrev = () => {
+    if (!canPrev) return;
+    const idx = currentVizIndex - 1;
+    setCurrentVizIndex(idx);
+    const v = visualizations[idx];
+    setCode(v.code);
+    setLibrary(v.library);
+  };
+  const goNext = () => {
+    if (!canNext) return;
+    const idx = currentVizIndex + 1;
+    setCurrentVizIndex(idx);
+    const v = visualizations[idx];
+    setCode(v.code);
+    setLibrary(v.library);
   };
 
   useEffect(() => {
@@ -358,6 +426,16 @@ function HomeComponent() {
                             <ToggleGroupItem value="render">Rendering</ToggleGroupItem>
                             <ToggleGroupItem value="code">Code</ToggleGroupItem>
                           </ToggleGroup>
+                        )}
+                        {visualizations.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Button size="icon" variant="outline" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
+                              <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <Button size="icon" variant="outline" onClick={goNext} disabled={!canNext} title="Next visualization">
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>

@@ -36,9 +36,10 @@ import {
 
 interface ReactRendererProps {
   code: string;
+  onError?: (error: string) => void;
 }
 
-export const ReactRenderer: React.FC<ReactRendererProps> = ({ code }) => {
+export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -156,6 +157,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code }) => {
       return ComponentFunction;
     } catch (err: any) {
       setError(err.message || 'Failed to render React component');
+      if (onError) onError(err.message || 'Failed to render React component');
       setIsLoading(false);
       return null;
     }
@@ -195,6 +197,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code }) => {
       </div>
     );
   } catch (renderError: any) {
+    if (onError) onError(renderError.message || 'Render error');
     return (
       <div className="flex items-center justify-center h-64 bg-red-50 rounded-lg border border-red-200">
         <div className="text-center">
