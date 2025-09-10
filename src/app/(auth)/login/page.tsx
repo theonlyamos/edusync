@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,14 +11,20 @@ import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/componen
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useContext(SupabaseBrowserClientContext);
   const session = useContext(SupabaseSessionContext);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<'authenticated' | 'unauthenticated' | 'loading'>(session ? 'authenticated' : 'unauthenticated');
+  const redirectedFrom = searchParams.get('redirectedFrom');
 
   useEffect(() => {
     if (status === 'authenticated') {
+      if (redirectedFrom) {
+        router.replace(redirectedFrom);
+        return;
+      }
       switch (session.user.role) {
         case 'admin':
           router.push('/admin/dashboard');
@@ -33,7 +39,7 @@ export default function LoginPage() {
           router.push('/');
       }
     }
-  }, [session, status, router]);
+  }, [session, status, router, redirectedFrom]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -47,6 +53,10 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       setStatus('authenticated');
+      if (redirectedFrom) {
+        router.replace(redirectedFrom);
+        return;
+      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -60,7 +70,10 @@ export default function LoginPage() {
 
   const handleOAuth = async (provider: 'google') => {
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+      const redirectTo = redirectedFrom
+        ? `${window.location.origin}?redirectedFrom=${encodeURIComponent(redirectedFrom)}`
+        : window.location.origin;
+      const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) throw error;
     } catch (error) {
       toast({ title: 'Error', description: (error as any)?.message ?? 'OAuth failed', variant: 'destructive' });

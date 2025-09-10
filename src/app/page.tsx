@@ -154,6 +154,7 @@ function HomeComponent() {
   };
 
   const handleToolCall = async (name: string, args: any) => {
+
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
       try {
@@ -217,6 +218,7 @@ function HomeComponent() {
     if (name === 'set_topic') {
       try {
         const t = typeof args?.topic === 'string' ? args.topic.trim() : '';
+        console.log('set_topic', t, currentSessionId);
         if (t) {
           setTopic(t);
           if (currentSessionId) {
@@ -309,7 +311,7 @@ function HomeComponent() {
   }, [connectionStatus, show, code, library]);
 
   useEffect(() => {
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId) {
+    if (connectionStatus === 'connected' && voiceActive && !currentSessionId) {
       (async () => {
         try {
           const res = await axios.post('/api/learning/sessions', { session_id: null, session_handle: null, topic });

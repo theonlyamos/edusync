@@ -28,16 +28,11 @@ export function SupabaseAuthProvider({ children }: Props) {
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
-    const redirectedFrom = url.searchParams.get('redirectedFrom');
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(() => {
         url.searchParams.delete('code');
-        url.searchParams.delete('redirectedFrom');
-        const cleanPath = redirectedFrom || url.pathname;
-        window.history.replaceState({}, '', cleanPath);
-      }).catch(() => {
-        // ignore
-      });
+        window.history.replaceState({}, '', url.toString());
+      }).catch(() => {});
     }
   }, [supabase]);
 
