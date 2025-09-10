@@ -528,7 +528,7 @@ function HomeComponent() {
       )}
       
       {voiceActive && connectionStatus === 'connected' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
           <div className="flex flex-col items-center py-3 px-4">
             {/* Audio Visualizer - visualizer only, no audio initialization */}
             <div className="w-full h-8 max-h-12 mb-3" id="mobile-visualizer-container">
