@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+
+export const dynamic = 'force-dynamic';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { useSession } from 'next-auth/react';
 import { Loader2, Plus, FileText, Timer, Award } from 'lucide-react';
 
 interface Assessment {
@@ -44,7 +46,7 @@ interface Assessment {
 export default function AssessmentsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { data: session } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -89,7 +91,7 @@ export default function AssessmentsPage() {
     router.push(`/assessments/${assessmentId}/results`);
   };
 
-  if (loading) {
+  if (!session || loading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">

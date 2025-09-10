@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+
+export const dynamic = 'force-dynamic';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,7 +49,7 @@ const suggestedQuestions = [
 ];
 
 export default function TutorPage() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,12 +65,8 @@ export default function TutorPage() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status === 'unauthenticated' || (status === 'authenticated' && session?.user?.role !== 'student')) {
+    if (!session || (session?.user?.role !== 'student')) {
       router.push('/login');
-      return;
-    }
-
-    if (status !== 'authenticated') {
       return;
     }
 
@@ -108,10 +106,10 @@ export default function TutorPage() {
 
     fetchGradeLevel();
     fetchLessons();
-  }, [session, status, router, toast]);
+  }, [session, router, toast]);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (session) {
       // Fetch chat history
       const fetchChatHistory = async () => {
         try {
@@ -131,7 +129,7 @@ export default function TutorPage() {
 
       fetchChatHistory();
     }
-  }, [status, toast]);
+  }, [session, toast]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -324,7 +322,7 @@ export default function TutorPage() {
     }
   };
 
-  if (status === 'loading') {
+  if (!session) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">

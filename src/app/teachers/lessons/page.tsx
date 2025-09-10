@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+
+export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import {
@@ -27,17 +29,17 @@ interface Lesson {
 }
 
 export default function LessonsPage() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'teacher')) {
+    if (!session || (session?.user?.role !== 'teacher')) {
       router.push('/login');
     }
-  }, [session, status, router]);
+  }, [session, router]);
 
   useEffect(() => {
     fetchLessons();
@@ -56,7 +58,7 @@ export default function LessonsPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
+  if (!session || loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 

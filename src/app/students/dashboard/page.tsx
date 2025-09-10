@@ -1,8 +1,10 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useContext } from 'react';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+
+export const dynamic = 'force-dynamic';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,16 +18,16 @@ import { BookOpen, Brain, MessagesSquare, Trophy, Clock, FileText } from "lucide
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function StudentDashboard() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'student')) {
+    if (!session || (session?.user?.role !== 'student')) {
       router.push('/login');
     }
-  }, [session, status, router]);
+  }, [session, router]);
 
-  if (status === 'loading') {
+  if (!session) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 

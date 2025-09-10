@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
+
+export const dynamic = 'force-dynamic';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +34,7 @@ interface Stats {
 }
 
 export default function AdminDashboard() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
   const { toast } = useToast();
   const [stats, setStats] = useState<Stats>({
@@ -44,49 +46,47 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (!session) {
       router.replace('/login');
       return;
     }
     
-    if (status === 'authenticated') {
-      if (session?.user?.role !== 'admin') {
-        switch (session?.user?.role) {
-          case 'teacher':
-            router.replace('/teachers/dashboard');
-            break;
-          case 'student':
-            router.replace('/students/dashboard');
-            break;
-          default:
-            router.replace('/login');
-        }
-        return;
+    if (session?.user?.role !== 'admin') {
+      switch (session?.user?.role) {
+        case 'teacher':
+          router.replace('/teachers/dashboard');
+          break;
+        case 'student':
+          router.replace('/students/dashboard');
+          break;
+        default:
+          router.replace('/login');
       }
-
-      const fetchStats = async () => {
-        try {
-          const response = await fetch('/api/admin/stats');
-          if (!response.ok) throw new Error('Failed to fetch stats');
-          const data = await response.json();
-          setStats(data);
-        } catch (error) {
-          console.error('Error fetching stats:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to load dashboard statistics',
-            variant: 'destructive',
-          });
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      fetchStats();
+      return;
     }
-  }, [session, status, router, toast]);
 
-  if (status === 'loading' || isLoading) {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch('/api/admin/stats');
+        if (!response.ok) throw new Error('Failed to fetch stats');
+        const data = await response.json();
+        setStats(data);
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load dashboard statistics',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [session, router, toast]);
+
+  if (!session || isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -96,7 +96,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
+  if (session?.user?.role !== 'admin') {
     return null;
   }
 

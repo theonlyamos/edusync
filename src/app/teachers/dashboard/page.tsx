@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+
+export const dynamic = 'force-dynamic';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,18 +18,18 @@ import { BookOpen, FileText, Library } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function TeacherDashboard() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (!session) {
       router.replace('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'teacher') {
+    } else if (session?.user?.role !== 'teacher') {
       router.replace('/students/dashboard');
     }
-  }, [session, status, router]);
+  }, [session, router]);
 
-  if (status === 'loading') {
+  if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -38,7 +40,7 @@ export default function TeacherDashboard() {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'teacher') {
+  if (session?.user?.role !== 'teacher') {
     return null;
   }
 
