@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/componen
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useContext(SupabaseBrowserClientContext);
@@ -204,4 +204,19 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen overflow-x-hidden flex items-center justify-center bg-gradient-to-b from-background to-muted/20">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </main>
+    }>
+      <LoginContent />
+    </Suspense>
+  )
 } 

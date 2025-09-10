@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Mic, Zap, Code2, Sparkles, Play, ArrowRight, Volume2, Eye, MessageSquare, Sun, Moon } from 'lucide-react'
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
   
@@ -682,6 +682,21 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen overflow-x-hidden flex items-center justify-center bg-gradient-to-b from-background to-muted/20">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </main>
+    }>
+      <HomeContent />
+    </Suspense>
   )
 }
 
