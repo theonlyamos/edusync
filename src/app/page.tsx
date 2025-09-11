@@ -47,9 +47,9 @@ function HomeContent() {
         <div className="container mx-auto flex h-20 items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-              <Image src="/globe.svg" alt="Insyte logo" width={20} height={20} className="brightness-0 invert" />
+              <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
             </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Insyte</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
           </div>
           
           <nav className="hidden gap-8 lg:flex text-sm font-medium">
@@ -110,7 +110,7 @@ function HomeContent() {
         <div className="grid gap-8 py-20 md:grid-cols-2 md:gap-12">
           <div className="flex flex-col justify-center space-y-6">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-gradient-to-r from-indigo-500/10 to-violet-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200/50">
+              <Badge variant="secondary" className="bg-gradient-to-r from-indigo-500/10 to-violet-500/10 text-indigo-900 dark:text-indigo-100 border-indigo-200/50">
                 <Sparkles className="w-3 h-3 mr-1" />
                 AI-Powered Learning
               </Badge>
@@ -312,19 +312,19 @@ function HomeContent() {
         {/* Learning benefits showcase */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-950/20 dark:to-violet-950/20">
-            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">Instant</div>
+            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">Instant</div>
             <div className="text-sm text-muted-foreground">Get immediate visual explanations for any concept</div>
           </div>
           <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-violet-50 to-cyan-50 dark:from-violet-950/20 dark:to-cyan-950/20">
-            <div className="text-2xl font-bold text-violet-600 dark:text-violet-400 mb-2">Adaptive</div>
+            <div className="text-2xl font-bold text-violet-700 dark:text-violet-300 mb-2">Adaptive</div>
             <div className="text-sm text-muted-foreground">AI adjusts to your learning style and pace</div>
           </div>
           <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-cyan-50 to-indigo-50 dark:from-cyan-950/20 dark:to-indigo-950/20">
-            <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400 mb-2">Engaging</div>
+            <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 mb-2">Engaging</div>
             <div className="text-sm text-muted-foreground">Interactive content keeps you focused and motivated</div>
           </div>
           <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-950/20 dark:to-violet-950/20">
-            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">Effective</div>
+            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">Effective</div>
             <div className="text-sm text-muted-foreground">Visual learning improves comprehension and retention</div>
           </div>
         </div>
@@ -367,7 +367,7 @@ function HomeContent() {
               <div className="space-y-4">
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">1</span>
+                    <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">1</span>
                   </div>
                   <div>
                     <h4 className="font-semibold">Start a voice session</h4>
@@ -376,7 +376,7 @@ function HomeContent() {
                 </div>
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-violet-600 dark:text-violet-400">2</span>
+                    <span className="text-sm font-semibold text-violet-800 dark:text-violet-200">2</span>
                   </div>
                   <div>
                     <h4 className="font-semibold">Ask questions naturally</h4>
@@ -385,7 +385,7 @@ function HomeContent() {
                 </div>
                 <div className="flex gap-4">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-cyan-600 dark:text-cyan-400">3</span>
+                    <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">3</span>
                   </div>
                   <div>
                     <h4 className="font-semibold">Get visual explanations</h4>
@@ -482,7 +482,7 @@ function HomeContent() {
                   <div>• Interactive visualizations</div>
                   <div>• Progress tracking</div>
                 </div>
-                <div className="flex items-center gap-2 mt-6 text-indigo-600 dark:text-indigo-400 font-medium">
+                <div className="flex items-center gap-2 mt-6 text-indigo-700 dark:text-indigo-300 font-medium">
                   Start learning now
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </div>
@@ -552,7 +552,7 @@ function HomeContent() {
             <CardContent className="p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-100 to-violet-100 dark:from-indigo-900/50 dark:to-violet-900/50 px-4 py-2 rounded-full mb-6">
                 <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Free to start</span>
+                <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">Free to start</span>
               </div>
               
               <h3 className="text-3xl font-bold mb-4">Start free, upgrade when you grow</h3>
@@ -577,15 +577,15 @@ function HomeContent() {
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-1">✨</div>
+                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-1">✨</div>
                   <div className="text-sm text-muted-foreground">No credit card required</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-violet-600 dark:text-violet-400 mb-1">🚀</div>
+                  <div className="text-2xl font-bold text-violet-700 dark:text-violet-300 mb-1">🚀</div>
                   <div className="text-sm text-muted-foreground">Instant setup in seconds</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400 mb-1">🎯</div>
+                  <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 mb-1">🎯</div>
                   <div className="text-sm text-muted-foreground">Works in any browser</div>
                 </div>
               </div>
@@ -601,9 +601,9 @@ function HomeContent() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-                  <Image src="/globe.svg" alt="Insyte logo" width={20} height={20} className="brightness-0 invert" />
+                  <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
                 </div>
-                <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Insyte</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Transforming education through AI-powered visual learning experiences that make complex concepts simple and engaging.
@@ -671,7 +671,7 @@ function HomeContent() {
           {/* Bottom Section */}
           <div className="border-t pt-8 mt-12 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} Insyte. All rights reserved. Powered by AI for visual learning.
+              © {new Date().getFullYear()} InsyteAI. All rights reserved. Powered by AI for visual learning.
             </div>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
               <span>Privacy</span>

@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Insyte - AI Visual Learning Platform | Interactive Education with Voice & Visualizations",
+  title: "InsyteAI - AI Visual Learning Platform | Interactive Education with Voice & Visualizations",
   description: "Transform learning with AI-powered visual explanations, interactive demos, and voice-guided education. Get personalized tutoring with real-time visualizations, quizzes, and collaborative tools for students and teachers.",
 };
 

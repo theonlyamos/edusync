@@ -112,9 +112,9 @@ function LoginContent() {
       <header className="absolute top-0 left-0 right-0 z-20 p-6">
         <Link href="/" className="inline-flex items-center gap-3 group">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-            <Image src="/globe.svg" alt="Insyte logo" width={20} height={20} className="brightness-0 invert" />
+            <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
           </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Insyte</span>
+          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
         </Link>
       </header>
 
