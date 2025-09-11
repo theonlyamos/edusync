@@ -10,7 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Mic, Send, StopCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Mic, Send, StopCircle, X, ChevronLeft, ChevronRight, Coins, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import SessionLayout from './layout';
 import dynamic from 'next/dynamic';
@@ -48,6 +48,9 @@ function HomeComponent() {
   const [generatingVisualization, setGeneratingVisualization] = useState(false);
   const [topic, setTopic] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number>(0);
+  const [showCreditWarning, setShowCreditWarning] = useState(false);
+  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -69,6 +72,12 @@ function HomeComponent() {
   };
 
   const handleVoiceStop = async () => {
+    // Clear credit deduction interval
+    if (creditDeductionInterval) {
+      clearInterval(creditDeductionInterval);
+      setCreditDeductionInterval(null);
+    }
+
     if (currentSessionId) {
       try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch {}
       setCurrentSessionId(null);
@@ -80,6 +89,7 @@ function HomeComponent() {
     setVisualizations([]);
     setCurrentVizIndex(-1);
     setError('');
+    setShowCreditWarning(false);
   };
 
   const handleFeedbackFormChange = (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
@@ -330,6 +340,79 @@ function HomeComponent() {
     }
   }, [connectionStatus, currentSessionId]);
 
+  // Fetch initial credits
+  useEffect(() => {
+    const fetchCredits = async () => {
+      try {
+        const response = await axios.get('/api/credits/status');
+        setCredits(response.data.credits);
+      } catch (error) {
+        console.error('Failed to fetch credits:', error);
+      }
+    };
+    fetchCredits();
+  }, []);
+
+  // Start credit deduction when voice becomes active and connected
+  useEffect(() => {
+    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
+      // Check if user has enough credits to start
+      if (credits < 1) {
+        setShowCreditWarning(true);
+        handleVoiceStop();
+        return;
+      }
+
+      // Start deducting credits every minute
+      const interval = setInterval(async () => {
+        try {
+          const response = await axios.post('/api/credits/deduct-minute', {
+            sessionId: currentSessionId
+          });
+
+          if (response.data.success) {
+            const newCredits = response.data.remainingCredits;
+            setCredits(newCredits);
+            
+            // Dispatch credit update event for layout
+            window.dispatchEvent(new CustomEvent('creditUpdate', { 
+              detail: { credits: newCredits } 
+            }));
+
+            // Show warning if credits are low
+            if (newCredits <= 5 && newCredits > 0) {
+              setShowCreditWarning(true);
+              setTimeout(() => setShowCreditWarning(false), 5000);
+            }
+
+            // Stop session if no credits left
+            if (newCredits <= 0) {
+              setError('Session ended: No credits remaining');
+              handleVoiceStop();
+            }
+          } else {
+            setError('Session ended: ' + response.data.error);
+            handleVoiceStop();
+          }
+        } catch (error: any) {
+          console.error('Failed to deduct credits:', error);
+          if (error.response?.status === 402) {
+            setError('Session ended: Insufficient credits');
+            handleVoiceStop();
+          }
+        }
+      }, 60000); // Every minute
+
+      setCreditDeductionInterval(interval);
+    }
+
+    // Cleanup interval when voice stops or disconnects
+    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
+      clearInterval(creditDeductionInterval);
+      setCreditDeductionInterval(null);
+    }
+  }, [connectionStatus, voiceActive, currentSessionId, credits, creditDeductionInterval]);
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
       {/* Background decorative elements */}
@@ -525,6 +608,35 @@ function HomeComponent() {
         </div>
       </div>
       
+      {/* Credit Warning */}
+      {showCreditWarning && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 shadow-lg max-w-md">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <div>
+                <p className="text-sm font-medium text-yellow-800">
+                  {credits <= 0 ? 'No credits remaining!' : `Only ${credits} credits left!`}
+                </p>
+                <p className="text-xs text-yellow-600 mt-1">
+                  {credits <= 0 
+                    ? 'Purchase credits to continue learning.' 
+                    : `≈ ${credits} minutes of AI time remaining`
+                  }
+                </p>
+              </div>
+              <Button 
+                size="sm" 
+                onClick={() => window.open('/session/credits', '_blank')}
+                className="ml-auto"
+              >
+                Buy Credits
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Feedback Form - positioned relative to main content only */}
       {showFeedbackForm && feedbackTrigger && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

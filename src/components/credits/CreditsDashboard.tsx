@@ -20,10 +20,10 @@ interface CreditStatus {
 }
 
 const CREDIT_PACKAGES = [
-  { credits: 100, price: 9.99, popular: false },
-  { credits: 500, price: 39.99, popular: true },
-  { credits: 1200, price: 79.99, popular: false },
-  { credits: 3000, price: 149.99, popular: false },
+  { credits: 100, price: 10.00, popular: false },
+  { credits: 500, price: 50.00, popular: true },
+  { credits: 1200, price: 120.00, popular: false },
+  { credits: 3000, price: 300.00, popular: false },
 ]
 
 export function CreditsDashboard() {
@@ -71,7 +71,7 @@ export function CreditsDashboard() {
 
   const formatPrice = (price: number) => `$${price.toFixed(2)}`
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString()
-  const getPricePerCredit = (credits: number, price: number) => (price / credits).toFixed(3)
+  const getPricePerCredit = () => '$0.10' // Fixed price per credit
 
   if (loading) return <div className="flex items-center justify-center p-8">Loading credits information...</div>
 
@@ -110,7 +110,7 @@ export function CreditsDashboard() {
       {/* Quick Purchase Options */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
         {CREDIT_PACKAGES.map((pkg, index) => {
-          const pricePerCredit = getPricePerCredit(pkg.credits, pkg.price)
+          const pricePerCredit = getPricePerCredit()
           
           return (
             <Card key={index} className={pkg.popular ? 'ring-2 ring-primary' : ''}>
@@ -151,19 +151,21 @@ export function CreditsDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-3 max-w-md">
+          <div className="flex gap-3 max-w-lg">
             <Input
               type="number"
               placeholder="Enter credits (min 10)"
               value={customCredits}
               onChange={(e) => setCustomCredits(e.target.value)}
               min="10"
+              className="flex-1"
             />
             <Button 
               onClick={handleCustomPurchase}
               disabled={purchasing || !customCredits || parseInt(customCredits) < 10}
+              className="whitespace-nowrap min-w-[120px]"
             >
-              Buy for ${((parseInt(customCredits) || 0) * 0.10).toFixed(2)}
+              Buy ${((parseInt(customCredits) || 0) * 0.10).toFixed(2)}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">

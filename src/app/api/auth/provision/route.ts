@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         if (!existing) {
             const { error: insertError } = await supabaseAdmin
                 .from('users')
-                .insert({ id, email, name, image, role: 'student', credits: 100 })
+                .insert({ id, email, name, image, role: 'student', credits: 60 })
             if (insertError) throw insertError
 
             // Initialize credits for new user

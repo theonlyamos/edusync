@@ -2,12 +2,12 @@
 -- Add credit fields to users table and create related tables
 
 -- Add credit fields to users table
-ALTER TABLE users ADD COLUMN IF NOT EXISTS credits integer DEFAULT 100;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credits integer DEFAULT 60;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS total_credits_purchased integer DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS total_credits_used integer DEFAULT 0;
 
--- Update existing users to have 100 credits if they have less
-UPDATE users SET credits = 100 WHERE credits < 100 OR credits IS NULL;
+-- Update existing users to have 60 credits if they have less
+UPDATE users SET credits = 60 WHERE credits < 60 OR credits IS NULL;
 
 -- Create credit transactions table
 CREATE TABLE IF NOT EXISTS credit_transactions (
@@ -45,12 +45,12 @@ INSERT INTO credit_transactions (user_id, transaction_type, credits, description
 SELECT 
     id,
     'bonus',
-    100,
-    'Welcome bonus - 100 free credits'
+    60,
+    'Welcome bonus - 60 free credits'
 FROM users 
 WHERE id NOT IN (
     SELECT DISTINCT user_id 
     FROM credit_transactions 
     WHERE transaction_type = 'bonus' 
-    AND description = 'Welcome bonus - 100 free credits'
+    AND description = 'Welcome bonus - 60 free credits'
 );

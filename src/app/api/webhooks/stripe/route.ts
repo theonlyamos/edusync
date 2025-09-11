@@ -7,10 +7,39 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: '2025-08-27.basil',
 })
 
+// Disable body parsing for webhook signature verification
+export const config = {
+    api: {
+        bodyParser: false,
+    },
+}
+
 export async function POST(request: NextRequest) {
-    const body = await request.text()
-    const headersList = await headers()
-    const signature = headersList.get('stripe-signature')!
+    let body: string
+    let signature: string
+
+    try {
+        // Get raw body as text
+        body = await request.text()
+
+        // Get signature from headers
+        const headersList = await headers()
+        signature = headersList.get('stripe-signature') || ''
+
+        if (!signature) {
+            console.error('No Stripe signature found in headers')
+            return NextResponse.json({ error: 'No signature found' }, { status: 400 })
+        }
+
+        console.log('Webhook received:', {
+            bodyLength: body.length,
+            hasSignature: !!signature,
+            signatureStart: signature.substring(0, 10) + '...'
+        })
+    } catch (error) {
+        console.error('Error parsing webhook request:', error)
+        return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+    }
 
     let event: Stripe.Event
 

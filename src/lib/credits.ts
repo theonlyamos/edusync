@@ -27,7 +27,7 @@ export async function deductCreditsForMinute(
     try {
         const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('credits')
+            .select('credits, total_credits_used')
             .eq('id', userId)
             .single()
 
@@ -48,7 +48,7 @@ export async function deductCreditsForMinute(
             .from('users')
             .update({
                 credits: newCredits,
-                total_credits_used: supabase.raw('total_credits_used + 1')
+                total_credits_used: (userData.total_credits_used || 0) + 1
             })
             .eq('id', userId)
 
@@ -83,7 +83,7 @@ export async function addCredits(
     try {
         const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('credits')
+            .select('credits, total_credits_purchased')
             .eq('id', userId)
             .single()
 
@@ -95,7 +95,7 @@ export async function addCredits(
         const updateData: any = { credits: newTotal }
 
         if (type === 'purchase') {
-            updateData.total_credits_purchased = supabase.raw('total_credits_purchased + ?', [credits])
+            updateData.total_credits_purchased = (userData.total_credits_purchased || 0) + credits
         }
 
         const { error: updateError } = await supabase
@@ -104,6 +104,7 @@ export async function addCredits(
             .eq('id', userId)
 
         if (updateError) {
+            console.error('Error updating credits:', updateError)
             return { success: false, newTotal: userData.credits, error: 'Failed to update credits' }
         }
 
@@ -135,7 +136,7 @@ export async function getCreditHistory(userId: string, limit: number = 50) {
     return { data: data || [], error }
 }
 
-// Initialize new users with 100 free credits (called during signup)
+// Initialize new users with 60 free credits (called during signup)
 export async function initializeUserCredits(userId: string) {
     const supabase = createServerSupabase()
 
@@ -146,19 +147,19 @@ export async function initializeUserCredits(userId: string) {
         .eq('id', userId)
         .single()
 
-    if (userData && userData.credits >= 100) {
+    if (userData && userData.credits >= 60) {
         return // Already initialized
     }
 
     await supabase
         .from('users')
-        .update({ credits: 100 })
+        .update({ credits: 60 })
         .eq('id', userId)
 
     await supabase.from('credit_transactions').insert({
         user_id: userId,
         transaction_type: 'bonus',
-        credits: 100,
-        description: 'Welcome bonus - 100 free credits'
+        credits: 60,
+        description: 'Welcome bonus - 60 free credits'
     })
 }

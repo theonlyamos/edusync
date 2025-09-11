@@ -1,6 +1,6 @@
 import { CreditsDashboard } from '@/components/credits/CreditsDashboard'
 
-export default function CreditsPage() {
+export default function SessionCreditsPage() {
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8">

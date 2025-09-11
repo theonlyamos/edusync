@@ -4,7 +4,9 @@ import { useContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, LogOut, Sun, Moon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play } from 'lucide-react'
+import Link from 'next/link'
+import axios from 'axios'
 
 export default function SessionLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -13,12 +15,46 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   const session = useContext(SupabaseSessionContext)
   const [collapsed, setCollapsed] = useState(true)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+  const [credits, setCredits] = useState<number>(0)
+  const [loadingCredits, setLoadingCredits] = useState(true)
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
     const initial = (saved === 'light' || saved === 'dark') ? (saved as 'light' | 'dark') : 'dark'
     setTheme(initial)
     document.documentElement.classList.toggle('dark', initial === 'dark')
+  }, [])
+
+  // Fetch credits on mount and set up refresh interval
+  useEffect(() => {
+    const fetchCredits = async () => {
+      try {
+        const response = await axios.get('/api/credits/status')
+        setCredits(response.data.credits)
+      } catch (error) {
+        console.error('Failed to fetch credits:', error)
+      } finally {
+        setLoadingCredits(false)
+      }
+    }
+
+    if (session?.user) {
+      fetchCredits()
+      
+      // Refresh credits every 30 seconds
+      const interval = setInterval(fetchCredits, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [session?.user])
+
+  // Listen for credit updates from other components
+  useEffect(() => {
+    const handleCreditUpdate = (event: CustomEvent) => {
+      setCredits(event.detail.credits)
+    }
+
+    window.addEventListener('creditUpdate', handleCreditUpdate as EventListener)
+    return () => window.removeEventListener('creditUpdate', handleCreditUpdate as EventListener)
   }, [])
 
   const toggleTheme = () => {
@@ -40,6 +76,71 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
             <span className="text-sm font-medium truncate max-w-[8rem]">{displayName}</span>
           )}
         </div>
+        
+        {/* Credits Display */}
+        <div className="px-4 pb-2">
+          {collapsed ? (
+            <Link href="/session/credits">
+              <div className="flex items-center justify-center p-2 rounded-md hover:bg-muted/50 transition-colors">
+                <Coins className="w-5 h-5 text-yellow-500" />
+              </div>
+            </Link>
+          ) : (
+            <Link href="/session/credits" className="block">
+              <div className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors border">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-500" />
+                  <span className="text-sm font-medium">
+                    {loadingCredits ? '...' : credits}
+                  </span>
+                </div>
+                {credits < 10 && (
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                )}
+              </div>
+            </Link>
+          )}
+          {!collapsed && (
+            <div className="mt-2">
+              <Link href="/session/credits">
+                <Button size="sm" variant="outline" className="w-full">
+                  <Plus className="w-3 h-3 mr-1" />
+                  Buy Credits
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+        
+        {/* Divider */}
+        <div className="px-4 py-3">
+          <div className="border-t border-gray-200 dark:border-gray-700"></div>
+        </div>
+        
+        {/* New Session Button */}
+        <div className="px-4 pb-4">
+          {collapsed ? (
+            <Button
+              size="icon"
+              variant="outline"
+              className="w-full"
+              onClick={() => router.push('/session')}
+              title="Start New Session"
+            >
+              <Play className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/session')}
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start New Session
+            </Button>
+          )}
+        </div>
+        
         <div className="mt-auto">
           <div className="p-4 flex items-center justify-center">
             <button

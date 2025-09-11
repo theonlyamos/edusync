@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, Coins, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
-export default function CreditsSuccessPage() {
+function SessionCreditsSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -56,7 +56,7 @@ export default function CreditsSuccessPage() {
               We couldn't verify your payment session.
             </p>
             <Button asChild>
-              <Link href="/credits">Back to Credits</Link>
+              <Link href="/session/credits">Back to Credits</Link>
             </Button>
           </CardContent>
         </Card>
@@ -107,7 +107,7 @@ export default function CreditsSuccessPage() {
             </Button>
             
             <Button variant="outline" asChild className="w-full">
-              <Link href="/credits">View Credit History</Link>
+              <Link href="/session/credits">View Credit History</Link>
             </Button>
           </div>
 
@@ -118,5 +118,22 @@ export default function CreditsSuccessPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function SessionCreditsSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="text-center p-8">
+            <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading payment confirmation...</p>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <SessionCreditsSuccessContent />
+    </Suspense>
   )
 }
