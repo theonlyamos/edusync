@@ -57,6 +57,7 @@
     "reactflow": "^11.11.4",
     "recharts": "^3.1.2",
     "socket.io": "^4.8.1",
+    "stripe": "^18.5.0",
     "tailwind-merge": "^2.5.5",
     "three": "^0.172.0",
     "utf-8-validate": "^6.0.5",
