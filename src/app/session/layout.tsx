@@ -61,9 +61,6 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     if (session?.user) {
       fetchCredits()
       fetchHistory()
-      
-      const creditInterval = setInterval(fetchCredits, 30000)
-      return () => clearInterval(creditInterval)
     }
   }, [session?.user])
 
