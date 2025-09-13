@@ -1,7 +1,7 @@
 // AI-Powered Illustrative Explainer Page
 'use client';
 
-import { useEffect, useRef, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -91,6 +91,35 @@ function HomeComponent() {
     setError('');
     setShowCreditWarning(false);
   };
+
+  // Function to reset session state
+  const resetSessionState = useCallback(() => {
+    // Stop any active voice session
+    if (voiceActive) {
+      handleVoiceStop();
+    }
+    
+    // Reset all session-related state
+    setMessages([]);
+    setCode('');
+    setLibrary(null);
+    setVisualizations([]);
+    setCurrentVizIndex(-1);
+    setError('');
+    setInput('');
+    setTopic(null);
+    setCurrentSessionId(null);
+    setShowFeedbackForm(false);
+    setFeedbackTrigger(null);
+    setGeneratingVisualization(false);
+    setShowCreditWarning(false);
+    
+    // Clear any intervals
+    if (creditDeductionInterval) {
+      clearInterval(creditDeductionInterval);
+      setCreditDeductionInterval(null);
+    }
+  }, [voiceActive, handleVoiceStop, creditDeductionInterval]);
 
   const handleFeedbackFormChange = (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -352,6 +381,16 @@ function HomeComponent() {
     };
     fetchCredits();
   }, []);
+
+  // Listen for reset session events
+  useEffect(() => {
+    const handleResetSession = () => {
+      resetSessionState();
+    };
+
+    window.addEventListener('resetSession', handleResetSession);
+    return () => window.removeEventListener('resetSession', handleResetSession);
+  }, [resetSessionState]);
 
   // Start credit deduction when voice becomes active and connected
   useEffect(() => {

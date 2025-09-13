@@ -49,11 +49,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
-    // Session resumption - commented out for feedback collection
-    // const sessionResumptionHandleRef = useRef<string | null>(null);
-    // const isResumingSessionRef = useRef<boolean>(false);
+    // Session resumption
+    const sessionResumptionHandleRef = useRef<string | null>(null);
+    const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
-    // const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -81,11 +81,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             geminiLiveSessionRef.current = null;
         }
 
-        // Clear reconnect timeout - commented out for feedback collection
-        // if (reconnectTimeoutRef.current) {
-        //     clearTimeout(reconnectTimeoutRef.current);
-        //     reconnectTimeoutRef.current = null;
-        // }
+        // Clear reconnect timeout
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
     }, []);
 
     // Function to handle stopping the stream
@@ -101,15 +101,15 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         setFeedbackTrigger('manual_stop');
         setShowFeedbackForm(true);
 
-        // Clear resumption handle when manually stopping - commented out for feedback collection
-        // sessionResumptionHandleRef.current = null;
-        // isResumingSessionRef.current = false;
+        // Clear resumption handle when manually stopping
+        sessionResumptionHandleRef.current = null;
+        isResumingSessionRef.current = false;
 
-        // Clear reconnect timeout - commented out for feedback collection
-        // if (reconnectTimeoutRef.current) {
-        //     clearTimeout(reconnectTimeoutRef.current);
-        //     reconnectTimeoutRef.current = null;
-        // }
+        // Clear reconnect timeout
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
 
         // Close the Gemini Live session if it exists
         if (geminiLiveSessionRef.current) {
@@ -202,14 +202,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const connectConfig: any = {
                 model: 'models/gemini-live-2.5-flash-preview',
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
-                // Session resumption commented out for feedback collection
-                // config: sessionResumptionHandleRef.current ? {
-                //     sessionResumption: { handle: sessionResumptionHandleRef.current }
-                // } : undefined,
+                // Session resumption
+                config: sessionResumptionHandleRef.current ? {
+                    sessionResumption: { handle: sessionResumptionHandleRef.current }
+                } : undefined,
                 callbacks: {
                     onopen: () => {
                         setConnectionStatus('connected');
-                        // isResumingSessionRef.current = false; // commented out for feedback collection
+                        isResumingSessionRef.current = false;
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
@@ -220,43 +220,31 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
 
-                        // Show feedback form for errors
-                        setFeedbackTrigger('error');
-                        setShowFeedbackForm(true);
-
-                        // Clear resumption handle on error - commented out for feedback collection
-                        // sessionResumptionHandleRef.current = null;
+                        // Don't show feedback form for errors - let auto-resume handle it
+                        // Clear resumption handle on error
+                        sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
                         setConnectionStatus('disconnected');
 
-                        // Show feedback form for connection resets (if not manual disconnect)
-                        if (!isManualDisconnectRef.current && isStreamingRef.current) {
-                            setFeedbackTrigger('connection_reset');
-                            setShowFeedbackForm(true);
-                        }
+                        // Don't show feedback form for connection resets - let auto-resume handle it
 
-                        // Session resumption commented out for feedback collection
-                        // if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
-                        //     console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
-                        //     isResumingSessionRef.current = true;
-                        //     // Delay resumption slightly to avoid immediate reconnection
-                        //     reconnectTimeoutRef.current = setTimeout(() => {
-                        //         if (isStreamingRef.current && !isManualDisconnectRef.current) {
-                        //             startGeminiLiveSession(streamRef.current!, 16000);
-                        //         }
-                        //     }, 1000);
-                        // }
+                        // Session resumption - auto resume unless manual disconnect
+                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
+                            console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
+                            isResumingSessionRef.current = true;
+                            // Delay resumption slightly to avoid immediate reconnection
+                            reconnectTimeoutRef.current = setTimeout(() => {
+                                if (isStreamingRef.current && !isManualDisconnectRef.current) {
+                                    startGeminiLiveSession(streamRef.current!, 16000);
+                                }
+                            }, 1000);
+                        }
                     }
                 }
             };
 
-            // Session resumption config commented out for feedback collection
-            // if (sessionResumptionHandleRef.current) {
-            //     connectConfig.config = {
-            //         sessionResumption: { handle: sessionResumptionHandleRef.current }
-            //     };
-            // }
+            // Session resumption config is already set above in connectConfig
 
             const geminiSession = await ai.live.connect(connectConfig);
 
@@ -306,9 +294,9 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             source.connect(workletNode);
             processorRef.current = workletNode;
 
-            // Session resumption initial message commented out for feedback collection
-            // const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
-            geminiSession.sendRealtimeInput({ text: 'Hello' });
+            // Session resumption initial message
+            const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+            geminiSession.sendRealtimeInput({ text: initialMessage });
 
         } catch (error: any) {
             console.error('Failed to start Gemini Live session:', error);
@@ -323,15 +311,15 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         while (responseQueue.length > 0) {
             const message = responseQueue.shift();
 
-            // Handle session resumption updates - commented out for feedback collection
-            // if ((message as any)?.sessionResumptionUpdate) {
-            //     const update = (message as any).sessionResumptionUpdate;
-            //     if (update.resumable && update.newHandle) {
-            //         console.log('Received new session resumption handle:', update.newHandle);
-            //         sessionResumptionHandleRef.current = update.newHandle;
-            //     }
-            //     continue;
-            // }
+            // Handle session resumption updates
+            if ((message as any)?.sessionResumptionUpdate) {
+                const update = (message as any).sessionResumptionUpdate;
+                if (update.resumable && update.newHandle) {
+                    console.log('Received new session resumption handle:', update.newHandle);
+                    sessionResumptionHandleRef.current = update.newHandle;
+                }
+                continue;
+            }
 
             // Handle GoAway messages
             if ((message as any)?.goAway) {

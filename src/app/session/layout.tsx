@@ -91,6 +91,16 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     }
   };
 
+  const handleNewSession = () => {
+    if (pathname === '/session') {
+      // If already on session page, dispatch event to reset session state
+      window.dispatchEvent(new CustomEvent('resetSession'));
+    } else {
+      // Navigate to session page
+      router.push('/session');
+    }
+  };
+
   const avatarUrl = session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || '/next.svg'
   const displayName = session?.user?.user_metadata?.name || session?.user?.email || 'User'
 
@@ -109,7 +119,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               className="w-full"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push('/session');
+                handleNewSession();
               }}
               title="New Chat"
             >
@@ -120,7 +130,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                <Button
                 variant="outline"
                 className="justify-start flex-grow"
-                onClick={() => router.push('/session')}
+                onClick={handleNewSession}
               >
                 <MessageSquarePlus className="w-4 h-4 mr-2" />
                 New Session

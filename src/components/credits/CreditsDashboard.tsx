@@ -17,6 +17,13 @@ interface CreditStatus {
     transaction_type: string
     created_at: string
   }>
+  usageByTopic: Array<{
+    topic: string
+    totalCredits: number
+    totalMinutes: number
+    sessionCount: number
+    lastUsed: string
+  }>
 }
 
 const CREDIT_PACKAGES = [
@@ -174,38 +181,40 @@ export function CreditsDashboard() {
         </CardContent>
       </Card>
 
-      {/* Recent Transactions */}
+      {/* Usage by Topic */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            Recent Activity
+            <TrendingUp className="w-5 h-5" />
+            Usage by Topic
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {status?.recentTransactions?.length ? (
-              status.recentTransactions.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div>
-                    <div className="font-medium">{transaction.description}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDate(transaction.created_at)}
+            {status?.usageByTopic?.length ? (
+              status.usageByTopic.map((usage, index) => (
+                <div key={index} className="flex items-center justify-between py-3 border-b last:border-0">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm mb-1">{usage.topic}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {usage.sessionCount} session{usage.sessionCount !== 1 ? 's' : ''} • Last used: {formatDate(usage.lastUsed)}
                     </div>
                   </div>
-                  <div className={`font-bold ${transaction.credits > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {transaction.credits > 0 ? '+' : ''}{transaction.credits}
+                  <div className="text-right">
+                    <div className="font-bold text-red-600">-{usage.totalCredits} credits</div>
+                    <div className="text-xs text-muted-foreground">{usage.totalMinutes} minutes</div>
                   </div>
                 </div>
               ))
             ) : (
               <div className="text-center text-muted-foreground py-8">
-                No recent transactions
+                No usage data yet. Start a session to see your learning topics!
               </div>
             )}
           </div>
         </CardContent>
       </Card>
+
 
       {/* Usage Insights */}
       <Card>

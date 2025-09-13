@@ -136,6 +136,58 @@ export async function getCreditHistory(userId: string, limit: number = 50) {
     return { data: data || [], error }
 }
 
+export async function getCreditUsageByTopic(userId: string) {
+    const supabase = createServerSupabase()
+
+    const { data, error } = await supabase
+        .from('credit_transactions')
+        .select(`
+            credits,
+            created_at,
+            learning_sessions!inner(topic)
+        `)
+        .eq('user_id', userId)
+        .eq('transaction_type', 'usage')
+        .not('learning_sessions.topic', 'is', null)
+        .order('created_at', { ascending: false })
+
+    if (error) {
+        console.error('Error fetching credit usage by topic:', error)
+        return { data: [], error }
+    }
+
+    // Aggregate by topic
+    const aggregated = (data || []).reduce((acc: any, transaction: any) => {
+        const topic = transaction.learning_sessions?.topic || 'Unknown Topic'
+
+        if (!acc[topic]) {
+            acc[topic] = {
+                topic,
+                totalCredits: 0,
+                totalMinutes: 0,
+                sessionCount: 0,
+                lastUsed: transaction.created_at
+            }
+        }
+
+        acc[topic].totalCredits += Math.abs(transaction.credits)
+        acc[topic].totalMinutes += Math.abs(transaction.credits) // 1 credit = 1 minute
+        acc[topic].sessionCount += 1
+
+        // Keep the most recent date
+        if (new Date(transaction.created_at) > new Date(acc[topic].lastUsed)) {
+            acc[topic].lastUsed = transaction.created_at
+        }
+
+        return acc
+    }, {})
+
+    // Convert to array and sort by total credits used (descending)
+    const aggregatedArray = Object.values(aggregated).sort((a: any, b: any) => b.totalCredits - a.totalCredits)
+
+    return { data: aggregatedArray, error: null }
+}
+
 // Initialize new users with 60 free credits (called during signup)
 export async function initializeUserCredits(userId: string) {
     const supabase = createServerSupabase()
