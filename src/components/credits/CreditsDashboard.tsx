@@ -192,7 +192,9 @@ export function CreditsDashboard() {
         <CardContent>
           <div className="space-y-3">
             {status?.usageByTopic?.length ? (
-              status.usageByTopic.map((usage, index) => (
+              status.usageByTopic
+                .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
+                .map((usage, index) => (
                 <div key={index} className="flex items-center justify-between py-3 border-b last:border-0">
                   <div className="flex-1">
                     <div className="font-medium text-sm mb-1">{usage.topic}</div>
