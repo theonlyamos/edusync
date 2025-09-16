@@ -1,4 +1,3 @@
-// AI-Powered Illustrative Explainer Page
 'use client';
 
 import { useEffect, useRef, useState, Suspense, useCallback } from 'react';
@@ -10,9 +9,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Mic, Send, StopCircle, X, ChevronLeft, ChevronRight, Coins, AlertTriangle } from 'lucide-react';
+import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import SessionLayout from './layout';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 

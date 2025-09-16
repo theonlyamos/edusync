@@ -1,10 +1,9 @@
-import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
-    baseURL: process.env.GROQ_BASE_URL,
-    apiKey: process.env.GROQ_API_KEY,
+    baseURL: process.env.CEREBRAS_BASE_URL,
+    apiKey: process.env.CEREBRAS_API_KEY,
 });
 
 const SYSTEM_PROMPT = `You are an expert in creating educational visualizations. Your task is to generate code and explanations for visual aids based on a given task description.
@@ -74,6 +73,16 @@ When you write the code snippet, you **must** follow these rules:
 * Keep state minimal (e.g., \`currentIndex\`, \`isFlipped\`); handle bounds and empty decks gracefully.
 * Name the main component \`App\` or \`InteractiveComponent\` to comply with naming rules.
 
+### Map Generation (React)
+* Display the map when discussing geographical topics.
+* Use the \`'react'\` library with \`React.createElement()\` (no JSX).
+* Use the \`@googlemaps/js-api-loader\` library to generate a map.
+* The \`Loader\` component is already imported. Do not import it again.
+* Use \`process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY\` as the API key for the loader.
+* Name the main component \`App\` or \`InteractiveComponent\` to comply with naming rules.
+* **CRITICAL:** You **MUST** use \`React.createElement()\` syntax. **NEVER** use JSX tags (e.g., \`<Card>\`).
+
+### Example react code
 * **\`React.createElement()\` Example with correct naming:**
    \`\`\`javascript
    function App() {
@@ -138,7 +147,7 @@ export async function POST(request: NextRequest) {
         const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo;
 
         const completion = await openai.chat.completions.create({
-            model: process.env.GROQ_MODEL as string,
+            model: process.env.CEREBRAS_MODEL as string,
             messages: [
                 { role: 'system', content: systemPromptWithDimensions },
                 { role: 'user', content: task_description }

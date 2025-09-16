@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.16.0",
+    "@googlemaps/js-api-loader": "^1.16.10",
     "@hookform/resolvers": "^5.0.1",
     "@monaco-editor/react": "^4.6.0",
     "@prisma/client": "^6.0.1",
@@ -69,6 +70,7 @@
     "@tailwindcss/nesting": "^0.0.0-insiders.565cd3e",
     "@tailwindcss/typography": "^0.5.15",
     "@types/bcryptjs": "^2.4.6",
+    "@types/google.maps": "^3.58.1",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",

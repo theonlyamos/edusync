@@ -26,6 +26,34 @@ interface AudioStreamingActions {
     submitFeedback: (feedback: any) => Promise<void>;
 }
 
+const systemPrompt = `You are a friendly, knowledgeable, and creative AI teacher for learners of all ages and levels. Your goal is to teach concepts clearly, encourage curiosity, and adapt your explanations to the learner's background. You are a visual-first teacher who uses illustrations, interactive demos, and short quizzes to help ideas click.
+
+### Your Behavior
+
+* **Be Conversational:** Explain concepts and answer questions in a clear, encouraging tone. Ask brief check-in questions to gauge understanding and adjust difficulty.
+* **Recognize Opportunities:** Notice when a visual or a quick quiz will make the concept clearer.
+* **Generate Visuals:** Use the \`generate_visualization_description\` tool to create a task description for a visual aid. This description will be used to generate the actual visual.
+
+### Proactive Visual Teaching Strategy
+
+* **Proactive, not reactive:** Do not ask if you should show a visual, demo, flashcards, or a quiz—just decide and call \`generate_visualization_description\`.
+* **Cycle through modalities:** As you teach, rotate across: illustration/diagram → interactive demo → flashcards → quick quiz → brief recap. Adapt this sequence to the topic and the learner's progress.
+* **Cadence:** Aim to present at least one visual aid every 2–3 exchanges, and more frequently at the start of a new subtopic.
+* **Topic changes:** On new topics, immediately show a title-slide style introduction via \`generate_visualization_description\`.
+* **Keep it lightweight:** Prefer small, instantly runnable visuals.
+* **Close the loop:** After a visual or quiz, ask one short reflective question to assess understanding, then continue.
+
+* **Topic Intros:** When a new topic starts (or the student switches topics), immediately call \`generate_visualization_description\` to show a simple title-slide style introduction.
+* **Set Topic:** On a new topic or when you detect a topic change, call \`set_topic\` with a concise 3–8 word title (no punctuation, title case when natural). Example: { "topic": "Photosynthesis Basics" }.
+* **Use Quizzes:** When helpful, ask 1–5 quick questions to check understanding. If an interactive quiz is best, build it with \`generate_visualization_description\`.
+* **Use Flashcards:** When memorization helps (terms, formulas, definitions), create a small set of flashcards with \`generate_visualization_description\`.
+
+### Explanation Rules
+
+* Adapt to the learner's level (beginner to advanced) and avoid unnecessary jargon.
+* Keep the focus on the core idea and how the visual/quiz builds intuition.
+`;
+
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -203,9 +231,49 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 model: 'models/gemini-live-2.5-flash-preview',
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
                 // Session resumption
-                config: sessionResumptionHandleRef.current ? {
-                    sessionResumption: { handle: sessionResumptionHandleRef.current }
-                } : undefined,
+                config: {
+                    responseModalities: ['AUDIO'],
+                    systemInstruction: systemPrompt,
+                    speechConfig: {
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+                    },
+                    // Session resumption and context window compression commented out for feedback collection
+                    contextWindowCompression: {
+                        slidingWindow: {}
+                    },
+                    sessionResumption: {
+                        handle: sessionResumptionHandleRef.current || undefined
+                    },
+                    tools: [{
+                        functionDeclarations: [{
+                            name: 'generate_visualization_description',
+                            description: "Generates a detailed description of the visual aid to be created.",
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    task_description: {
+                                        type: 'string',
+                                        description: "A detailed description of the visual aid to be generated. This should include all the necessary information for another AI to create the visual."
+                                    }
+                                },
+                                required: ['task_description']
+                            }
+                        }, {
+                            name: 'set_topic',
+                            description: 'Sets or updates the current discussion topic. Call on new topic or topic change.',
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    topic: {
+                                        type: 'string',
+                                        description: 'A concise 3–8 word title describing the current topic.'
+                                    }
+                                },
+                                required: ['topic']
+                            }
+                        }]
+                    }]
+                },
                 callbacks: {
                     onopen: () => {
                         setConnectionStatus('connected');
@@ -225,20 +293,19 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
-                        setConnectionStatus('disconnected');
-
-                        // Don't show feedback form for connection resets - let auto-resume handle it
-
                         // Session resumption - auto resume unless manual disconnect
                         if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
                             console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
                             isResumingSessionRef.current = true;
+                            startGeminiLiveSession(streamRef.current!, 16000);
                             // Delay resumption slightly to avoid immediate reconnection
-                            reconnectTimeoutRef.current = setTimeout(() => {
-                                if (isStreamingRef.current && !isManualDisconnectRef.current) {
-                                    startGeminiLiveSession(streamRef.current!, 16000);
-                                }
-                            }, 1000);
+                            // reconnectTimeoutRef.current = setTimeout(() => {
+                            //     if (isStreamingRef.current && !isManualDisconnectRef.current) {
+                            //     }
+                            // }, 1000);
+                        }
+                        else {
+                            setConnectionStatus('disconnected');
                         }
                     }
                 }

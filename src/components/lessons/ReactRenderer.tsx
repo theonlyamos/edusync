@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +33,7 @@ import {
   RadialBar, 
   RadialBarChart 
 } from 'recharts';
+import { Loader } from '@googlemaps/js-api-loader'
 
 interface ReactRendererProps {
   code: string;
@@ -55,6 +56,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         'useEffect',
         'useMemo',
         'useCallback',
+        'useRef',
         'Button',
         'Input',
         'Card',
@@ -93,6 +95,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         'Scatter',
         'RadialBar',
         'RadialBarChart',
+        'Loader',
+        'process',
         `
         ${code}
         
@@ -113,6 +117,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         useEffect,
         useMemo,
         React.useCallback,
+        useRef,
         Button,
         Input,
         Card,
@@ -150,7 +155,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         Cell,
         Scatter,
         RadialBar,
-        RadialBarChart
+        RadialBarChart,
+        Loader,
+        process
       );
 
       setIsLoading(false);
