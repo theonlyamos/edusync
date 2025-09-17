@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SupabaseAuthProvider } from "../components/providers/SupabaseAuthProvider";
-import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Analytics } from '@vercel/analytics/next';
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
         <SupabaseAuthProvider>
           {children}
           <Toaster />
+          <Analytics />
         </SupabaseAuthProvider>
       </body>
     </html>
