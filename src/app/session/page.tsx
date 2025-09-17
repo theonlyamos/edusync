@@ -9,7 +9,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
@@ -49,6 +49,7 @@ function HomeComponent() {
   const [credits, setCredits] = useState<number>(0);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
   const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
+  const [showChatPanel, setShowChatPanel] = useState(true);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -460,14 +461,14 @@ function HomeComponent() {
       </div>
       <div className="flex-1 relative">
         <div className="h-full">
-          <div className="flex h-full relative">
+          <div className={`flex h-full relative ${showChatPanel ? '' : 'chat-hidden'}`}> 
             {showOverlay && (
               <div className="absolute inset-0 z-30">
                 <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />
               </div>
             )}
             {/* Left Panel - Chat Window */}
-            <div className="hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col p-6">
+            <div className="chat-panel hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col p-6 transition-[width,opacity,margin,padding] duration-300">
               <Card className="flex-1 flex flex-col h-full backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
@@ -543,7 +544,28 @@ function HomeComponent() {
                 <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
+                      <div className="flex items-center gap-2">
+                        {/* Chat Panel Toggle - Only show on large screens */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowChatPanel((v) => !v);
+                          }}
+                          title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
+                          className="hidden lg:flex"
+                        >
+                          {showChatPanel ? (
+                            <PanelLeftClose className="w-4 h-4" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4" />
+                          )}
+                        </Button>
+                        <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
+                      </div>
                       <div className="flex items-center gap-2">
                         {debugMode && (
                           <ToggleGroup
@@ -613,7 +635,30 @@ function HomeComponent() {
                   <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle>Visualization</CardTitle>
+                        <div className="flex items-center gap-2">
+                          {/* Chat Panel Toggle - Only show on large screens */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setShowChatPanel((v) => !v);
+                            }}
+                            title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
+                            className="hidden lg:flex"
+                          >
+                            {showChatPanel ? (
+                              <PanelLeftClose className="w-4 h-4" />
+                            ) : (
+                              <MessageSquare className="w-4 h-4" />
+                            )}
+                          </Button>
+                          <CardTitle>Visualization</CardTitle>
+                        </div>
+                        <div className="flex items-center gap-2">
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="flex-1 flex flex-col items-center justify-center">
@@ -627,8 +672,30 @@ function HomeComponent() {
                 <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>Visualization</CardTitle>
-                      
+                      <div className="flex items-center gap-2">
+                        {/* Chat Panel Toggle - Only show on large screens */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowChatPanel((v) => !v);
+                          }}
+                          title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
+                          className="hidden lg:flex"
+                        >
+                          {showChatPanel ? (
+                            <PanelLeftClose className="w-4 h-4" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4" />
+                          )}
+                        </Button>
+                        <CardTitle>Visualization</CardTitle>
+                      </div>
+                      <div className="flex items-center gap-2">
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 flex items-center justify-center">
@@ -688,7 +755,7 @@ function HomeComponent() {
       )}
       
       {voiceActive && connectionStatus === 'connected' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
+        <div className={`fixed bottom-0 left-0 right-0 z-50 ${showChatPanel ? 'lg:hidden' : ''}`}>
           <div className="flex flex-col items-center py-3 px-4">
             {/* Audio Visualizer - visualizer only, no audio initialization */}
             <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">

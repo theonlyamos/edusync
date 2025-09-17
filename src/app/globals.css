@@ -121,3 +121,18 @@
 .pulse-orb {
   animation: pulse-orb 2s infinite ease-in-out;
 }
+
+/* Chat panel CSS-only toggle behavior */
+.chat-hidden .chat-panel {
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-hidden .chat-panel > * {
+  opacity: 0;
+}

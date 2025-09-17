@@ -257,7 +257,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
       
       {/* Mobile/tablet visualizer via portal - shows when bottom panel is visible */}
       {mobileContainer && createPortal(
-        <div className="w-full h-full lg:hidden">
+        <div className="w-full h-full">
           <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
         </div>,
         mobileContainer
