@@ -49,7 +49,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
     const fetchHistory = async () => {
       try {
-        const response = await axios.get('/api/sessions')
+        const response = await axios.get('/api/sessions?limit=8')
         setSessionHistory(response.data)
       } catch (error) {
         console.error('Failed to fetch session history:', error)

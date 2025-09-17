@@ -250,7 +250,7 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
       {/* Desktop component - always render for status management, but hide on mobile */}
       <div className="flex flex-col gap-2 w-full">
         <div className="hidden lg:block">{statusBadge}</div>
-        <div className="w-full h-12 sm:h-16 hidden lg:block">
+        <div className="w-full max-w-md h-12 sm:h-16 hidden lg:block">
           <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
         </div>
       </div>

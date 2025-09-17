@@ -7,15 +7,18 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession()
 
   if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const { searchParams } = new URL(request.url)
+  const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit') as string) : 50
 
   const { data: sessions, error } = await supabase
     .from('learning_sessions')
     .select('id, created_at, topic')
     .eq('user_id', session.user.id)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(limit)
 
   if (error) {
     console.error('Failed to fetch learning sessions:', error)

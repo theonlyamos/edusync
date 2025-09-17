@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, useCallback } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback, useMemo } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -176,7 +176,44 @@ function HomeComponent() {
     }
   };
 
-  const renderVisualization = () => {
+  const handleRendererError = useCallback(async (errMsg: string) => {
+    try {
+      setError(errMsg);
+      if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
+      setGeneratingVisualization(true);
+      const panelElement = vizRef.current;
+      let panelDimensions = { width: 800, height: 600 };
+      if (panelElement) {
+        const rect = panelElement.getBoundingClientRect();
+        panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
+      }
+      const taskDescription = visualizations[currentVizIndex]?.taskDescription;
+      if (!taskDescription) return;
+      const response = await fetch('/api/genai/visualize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_description: taskDescription, panel_dimensions: panelDimensions })
+      });
+      if (!response.ok) throw new Error('Failed to regenerate visualization');
+      const vizData = await response.json();
+      setVisualizations(prev => {
+        const next = [...prev];
+        next[currentVizIndex] = { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription, panelDimensions };
+        return next;
+      });
+      setCode(vizData.code);
+      setLibrary(vizData.library);
+      if (vizData.explanation) {
+        setMessages(prev => [...prev, { role: 'assistant', content: vizData.explanation }]);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to regenerate visualization');
+    } finally {
+      setGeneratingVisualization(false);
+    }
+  }, [currentVizIndex, visualizations]);
+
+  const renderVisualization = useMemo(() => {
     if (!code || !library) return null;
 
     switch (library) {
@@ -188,7 +225,7 @@ function HomeComponent() {
       default:
         return null;
     }
-  };
+  }, [code, library, handleRendererError]);
 
   const handleToolCall = async (name: string, args: any) => {
 
@@ -263,43 +300,6 @@ function HomeComponent() {
           }
         }
       } catch {}
-    }
-  };
-
-  const handleRendererError = async (errMsg: string) => {
-    try {
-      setError(errMsg);
-      if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
-      setGeneratingVisualization(true);
-      const panelElement = vizRef.current;
-      let panelDimensions = { width: 800, height: 600 };
-      if (panelElement) {
-        const rect = panelElement.getBoundingClientRect();
-        panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
-      }
-      const taskDescription = visualizations[currentVizIndex]?.taskDescription;
-      if (!taskDescription) return;
-      const response = await fetch('/api/genai/visualize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_description: taskDescription, panel_dimensions: panelDimensions })
-      });
-      if (!response.ok) throw new Error('Failed to regenerate visualization');
-      const vizData = await response.json();
-      setVisualizations(prev => {
-        const next = [...prev];
-        next[currentVizIndex] = { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription, panelDimensions };
-        return next;
-      });
-      setCode(vizData.code);
-      setLibrary(vizData.library);
-      if (vizData.explanation) {
-        setMessages(prev => [...prev, { role: 'assistant', content: vizData.explanation }]);
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to regenerate visualization');
-    } finally {
-      setGeneratingVisualization(false);
     }
   };
 
@@ -573,7 +573,7 @@ function HomeComponent() {
                       {show === 'render' && (
                         !generatingVisualization ? (
                         <div className="h-full">
-                          {renderVisualization()}
+                          {renderVisualization}
                         </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center">
@@ -691,7 +691,7 @@ function HomeComponent() {
         <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
           <div className="flex flex-col items-center py-3 px-4">
             {/* Audio Visualizer - visualizer only, no audio initialization */}
-            <div className="w-full h-8 max-h-12 mb-3" id="mobile-visualizer-container">
+            <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">
               {/* Visualizer will be rendered here by the main VoiceControl */}
             </div>
             

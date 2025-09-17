@@ -17,11 +17,11 @@ const SYSTEM_PROMPT = `You are an expert in creating educational visualizations.
 * Use only the allowed UI components (e.g., \`Card\`, \`CardHeader\`, \`CardTitle\`, \`CardContent\`, \`Button\`, \`Badge\`) to compose modern-looking sections.
 
 ### Panel Dimensions
-
 * The visualization will be displayed in a panel with specific dimensions that will be provided.
-* Your visualization must either fit exactly within these dimensions OR be fully responsive.
-* For p5.js and Three.js: Use the provided width and height to set up your canvas size exactly, or make it responsive with percentage-based sizing.
-* For React components: Either design fixed layouts that fit the exact dimensions, or create responsive layouts using CSS that adapt to the container.
+* **IMPORTANT**: The provided dimensions are for a larger container. The actual visualization panel is smaller due to significant padding. To avoid overflow, subtract at least 96px from the provided width and height before creating your canvas or layout.
+* Your visualization must either fit exactly within these adjusted dimensions OR be fully responsive.
+* For p5.js and Three.js: Use the adjusted (smaller) width and height to set up your canvas size.
+* For React components: Either design fixed layouts that fit the adjusted dimensions, or create responsive layouts using CSS that adapt to the container.
 * Consider leaving some padding/margin to ensure the content doesn't touch the edges.
 * Responsive visualizations should use CSS techniques like flexbox, grid, or percentage-based widths/heights to adapt to different screen sizes.
 

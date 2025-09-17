@@ -39,9 +39,13 @@ export const LiveSketch: React.FC<LiveSketchProps> = ({ code, library }: LiveSke
       overflow: hidden; 
       background: #fff; 
       font-family: Arial, sans-serif;
+      width: 100vw;
+      height: 100vh;
     }
     canvas { 
       display: block; 
+      max-width: 100%;
+      max-height: 100%;
     }
   </style>
 </head>
@@ -113,7 +117,7 @@ export const LiveSketch: React.FC<LiveSketchProps> = ({ code, library }: LiveSke
       <iframe
         ref={iframeRef}
         title="Live Sketch Preview"
-        className="w-full h-[350px] border border-gray-200 rounded bg-white"
+        className="w-full h-full min-h-[400px] border border-gray-200 rounded bg-white"
         sandbox="allow-scripts allow-same-origin"
         style={{ display: isLoading || error ? 'none' : 'block' }}
       />

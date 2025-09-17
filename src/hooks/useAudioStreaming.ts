@@ -294,15 +294,19 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     },
                     onclose: (e: CloseEvent) => {
                         // Session resumption - auto resume unless manual disconnect
-                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current) {
-                            console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
-                            isResumingSessionRef.current = true;
-                            startGeminiLiveSession(streamRef.current!, 16000);
+                        console.log(e)
+                        console.log(sessionResumptionHandleRef.current)
+                        console.log(isStreamingRef.current)
+                        console.log(!isResumingSessionRef.current)
+                        console.log(!isManualDisconnectRef.current)
+                        console.log(sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current)
+                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
                             // Delay resumption slightly to avoid immediate reconnection
-                            // reconnectTimeoutRef.current = setTimeout(() => {
-                            //     if (isStreamingRef.current && !isManualDisconnectRef.current) {
-                            //     }
-                            // }, 1000);
+                            reconnectTimeoutRef.current = setTimeout(() => {
+                                console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
+                                isResumingSessionRef.current = true;
+                                startGeminiLiveSession(streamRef.current!, 16000);
+                            }, 1000);
                         }
                         else {
                             setConnectionStatus('disconnected');
