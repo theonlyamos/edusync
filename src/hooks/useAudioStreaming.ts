@@ -264,36 +264,38 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     sessionResumption: {
                         handle: sessionResumptionHandleRef.current || undefined
                     },
-                    tools: [{
-                        googleSearch: {},
-                        functionDeclarations: [{
-                            name: 'generate_visualization_description',
-                            description: "Generates a detailed description of the visual aid to be created.",
-                            parameters: {
-                                type: 'object',
-                                properties: {
-                                    task_description: {
-                                        type: 'string',
-                                        description: "A detailed description of the visual aid to be generated. This should include all the necessary information for another AI to create the visual."
-                                    }
-                                },
-                                required: ['task_description']
-                            }
-                        }, {
-                            name: 'set_topic',
-                            description: 'Sets or updates the current discussion topic. Call on new topic or topic change.',
-                            parameters: {
-                                type: 'object',
-                                properties: {
-                                    topic: {
-                                        type: 'string',
-                                        description: 'A concise 3–8 word title describing the current topic.'
-                                    }
-                                },
-                                required: ['topic']
-                            }
-                        }]
-                    }]
+                    tools: [
+                        { googleSearch: {} },
+                        {
+                            functionDeclarations: [{
+                                name: 'generate_visualization_description',
+                                description: "Generates a detailed description of the visual aid to be created.",
+                                parameters: {
+                                    type: 'object',
+                                    properties: {
+                                        task_description: {
+                                            type: 'string',
+                                            description: "A detailed description of the visual aid to be generated. This should include all the necessary information for another AI to create the visual."
+                                        }
+                                    },
+                                    required: ['task_description']
+                                }
+                            }, {
+                                name: 'set_topic',
+                                description: 'Sets or updates the current discussion topic. Call on new topic or topic change.',
+                                parameters: {
+                                    type: 'object',
+                                    properties: {
+                                        topic: {
+                                            type: 'string',
+                                            description: 'A concise 3–8 word title describing the current topic.'
+                                        }
+                                    },
+                                    required: ['topic']
+                                }
+                            }]
+                        }
+                    ]
                 },
                 callbacks: {
                     onopen: () => {
