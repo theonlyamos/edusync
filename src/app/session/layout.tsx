@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, MessageSquarePlus, Search, Library } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, MessageSquarePlus, Search, Library, Menu, X } from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
 
@@ -26,6 +26,8 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   const [loadingCredits, setLoadingCredits] = useState(true)
   const [sessionHistory, setSessionHistory] = useState<SessionHistoryItem[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMenuAnimating, setMobileMenuAnimating] = useState(false)
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
@@ -101,13 +103,29 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     }
   };
 
+  const openMobileMenu = () => {
+    setMobileMenuOpen(true);
+    // Use requestAnimationFrame to ensure DOM is rendered before animation starts
+    requestAnimationFrame(() => {
+      setMobileMenuAnimating(true);
+    });
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuAnimating(false);
+    setTimeout(() => {
+      setMobileMenuOpen(false);
+    }, 300); // Match the animation duration
+  };
+
   const avatarUrl = session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || '/next.svg'
   const displayName = session?.user?.user_metadata?.name || session?.user?.email || 'User'
 
   return (
     <div className="flex h-screen bg-background">
+      {/* Desktop Sidebar */}
       <aside 
-        className={`border-r bg-card transition-all duration-300 ${collapsed ? 'w-20 hover:cursor-pointer' : 'w-64'} flex flex-col shadow-lg z-20`}
+        className={`hidden lg:flex border-r bg-card transition-all duration-300 ${collapsed ? 'w-20 hover:cursor-pointer' : 'w-64'} flex-col shadow-lg z-20`}
         onClick={handleSidebarClick}
       >
         {/* Header */}
@@ -268,7 +286,159 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           </div>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto">
+
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-background border-b border-border">
+        <div className="flex items-center justify-between p-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={openMobileMenu}
+            className="mr-3"
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+          
+          <div className="flex items-center gap-3 flex-1">
+            <Link href="/session/credits" className="flex items-center gap-2 text-sm">
+              <Coins className="w-4 h-4 text-yellow-500" />
+              <span className="font-medium">{loadingCredits ? '...' : credits}</span>
+            </Link>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="ml-auto"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className={`lg:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ease-in-out ${
+            mobileMenuAnimating ? 'opacity-100' : 'opacity-0'
+          }`}
+          onClick={closeMobileMenu}
+        >
+          <div 
+            className={`fixed left-0 top-0 h-full w-80 bg-card border-r shadow-xl transform transition-transform duration-300 ease-in-out ${
+              mobileMenuAnimating ? 'translate-x-0' : '-translate-x-full'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={avatarUrl} 
+                    alt="avatar" 
+                    referrerPolicy="no-referrer" 
+                    crossOrigin="anonymous" 
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/next.svg' }} 
+                    className="w-8 h-8 rounded-full object-cover" 
+                  />
+                  <span className="text-lg font-semibold">{displayName}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={closeMobileMenu}
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="p-4 flex-grow overflow-y-auto">
+              {/* New Session Button */}
+              <div className="mb-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    handleNewSession();
+                    closeMobileMenu();
+                  }}
+                >
+                  <MessageSquarePlus className="w-4 h-4 mr-2" />
+                  New Session
+                </Button>
+              </div>
+
+              {/* Credits Section */}
+              <div className="mb-6">
+                <Link href="/session/credits" className="block mb-2" onClick={closeMobileMenu}>
+                  <div className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors border">
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-yellow-500" />
+                      <span className="text-sm font-medium">
+                        {loadingCredits ? '...' : `${credits} Credits`}
+                      </span>
+                    </div>
+                    {credits < 10 && (
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                </Link>
+                <Link href="/session/credits" onClick={closeMobileMenu}>
+                  <Button size="sm" variant="outline" className="w-full">
+                    <Plus className="w-3 h-3 mr-1" />
+                    Buy Credits
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Session History */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-2">Sessions</h3>
+                <div className="space-y-1">
+                  {loadingHistory ? (
+                    [...Array(5)].map((_, i) => (
+                      <div key={i} className="h-8 rounded-md bg-muted animate-pulse" />
+                    ))
+                  ) : (
+                    sessionHistory.map(s => (
+                      <Link 
+                        key={s.id} 
+                        href={`/session/${s.id}`} 
+                        title={s.topic || 'Chat'}
+                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                        onClick={closeMobileMenu}
+                      >
+                        {s.topic || 'New Session'}
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Logout Button */}
+              <div className="border-t border-border pt-4">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-red-500 hover:bg-red-500 hover:text-white"
+                  onClick={async () => {
+                    await supabase?.auth.signOut()
+                    const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
+                    router.replace(`/login${back}`)
+                  }}
+                >
+                  <LogOut className="h-5 w-5 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto lg:ml-0 pt-16 lg:pt-0">
         {children}
       </main>
     </div>
