@@ -89,7 +89,27 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         processorRef.current?.disconnect();
         processorRef.current = null;
 
-        // Close the AudioContext if it exists and is not already closed
+        // Clean up analyser
+        if (analyserRef.current) {
+            try {
+                analyserRef.current.disconnect();
+            } catch (e) {
+                // Ignore disconnect errors during cleanup
+            }
+            analyserRef.current = null;
+        }
+
+        // Close the playback AudioContext if it exists and is not already closed
+        if (playbackCtxRef.current?.state !== 'closed') {
+            try {
+                playbackCtxRef.current?.close();
+            } catch (e) {
+                console.warn('Failed to close playback context:', e);
+            }
+            playbackCtxRef.current = null;
+        }
+
+        // Close the recording AudioContext if it exists and is not already closed
         if (audioContextRef.current?.state !== 'closed') {
             audioContextRef.current?.close();
             audioContextRef.current = null;
@@ -245,6 +265,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         handle: sessionResumptionHandleRef.current || undefined
                     },
                     tools: [{
+                        googleSearch: {},
                         functionDeclarations: [{
                             name: 'generate_visualization_description',
                             description: "Generates a detailed description of the visual aid to be created.",
@@ -479,11 +500,16 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             // Create or reuse analyser for visualization
-            if (!analyserRef.current || analyserRef.current.context !== ctx) {
-                analyserRef.current = ctx.createAnalyser();
-                analyserRef.current.fftSize = 256;
-                analyserRef.current.smoothingTimeConstant = 0.8;
-                analyserRef.current.connect(ctx.destination);
+            if (!analyserRef.current || analyserRef.current.context !== ctx || analyserRef.current.context.state === 'closed') {
+                try {
+                    analyserRef.current = ctx.createAnalyser();
+                    analyserRef.current.fftSize = 256;
+                    analyserRef.current.smoothingTimeConstant = 0.8;
+                    analyserRef.current.connect(ctx.destination);
+                } catch (e) {
+                    console.error('Failed to create analyser:', e);
+                    analyserRef.current = null;
+                }
             }
 
             const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
@@ -492,8 +518,24 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
 
-            // Always connect through analyser for visualization
-            source.connect(analyserRef.current);
+            // Connect through analyser for visualization if available
+            try {
+                if (analyserRef.current && analyserRef.current.context.state !== 'closed') {
+                    source.connect(analyserRef.current);
+                } else {
+                    // Fallback: connect directly to destination if analyser is unavailable
+                    source.connect(ctx.destination);
+                }
+            } catch (e) {
+                console.error('Failed to connect audio source:', e);
+                // Fallback: try connecting directly to destination
+                try {
+                    source.connect(ctx.destination);
+                } catch (fallbackError) {
+                    console.error('Failed to connect to destination:', fallbackError);
+                    throw new Error('Unable to connect audio source');
+                }
+            }
 
             const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
             source.start(startAt);
@@ -612,7 +654,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     }, []);
 
     const getAnalyser = useCallback(() => {
-        return analyserRef.current;
+        // Return analyser only if it's valid and its context is not closed
+        if (analyserRef.current && analyserRef.current.context.state !== 'closed') {
+            return analyserRef.current;
+        }
+        return null;
     }, []);
 
     const closeFeedbackForm = useCallback(() => {

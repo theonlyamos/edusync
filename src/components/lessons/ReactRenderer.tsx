@@ -34,6 +34,29 @@ import {
   RadialBarChart 
 } from 'recharts';
 import { Loader } from '@googlemaps/js-api-loader'
+import 'leaflet/dist/leaflet.css'
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  Polygon,
+  Circle,
+  Rectangle,
+  useMap,
+  useMapEvent,
+} from 'react-leaflet'
+import L from 'leaflet'
+
+// Configure default Leaflet marker icons to work with Next.js bundling
+// by referencing CDN assets. This avoids 404s for marker icon images.
+if (typeof window !== 'undefined' && (L as any)?.Icon?.Default) {
+  const iconRetinaUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png'
+  const iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png'
+  const shadowUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+  ;(L as any).Icon.Default.mergeOptions({ iconRetinaUrl, iconUrl, shadowUrl })
+}
 
 interface ReactRendererProps {
   code: string;
@@ -96,6 +119,18 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         'RadialBar',
         'RadialBarChart',
         'Loader',
+        // React-Leaflet
+        'MapContainer',
+        'TileLayer',
+        'Marker',
+        'Popup',
+        'Polyline',
+        'Polygon',
+        'Circle',
+        'Rectangle',
+        'useMap',
+        'useMapEvent',
+        'L',
         'process',
         `
         ${code}
@@ -157,6 +192,18 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         RadialBar,
         RadialBarChart,
         Loader,
+        // React-Leaflet
+        MapContainer,
+        TileLayer,
+        Marker,
+        Popup,
+        Polyline,
+        Polygon,
+        Circle,
+        Rectangle,
+        useMap,
+        useMapEvent,
+        L,
         process
       );
 
