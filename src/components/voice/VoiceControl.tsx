@@ -90,8 +90,8 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   }, [onToolCall, setToolCallListener]);
 
   useEffect(() => {
-    setOnAudioDataListener((data: Float32Array<ArrayBufferLike>) => {
-      // Convert to the expected type for our state
+    setOnAudioDataListener((data) => {
+      // Create a new Float32Array to ensure it's backed by a standard ArrayBuffer
       const convertedData = new Float32Array(data);
       setAudioData(convertedData);
     });

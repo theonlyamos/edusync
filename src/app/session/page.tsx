@@ -344,7 +344,7 @@ function HomeComponent() {
         .finally(() => {
           isCapturingRef.current = false;
         });
-    }, 1000);
+    }, 3000);
     return () => clearInterval(id);
   }, [connectionStatus, show, code, library]);
 

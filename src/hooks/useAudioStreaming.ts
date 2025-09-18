@@ -134,6 +134,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
+
+        // Clear speaking timeout
+        if (speakingTimeoutRef.current) {
+            clearTimeout(speakingTimeoutRef.current);
+            speakingTimeoutRef.current = null;
+        }
     }, []);
 
     // Function to handle stopping the stream
@@ -143,6 +149,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
         setIsStreaming(false);
         isStreamingRef.current = false;
+        setIsSpeaking(false);
         setConnectionStatus('disconnected');
 
         // Show feedback form for manual stop
@@ -152,28 +159,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         // Clear resumption handle when manually stopping
         sessionResumptionHandleRef.current = null;
         isResumingSessionRef.current = false;
-
-        // Clear reconnect timeout
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = null;
-        }
-
-        // Close the Gemini Live session if it exists
-        if (geminiLiveSessionRef.current) {
-            try {
-                geminiLiveSessionRef.current.close();
-            } catch (e) {
-                console.warn('Failed to close Gemini Live session during stop:', e);
-            }
-        }
-
-        // Close playback context
-        if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
-            playbackCtxRef.current.close();
-        }
-        playbackCtxRef.current = null;
-        analyserRef.current = null;
         nextPlaybackTimeRef.current = 0;
 
         // Run the full cleanup for capture resources
@@ -317,13 +302,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     },
                     onclose: (e: CloseEvent) => {
                         // Session resumption - auto resume unless manual disconnect
-                        console.log(e)
-                        console.log(sessionResumptionHandleRef.current)
-                        console.log(isStreamingRef.current)
-                        console.log(!isResumingSessionRef.current)
-                        console.log(!isManualDisconnectRef.current)
-                        console.log(sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current)
-                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isResumingSessionRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
+                        console.log('close event', e)
+                        console.log('sessionResumptionHandleRef.current', sessionResumptionHandleRef.current)
+                        console.log('isStreamingRef.current', isStreamingRef.current)
+                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
                             // Delay resumption slightly to avoid immediate reconnection
                             reconnectTimeoutRef.current = setTimeout(() => {
                                 console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
@@ -465,6 +447,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 const part = message.serverContent.modelTurn.parts[0];
                 if (part?.inlineData?.data) {
                     audioParts.push(part.inlineData.data);
+                    console.log('Received AI audio chunk, total parts:', audioParts.length);
                 }
             }
 
@@ -473,6 +456,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 (message?.serverContent?.turnComplete && audioParts.length > 0);
 
             if (shouldFlush) {
+                console.log('Flushing AI audio chunks:', audioParts.length);
                 playGeminiAudioChunks(audioParts.slice());
                 audioParts.length = 0;
             }
@@ -482,6 +466,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     // Play audio chunks from Gemini
     const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
         try {
+            console.log('Playing AI audio chunks:', rawData.length, 'chunks');
             const pcmData = rawData.map(data => {
                 const binaryString = atob(data);
                 const bytes = new Uint8Array(binaryString.length);
@@ -492,6 +477,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             });
 
             const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
+            console.log('Total audio data length:', totalDataLength);
             const wavBuffer = convertToWav(rawData, 24000);
 
             let ctx = playbackCtxRef.current;
@@ -515,6 +501,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
+            console.log('Audio buffer decoded, duration:', audioBuffer.duration, 'seconds');
             const float32Data = audioBuffer.getChannelData(0);
             onAiAudioDataListenerRef.current?.(float32Data);
             const source = ctx.createBufferSource();
@@ -540,6 +527,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
+            console.log('Starting audio playback at:', startAt, 'duration:', audioBuffer.duration);
             source.start(startAt);
             nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
 
@@ -548,10 +536,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
 
             // Calculate when this chunk will finish playing
-            const endTime = (startAt + audioBuffer.duration - ctx.currentTime) * 1000 + 250;
+            const timeUntilEnd = (startAt + audioBuffer.duration - ctx.currentTime) * 1000;
+            // A small buffer to ensure the audio has fully finished.
+            const endTime = Math.max(0, timeUntilEnd) + 250;
+
             speakingTimeoutRef.current = setTimeout(() => {
-                // Only stop speaking if we're not expecting more audio
-                if (nextPlaybackTimeRef.current <= ctx.currentTime + 0.1) {
+                if (playbackCtxRef.current && nextPlaybackTimeRef.current <= playbackCtxRef.current.currentTime + 0.1) {
                     setIsSpeaking(false);
                 }
             }, endTime);
