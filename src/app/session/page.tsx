@@ -10,7 +10,7 @@ import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 
@@ -26,7 +26,11 @@ type Message = {
 
 function HomeComponent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const params = useParams();
   const debugMode = searchParams.get('debug') === 'true';
+  
+  const sessionIdFromUrl = params?.id as string;
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -50,11 +54,12 @@ function HomeComponent() {
   const [showCreditWarning, setShowCreditWarning] = useState(false);
   const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [showChatPanel, setShowChatPanel] = useState(true);
+  const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const showOverlay = !voiceActive || (voiceActive && connectionStatus !== 'connected');
+  const showOverlay = (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -68,6 +73,7 @@ function HomeComponent() {
     setVisualizations([]);
     setCurrentVizIndex(-1);
     setError('');
+    setSessionManuallyStopped(true);
   };
 
   const handleVoiceStop = async () => {
@@ -89,6 +95,7 @@ function HomeComponent() {
     setCurrentVizIndex(-1);
     setError('');
     setShowCreditWarning(false);
+    setSessionManuallyStopped(true);
   };
 
   // Function to reset session state
@@ -112,6 +119,7 @@ function HomeComponent() {
     setFeedbackTrigger(null);
     setGeneratingVisualization(false);
     setShowCreditWarning(false);
+    setSessionManuallyStopped(false);
     
     // Clear any intervals
     if (creditDeductionInterval) {
@@ -152,6 +160,26 @@ function HomeComponent() {
   const handleFeedbackClose = () => {
     setShowFeedbackForm(false);
     setFeedbackTrigger(null);
+  };
+
+  const handleStartSession = async () => {
+    setConnectionStatus('connecting');
+    try {
+      // Create a new session
+      const response = await axios.post('/api/learning/sessions', {
+        session_id: null,
+        session_handle: null,
+        topic: null
+      });
+      
+      const sessionId = response.data.id;
+      
+      // Navigate to the dynamic session page
+      router.push(`/session/${sessionId}`);
+    } catch (error: any) {
+      console.error('Failed to create session:', error);
+      setError(error.response?.data?.error || 'Failed to create session');
+    }
   };
 
   const handleAsk = async () => {
@@ -391,6 +419,14 @@ function HomeComponent() {
     return () => window.removeEventListener('resetSession', handleResetSession);
   }, [resetSessionState]);
 
+  // Auto-start session when we have a session ID from URL
+  useEffect(() => {
+    if (sessionIdFromUrl && !currentSessionId && !voiceActive && !sessionManuallyStopped) {
+      setCurrentSessionId(sessionIdFromUrl);
+      setVoiceActive(true);
+    }
+  }, [sessionIdFromUrl, currentSessionId, voiceActive, sessionManuallyStopped]);
+
   // Start credit deduction when voice becomes active and connected
   useEffect(() => {
     if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
@@ -464,7 +500,7 @@ function HomeComponent() {
           <div className={`flex h-full relative ${showChatPanel ? '' : 'chat-hidden'}`}> 
             {showOverlay && (
               <div className="absolute inset-0 z-30">
-                <StartButtonOverlay onStart={() => setVoiceActive(true)} connectionStatus={connectionStatus} />
+                <StartButtonOverlay onStart={handleStartSession} connectionStatus={connectionStatus} />
               </div>
             )}
             {/* Left Panel - Chat Window */}
@@ -743,7 +779,7 @@ function HomeComponent() {
 
       {/* Feedback Form - positioned relative to main content only */}
       {showFeedbackForm && feedbackTrigger && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10 p-4 lg:left-20">
           <FeedbackForm
             isOpen={showFeedbackForm}
             onClose={handleFeedbackClose}
