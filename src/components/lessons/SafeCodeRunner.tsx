@@ -21,13 +21,6 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
 
     try {
       const iframe = iframeRef.current;
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      
-      if (!doc) {
-        setError('Unable to access iframe document');
-        setIsLoading(false);
-        return;
-      }
 
       // Create sandboxed content based on library type
       let htmlContent = `<!DOCTYPE html>
@@ -124,9 +117,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
 </body>
 </html>`;
 
-      doc.open();
-      doc.write(htmlContent);
-      doc.close();
+      iframe.srcdoc = htmlContent;
 
       const handleLoad = () => {
         setIsLoading(false);

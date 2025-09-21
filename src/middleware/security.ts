@@ -9,7 +9,7 @@ export function addSecurityHeaders(response: NextResponse): NextResponse {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob: https:",
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com",
+        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -22,7 +22,8 @@ export function addSecurityHeaders(response: NextResponse): NextResponse {
     response.headers.set('X-Frame-Options', 'DENY');
     response.headers.set('X-XSS-Protection', '1; mode=block');
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    // Allow microphone on same-origin pages; keep geolocation and camera disabled
+    response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(self), camera=()');
 
     // Strict Transport Security (HSTS) - only in production
     if (process.env.NODE_ENV === 'production') {
