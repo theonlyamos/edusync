@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { getServerSession } from '@/lib/auth';
+import { feedbackSchema } from '@/lib/validation/api';
+import { rateLimit } from '@/lib/rate-limiter';
 
-interface FeedbackData {
-    rating: 'positive' | 'neutral' | 'negative';
-    experience: string; // Now required
-    improvements?: string;
-    wouldRecommend: 'yes' | 'no' | 'maybe';
-    trigger: 'manual_stop' | 'connection_reset' | 'error';
-    timestamp: string;
-    userAgent: string;
-    sessionDurationSeconds?: number;
-    connectionCount?: number;
-    errorMessage?: string;
-}
+// Type is now inferred from the Zod schema
+type FeedbackData = typeof feedbackSchema._output;
 
 export async function POST(request: NextRequest) {
     try {
+        // Apply rate limiting
+        const rateLimitResponse = await rateLimit(request, 'api');
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         // Check authentication
         const session = await getServerSession();
         if (!session?.user) {
@@ -26,15 +24,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const feedback: FeedbackData = await request.json();
+        const body = await request.json();
 
-        // Validate required fields
-        if (!feedback.rating || !feedback.wouldRecommend || !feedback.trigger || !feedback.experience?.trim()) {
+        // Validate input with Zod schema
+        const validation = feedbackSchema.safeParse(body);
+        if (!validation.success) {
             return NextResponse.json(
-                { error: 'Missing required fields: rating, wouldRecommend, trigger, or experience' },
+                { error: 'Invalid input', details: validation.error.flatten() },
                 { status: 400 }
             );
         }
+
+        const feedback = validation.data;
 
         // Create Supabase client
         const supabase = createServerSupabase();

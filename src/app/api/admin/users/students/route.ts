@@ -1,9 +1,28 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getServerSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
+import { createStudentSchema } from "@/lib/validation/admin";
 
 export async function GET() {
     try {
+        // Check authentication and admin role
+        const session = await getServerSession();
+        if (!session?.user) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 }
+            );
+        }
+
+        // Check if user is admin
+        if (session.user.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'Admin access required' },
+                { status: 403 }
+            );
+        }
+
         const { data, error } = await supabase
             .from('students_view')
             .select('*')
@@ -19,8 +38,35 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
+        // Check authentication and admin role
+        const session = await getServerSession();
+        if (!session?.user) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 }
+            );
+        }
+
+        // Check if user is admin
+        if (session.user.role !== 'admin') {
+            return NextResponse.json(
+                { error: 'Admin access required' },
+                { status: 403 }
+            );
+        }
+
         const body = await request.json();
-        const { email, password, name, level: grade } = body as { email: string; password: string; name: string; level: string };
+
+        // Validate input
+        const validation = createStudentSchema.safeParse(body);
+        if (!validation.success) {
+            return NextResponse.json(
+                { error: 'Invalid input', details: validation.error.flatten() },
+                { status: 400 }
+            );
+        }
+
+        const { email, password, name, level: grade } = validation.data;
 
         const { data: existing, error: checkErr } = await supabase
             .from('users')
@@ -30,7 +76,8 @@ export async function POST(request: Request) {
         if (checkErr) throw checkErr;
         if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Hash password with stronger settings
+        const hashedPassword = await bcrypt.hash(password, 12);
 
         const { data: userRow, error: userErr } = await supabase
             .from('users')
