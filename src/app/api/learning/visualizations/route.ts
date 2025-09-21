@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        const supabase = createServerSupabase()
+        const supabase = await createSSRUserSupabase()
 
         // Verify ownership of session
         const { data: sess, error: sessErr } = await supabase

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
-  const supabase = createServerSupabase()
+  const supabase = await createSSRUserSupabase()
   const session = await getServerSession()
 
   if (!session?.user) {

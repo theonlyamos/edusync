@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET() {
     try {
@@ -9,6 +9,7 @@ export async function GET() {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { data, error } = await supabase
             .from('chats')
             .select('*')
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { lessonId, messages, title } = await req.json();
 
         const now = new Date().toISOString();

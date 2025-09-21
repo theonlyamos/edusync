@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase.server';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { getServerSession } from '@/lib/auth';
 import { feedbackSchema } from '@/lib/validation/api';
 import { rateLimit } from '@/lib/rate-limiter';
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         const feedback = validation.data;
 
         // Create Supabase client
-        const supabase = createServerSupabase();
+        const supabase = await createSSRUserSupabase();
 
         // Prepare data for database insertion
         const dbData = {

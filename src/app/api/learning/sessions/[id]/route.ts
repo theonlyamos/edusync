@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         }
 
         const body = await request.json().catch(() => ({}))
-        const supabase = createServerSupabase()
+        const supabase = await createSSRUserSupabase()
 
         const { id } = await params
 

@@ -17,6 +17,11 @@ export async function middleware(request: NextRequest) {
   // Configure CORS
   response = configureCORS(request, response);
 
+  // Handle CORS preflight early
+  if (request.method === 'OPTIONS') {
+    return response;
+  }
+
   const pathname = request.nextUrl.pathname;
 
   // Apply rate limiting to API routes

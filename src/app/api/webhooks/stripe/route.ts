@@ -31,11 +31,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No signature found' }, { status: 400 })
         }
 
-        console.log('Webhook received:', {
-            bodyLength: body.length,
-            hasSignature: !!signature,
-            signatureStart: signature.substring(0, 10) + '...'
-        })
+        // Minimal logging; avoid leaking signature
+        console.log('Stripe webhook received', { bodyLength: body.length })
     } catch (error) {
         console.error('Error parsing webhook request:', error)
         return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -73,6 +70,13 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (creditsToAdd > 0) {
+                    // Idempotency: avoid processing the same event twice
+                    // Use the Stripe event id as unique key
+                    const eventId = event.id
+                    const processed = await hasProcessedEvent(eventId)
+                    if (processed) {
+                        return NextResponse.json({ received: true, duplicate: true })
+                    }
                     const result = await addCredits(
                         userId,
                         creditsToAdd,
@@ -85,8 +89,8 @@ export async function POST(request: NextRequest) {
                         console.error('Failed to add credits:', result.error)
                         return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 })
                     }
-
-                    console.log(`Successfully added ${creditsToAdd} credits to user ${userId}`)
+                    await markEventProcessed(eventId)
+                    console.log(`Processed Stripe checkout: added ${creditsToAdd} credits to user ${userId}`)
                 }
             }
         }
@@ -96,4 +100,13 @@ export async function POST(request: NextRequest) {
         console.error('Webhook processing error:', error)
         return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
     }
+}
+
+// Naive in-memory idempotency store; replace with Redis/DB in production
+const processedEvents = new Set<string>()
+async function hasProcessedEvent(id: string) {
+    return processedEvents.has(id)
+}
+async function markEventProcessed(id: string) {
+    processedEvents.add(id)
 }

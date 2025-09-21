@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(request: Request) {
     try {
@@ -9,6 +9,7 @@ export async function GET(request: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { data: timetables, error: tErr } = await supabase
             .from('timetables')
             .select('*');
@@ -82,6 +83,8 @@ export async function PUT(request: Request) {
         if (!level) {
             return new NextResponse('Grade level is required', { status: 400 });
         }
+
+        const supabase = await createSSRUserSupabase();
 
         const { data: currentTimetable } = await supabase
             .from('timetables')

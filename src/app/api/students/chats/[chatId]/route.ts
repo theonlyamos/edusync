@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(
     request: NextRequest,
@@ -12,6 +12,7 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { chatId } = await params;
         const { data: chat, error } = await supabase
             .from('chats')
@@ -42,6 +43,7 @@ export async function PUT(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { chatId } = await params;
         const { messages } = await request.json();
 
@@ -75,6 +77,7 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { chatId } = await params;
         const { error } = await supabase
             .from('chats')

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(req: Request) {
     try {
@@ -12,6 +12,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const lessonId = searchParams.get('lessonId');
 
+        const supabase = await createSSRUserSupabase();
         let query = supabase.from('resources').select('*');
         if (lessonId) query = query.eq('lessonId', lessonId);
         if (session.user.role === 'teacher') query = query.eq('createdBy', session.user.id);
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const data = await req.json();
         const { lessonId, title, description, type, fileUrl, filename, url, originalUrl } = data as any;
 

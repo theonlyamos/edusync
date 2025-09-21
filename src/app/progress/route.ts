@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(request: Request) {
     try {
@@ -9,6 +9,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { data, error } = await supabase
             .from('progress')
             .select('*, lesson:lessons(*)')
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const supabase = await createSSRUserSupabase();
         const { lessonId, completionStatus, timeSpent, quizScore } = await request.json();
 
         const upsertPayload: any = {

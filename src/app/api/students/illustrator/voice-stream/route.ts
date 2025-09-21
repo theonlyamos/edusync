@@ -1,4 +1,5 @@
 import { WebSocketServer } from 'ws';
+import { getServerSession } from '@/lib/auth'
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
 import path from 'path';
 
@@ -141,7 +142,21 @@ function initWebSocketServer() {
 
     wss = new WebSocketServer({ port: 3001, path: '/voice-stream' });
 
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+        // Basic auth: require a valid session on connect (best effort)
+        // In production, switch to a signed token passed as a query param
+        (async () => {
+            try {
+                const session = await getServerSession()
+                if (!session?.user?.id) {
+                    try { ws.close(1008, 'Unauthorized') } catch { }
+                    return
+                }
+            } catch {
+                try { ws.close(1011, 'Auth check failed') } catch { }
+                return
+            }
+        })()
         ws.on('message', async (data, isBinary) => {
             try {
                 if (!isBinary) {

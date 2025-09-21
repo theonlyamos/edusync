@@ -1,4 +1,4 @@
-import { writeFile } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -32,14 +32,16 @@ export async function fetchUrlContent(url: string) {
         // Create unique filename
         const filename = `${uuidv4()}.md`;
 
-        // Save to public/uploads directory
-        const uploadDir = join(process.cwd(), 'public', 'uploads');
+        // Save to non-public directory
+        const uploadDir = join(process.cwd(), 'uploads', 'external');
+        await mkdir(uploadDir, { recursive: true });
         const filePath = join(uploadDir, filename);
 
         await writeFile(filePath, markdown);
 
         return {
-            fileUrl: `/uploads/${filename}`,
+            // Do not expose public URL; return identifier/path for a secure download endpoint
+            path: filePath,
             filename: data.title,
             originalUrl: url
         };

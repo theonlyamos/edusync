@@ -71,16 +71,20 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
   <script>
     window.addEventListener('error', function(e) {
-      document.body.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
+      var c = document.createElement('div');
+      c.className = 'error';
+      c.textContent = 'Error: ' + (e.message || 'Unknown error');
+      document.body.replaceChildren(c);
     });
-    
     try {
-      // Wrap user code in IIFE to prevent global pollution
       (function() {
         ${code}
       })();
     } catch (error) {
-      document.body.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+      var c2 = document.createElement('div');
+      c2.className = 'error';
+      c2.textContent = 'Error: ' + (error && error.message ? error.message : 'Unknown error');
+      document.body.replaceChildren(c2);
     }
   </script>`;
       } else if (library === 'three') {
@@ -88,16 +92,20 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
   <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
   <script>
     window.addEventListener('error', function(e) {
-      document.body.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
+      var c = document.createElement('div');
+      c.className = 'error';
+      c.textContent = 'Error: ' + (e.message || 'Unknown error');
+      document.body.replaceChildren(c);
     });
-    
     try {
-      // Wrap user code in IIFE to prevent global pollution
       (function() {
         ${code}
       })();
     } catch (error) {
-      document.body.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+      var c2 = document.createElement('div');
+      c2.className = 'error';
+      c2.textContent = 'Error: ' + (error && error.message ? error.message : 'Unknown error');
+      document.body.replaceChildren(c2);
     }
   </script>`;
       } else if (library === 'react') {

@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
 import { getServerSession } from "@/lib/auth";
+import { createSSRUserSupabase } from "@/lib/supabase.server";
 
 export async function GET(
     request: NextRequest,
@@ -15,6 +15,7 @@ export async function GET(
             );
         }
 
+        const supabase = await createSSRUserSupabase();
         const { lessonId } = await params;
         const { data: lesson, error } = await supabase
             .from('lessons')
@@ -53,6 +54,7 @@ export async function PUT(
             );
         }
 
+        const supabase = await createSSRUserSupabase();
         const { lessonId } = await params;
         const { data: existing, error: findErr } = await supabase
             .from('lessons')
@@ -107,6 +109,7 @@ export async function DELETE(
             );
         }
 
+        const supabase = await createSSRUserSupabase();
         const { lessonId } = await params;
         const { data: lesson, error: findErr } = await supabase
             .from('lessons')

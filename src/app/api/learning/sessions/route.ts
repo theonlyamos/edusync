@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
 import { hasEnoughCredits } from '@/lib/credits'
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
         const { session_id, session_handle, topic } = await request.json().catch(() => ({}))
 
-        const supabase = createServerSupabase()
+        const supabase = await createSSRUserSupabase()
 
         const insertPayload: any = {
             user_id: session.user.id,

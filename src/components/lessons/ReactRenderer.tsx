@@ -131,7 +131,6 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         'useMap',
         'useMapEvent',
         'L',
-        'process',
         `
         ${code}
         
@@ -203,8 +202,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         Rectangle,
         useMap,
         useMapEvent,
-        L,
-        process
+        L
       );
 
       setIsLoading(false);

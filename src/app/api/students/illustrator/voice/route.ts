@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getServerSession } from '@/lib/auth'
 import { GoogleGenAI, MediaResolution, Modality, TurnCoverage, LiveServerMessage } from '@google/genai';
 
 // WebSocket polyfills for Node.js environment
@@ -18,6 +19,10 @@ if (typeof global !== 'undefined') {
 const activeSessions = new Map<string, any>();
 
 export async function POST(req: NextRequest) {
+    const session = await getServerSession()
+    if (!session?.user?.id) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    }
     const url = new URL(req.url);
     const action = url.searchParams.get('action');
     const sessionId = url.searchParams.get('sessionId');
@@ -157,11 +162,11 @@ async function handleStreamAudio(req: NextRequest, sessionId: string) {
         const responseAudio = await checkForResponseAudio(sessionData);
 
         if (responseAudio) {
-            return new Response(responseAudio, {
+            const body = new Uint8Array(responseAudio);
+            return new Response(body, {
                 status: 200,
                 headers: {
                     'Content-Type': 'audio/wav',
-                    'Content-Length': responseAudio.length.toString(),
                 },
             });
         }
@@ -188,11 +193,11 @@ async function handleEndSession(sessionId: string) {
         activeSessions.delete(sessionId);
 
         if (finalAudio) {
-            return new Response(finalAudio, {
+            const body = new Uint8Array(finalAudio);
+            return new Response(body, {
                 status: 200,
                 headers: {
                     'Content-Type': 'audio/wav',
-                    'Content-Length': finalAudio.length.toString(),
                 },
             });
         }
