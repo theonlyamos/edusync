@@ -497,15 +497,15 @@ function HomeComponent() {
       </div>
       <div className="flex-1 relative">
         <div className="h-full">
-          <div className={`flex h-full relative ${showChatPanel ? '' : 'chat-hidden'}`}> 
+          <div className={`flex h-full relative divide-x divide-border ${showChatPanel ? '' : 'chat-hidden'}`}> 
             {showOverlay && (
               <div className="absolute inset-0 z-30">
                 <StartButtonOverlay onStart={handleStartSession} connectionStatus={connectionStatus} />
               </div>
             )}
             {/* Left Panel - Chat Window */}
-            <div className="chat-panel hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col p-6 transition-[width,opacity,margin,padding] duration-300">
-              <Card className="flex-1 flex flex-col h-full backdrop-blur-sm bg-background/95 border-2 shadow-xl">
+            <div className="chat-panel hidden lg:flex lg:w-1/3 lg:min-w-[350px] flex-col transition-[width,opacity] duration-300">
+              <Card className="flex-1 flex flex-col h-full bg-background/95 border-0 shadow-none rounded-none">
                 <CardHeader>
                   <CardTitle>AI Illustrative Explainer</CardTitle>
                 </CardHeader>
@@ -575,9 +575,9 @@ function HomeComponent() {
             </div>
 
             {/* Right Panel - Preview/Code Editor */}
-            <div className="flex-1 flex flex-col ml-0 lg:min-w-0 p-6 overflow-y-auto"  ref={vizRef}>
+            <div className="flex-1 flex flex-col ml-0 lg:min-w-0 overflow-y-auto"  ref={vizRef}>
               {code && library ? (
-                <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
+                <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -668,7 +668,7 @@ function HomeComponent() {
                 </Card>
               ) : (
                 generatingVisualization ? (
-                  <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
+                  <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -705,7 +705,7 @@ function HomeComponent() {
                     </CardContent>
                   </Card>
                 ) : (
-                <Card className="flex-1 flex flex-col backdrop-blur-sm bg-background/95 border-2 shadow-xl">
+                <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

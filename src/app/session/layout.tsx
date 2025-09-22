@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, MessageSquarePlus, Search, Library, Menu, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, SquarePen, Library, Menu, X } from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
 
@@ -125,7 +125,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     <div className="flex h-screen bg-background">
       {/* Desktop Sidebar */}
       <aside 
-        className={`hidden lg:flex border-r bg-card transition-all duration-300 ${collapsed ? 'w-20 hover:cursor-pointer' : 'w-64'} flex-col shadow-lg z-20`}
+        className={`hidden lg:flex border-r bg-card transition-all duration-300 ${collapsed ? 'w-16 hover:cursor-pointer' : 'w-60'} flex-col shadow-none z-20`}
         onClick={handleSidebarClick}
       >
         {/* Header */}
@@ -133,24 +133,24 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           {collapsed ? (
             <Button
               size="icon"
-              variant="outline"
-              className="w-full"
+              variant="ghost"
+              className="w-full hover:bg-transparent group"
               onClick={(e) => {
                 e.stopPropagation();
                 handleNewSession();
               }}
-              title="New Chat"
+              title="New Session"
             >
-              <MessageSquarePlus className="w-5 h-5" />
+              <SquarePen className="w-5 h-5 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
             </Button>
           ) : (
             <div className="flex items-center justify-between">
                <Button
-                variant="outline"
-                className="justify-start flex-grow"
+                variant="ghost"
+                className="justify-start flex-grow hover:bg-transparent group"
                 onClick={handleNewSession}
               >
-                <MessageSquarePlus className="w-4 h-4 mr-2" />
+                <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
                 New Session
               </Button>
               <button
@@ -165,6 +165,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               </button>
             </div>
           )}
+          
         </div>
 
         <div className="p-4 flex-grow">
@@ -208,22 +209,30 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           </div>
 
           {/* Session History */}
-          {!collapsed && <h2 className="text-xs font-semibold text-muted-foreground px-2 mb-2">Sessions</h2>}
-          <div className="space-y-1 overflow-y-auto">
-            {loadingHistory ? (
-              [...Array(5)].map((_, i) => (
-                <div key={i} className={`h-8 rounded-md ${collapsed ? 'w-10 mx-auto' : 'w-full'} bg-muted animate-pulse`} />
-              ))
-            ) : (
-              sessionHistory.map(s => (
-                <Link key={s.id} href={`/session/${s.id}`} title={s.topic || 'Chat'}
-                  className={`block text-sm truncate rounded-md py-2 transition-colors ${collapsed ? 'px-2' : 'px-3'} ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                >
-                  {collapsed ? '...' : (s.topic || 'New Session')}
-                </Link>
-              ))
-            )}
-          </div>
+          {!collapsed && (
+            <div>
+              <h2 className="text-xs font-semibold text-muted-foreground px-2 mb-2">Sessions</h2>
+              <div className="space-y-1 overflow-y-auto">
+                {loadingHistory ? (
+                  [...Array(5)].map((_, i) => (
+                    <div key={i} className="h-8 rounded-md w-full bg-muted animate-pulse" />
+                  ))
+                ) : (
+                  sessionHistory.length === 0 ? (
+                    <div className="text-xs text-muted-foreground px-2 py-1">No sessions</div>
+                  ) : (
+                    sessionHistory.map(s => (
+                      <Link key={s.id} href={`/session/${s.id}`} title={s.topic || 'Chat'}
+                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      >
+                        {s.topic || 'New Session'}
+                      </Link>
+                    ))
+                  )
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Section */}
@@ -354,21 +363,23 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               </div>
             </div>
             
-            <div className="p-4 flex-grow overflow-y-auto">
+             <div className="p-4 flex-grow overflow-y-auto">
               {/* New Session Button */}
               <div className="mb-4">
                 <Button
-                  variant="outline"
-                  className="w-full justify-start"
+                  variant="ghost"
+                  className="w-full justify-start group"
                   onClick={() => {
                     handleNewSession();
                     closeMobileMenu();
                   }}
                 >
-                  <MessageSquarePlus className="w-4 h-4 mr-2" />
+                  <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
                   New Session
                 </Button>
               </div>
+
+              
 
               {/* Credits Section */}
               <div className="mb-6">
@@ -397,21 +408,25 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-2">Sessions</h3>
                 <div className="space-y-1">
-                  {loadingHistory ? (
+                   {loadingHistory ? (
                     [...Array(5)].map((_, i) => (
                       <div key={i} className="h-8 rounded-md bg-muted animate-pulse" />
                     ))
                   ) : (
-                    sessionHistory.map(s => (
-                      <Link 
-                        key={s.id} 
-                        href={`/session/${s.id}`} 
-                        title={s.topic || 'Chat'}
-                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                        onClick={closeMobileMenu}
-                      >
-                        {s.topic || 'New Session'}
-                      </Link>
+                    (sessionHistory.length === 0 ? (
+                      <div className="text-xs text-muted-foreground px-1 py-1">No sessions</div>
+                    ) : (
+                      sessionHistory.map(s => (
+                        <Link 
+                          key={s.id} 
+                          href={`/session/${s.id}`} 
+                          title={s.topic || 'Chat'}
+                          className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                          onClick={closeMobileMenu}
+                        >
+                          {s.topic || 'New Session'}
+                        </Link>
+                      ))
                     ))
                   )}
                 </div>
