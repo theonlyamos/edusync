@@ -584,7 +584,7 @@ function HomeComponent() {
                         {/* Chat Panel Toggle - Only show on large screens */}
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="icon"
                           onClick={(e) => {
                             e.preventDefault();
@@ -592,12 +592,12 @@ function HomeComponent() {
                             setShowChatPanel((v) => !v);
                           }}
                           title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
-                          className="hidden lg:flex"
+                          className="hidden lg:flex group hover:bg-transparent"
                         >
                           {showChatPanel ? (
-                            <PanelLeftClose className="w-4 h-4" />
+                            <PanelLeftClose className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                           ) : (
-                            <MessageSquare className="w-4 h-4" />
+                            <MessageSquare className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                           )}
                         </Button>
                         <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
@@ -615,11 +615,11 @@ function HomeComponent() {
                         )}
                         {visualizations.length > 0 && (
                           <div className="flex items-center gap-2">
-                            <Button size="icon" variant="outline" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
-                              <ChevronLeft className="w-4 h-4" />
+                            <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
+                              <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                             </Button>
-                            <Button size="icon" variant="outline" onClick={goNext} disabled={!canNext} title="Next visualization">
-                              <ChevronRight className="w-4 h-4" />
+                            <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization">
+                              <ChevronRight className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                             </Button>
                           </div>
                         )}
@@ -675,7 +675,7 @@ function HomeComponent() {
                           {/* Chat Panel Toggle - Only show on large screens */}
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="icon"
                             onClick={(e) => {
                               e.preventDefault();
@@ -683,12 +683,12 @@ function HomeComponent() {
                               setShowChatPanel((v) => !v);
                             }}
                             title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
-                            className="hidden lg:flex"
+                            className="hidden lg:flex group hover:bg-transparent"
                           >
                             {showChatPanel ? (
-                              <PanelLeftClose className="w-4 h-4" />
+                              <PanelLeftClose className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                             ) : (
-                              <MessageSquare className="w-4 h-4" />
+                              <MessageSquare className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                             )}
                           </Button>
                           <CardTitle>Visualization</CardTitle>
@@ -712,7 +712,7 @@ function HomeComponent() {
                         {/* Chat Panel Toggle - Only show on large screens */}
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           size="icon"
                           onClick={(e) => {
                             e.preventDefault();
@@ -720,12 +720,12 @@ function HomeComponent() {
                             setShowChatPanel((v) => !v);
                           }}
                           title={showChatPanel ? "Hide chat panel" : "Show chat panel"}
-                          className="hidden lg:flex"
+                          className="hidden lg:flex group hover:bg-transparent"
                         >
                           {showChatPanel ? (
-                            <PanelLeftClose className="w-4 h-4" />
+                            <PanelLeftClose className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                           ) : (
-                            <MessageSquare className="w-4 h-4" />
+                            <MessageSquare className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                           )}
                         </Button>
                         <CardTitle>Visualization</CardTitle>

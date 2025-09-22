@@ -141,7 +141,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               }}
               title="New Session"
             >
-              <SquarePen className="w-5 h-5 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
+              <SquarePen className="w-5 h-5 transition-transform text-muted-foreground group-hover:text-primary" />
             </Button>
           ) : (
             <div className="flex items-center justify-between">
@@ -149,8 +149,8 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 variant="ghost"
                 className="justify-start flex-grow hover:bg-transparent group"
                 onClick={handleNewSession}
-              >
-                <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
+               >
+                <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary" />
                 New Session
               </Button>
               <button
@@ -374,7 +374,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                     closeMobileMenu();
                   }}
                 >
-                  <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary group-hover:scale-110" />
+                  <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary" />
                   New Session
                 </Button>
               </div>
