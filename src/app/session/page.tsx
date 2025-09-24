@@ -50,7 +50,8 @@ function HomeComponent() {
   const [generatingVisualization, setGeneratingVisualization] = useState(false);
   const [topic, setTopic] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [credits, setCredits] = useState<number>(0);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [creditsLoading, setCreditsLoading] = useState(true);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
   const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [showChatPanel, setShowChatPanel] = useState(true);
@@ -58,6 +59,7 @@ function HomeComponent() {
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [replay, setReplay] = useState<{ userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
 
   const showOverlay = (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
 
@@ -161,6 +163,20 @@ function HomeComponent() {
     setShowFeedbackForm(false);
     setFeedbackTrigger(null);
   };
+
+  const handleRecordingsReady = useCallback(async ({ user, ai, durationMs }: { user: Blob | null; ai: Blob | null; durationMs: number }) => {
+    try {
+      const sid = currentSessionId || sessionIdFromUrl;
+      if (!sid) return;
+      const form = new FormData();
+      if (user) form.append('user', user);
+      if (ai) form.append('ai', ai);
+      form.append('durationMs', String(durationMs));
+      await axios.post(`/api/learning/sessions/${sid}/recordings`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
+      setReplay({ userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
+    } catch {}
+  }, [currentSessionId, sessionIdFromUrl]);
 
   const handleStartSession = async () => {
     setConnectionStatus('connecting');
@@ -388,6 +404,18 @@ function HomeComponent() {
   }, [connectionStatus, voiceActive, currentSessionId, topic]);
 
   useEffect(() => {
+    const sid = sessionIdFromUrl || currentSessionId;
+    if (!sid) return;
+    if (connectionStatus === 'connected') return;
+    (async () => {
+      try {
+        const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
+        if (data?.userUrl || data?.aiUrl || (data?.userParts?.length || data?.aiParts?.length)) setReplay({ userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
+      } catch {}
+    })();
+  }, [sessionIdFromUrl, currentSessionId, connectionStatus]);
+
+  useEffect(() => {
     if (connectionStatus === 'disconnected' && currentSessionId) {
       (async () => {
         try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'disconnected', ended: true }); } catch {}
@@ -400,11 +428,14 @@ function HomeComponent() {
   useEffect(() => {
     const fetchCredits = async () => {
       try {
+        setCreditsLoading(true);
         const response = await axios.get('/api/credits/status');
         setCredits(response.data.credits);
       } catch (error) {
         console.error('Failed to fetch credits:', error);
+        setCredits(null);
       }
+      finally { setCreditsLoading(false); }
     };
     fetchCredits();
   }, []);
@@ -430,8 +461,10 @@ function HomeComponent() {
   // Start credit deduction when voice becomes active and connected
   useEffect(() => {
     if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      // Check if user has enough credits to start
-      if (credits < 1) {
+      if (credits === null || creditsLoading) {
+        return;
+      }
+      if (credits !== null && credits < 1) {
         setShowCreditWarning(true);
         handleVoiceStop();
         return;
@@ -485,7 +518,7 @@ function HomeComponent() {
       clearInterval(creditDeductionInterval);
       setCreditDeductionInterval(null);
     }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditDeductionInterval]);
+  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
@@ -500,7 +533,13 @@ function HomeComponent() {
           <div className={`flex h-full relative divide-x divide-border ${showChatPanel ? '' : 'chat-hidden'}`}> 
             {showOverlay && (
               <div className="absolute inset-0 z-30">
-                <StartButtonOverlay onStart={handleStartSession} connectionStatus={connectionStatus} />
+                <StartButtonOverlay 
+                  onStart={handleStartSession} 
+                  connectionStatus={connectionStatus} 
+                  creditsLoading={creditsLoading}
+                  outOfCredits={credits !== null && credits <= 0}
+                  remainingCredits={credits ?? undefined}
+                />
               </div>
             )}
             {/* Left Panel - Chat Window */}
@@ -555,6 +594,7 @@ function HomeComponent() {
                     </div>
                     <VoiceControl
                       active={voiceActive}
+                      sessionId={currentSessionId || sessionIdFromUrl}
                       onError={setError}
                       onToolCall={handleToolCall}
                       onConnectionStatusChange={setConnectionStatus}
@@ -563,10 +603,30 @@ function HomeComponent() {
                       onFeedbackFormChange={handleFeedbackFormChange}
                       onFeedbackSubmit={handleFeedbackSubmit}
                       onFeedbackClose={handleFeedbackClose}
+                      onRecordingsReady={handleRecordingsReady}
                     />
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="text-red-700 text-sm">{error}</div>
+                      </div>
+                    )}
+                    {replay && (replay.userUrl || replay.aiUrl) && (
+                      <div className="p-3 border rounded-md">
+                        <div className="text-sm font-medium mb-2">Session Replay</div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {replay.userUrl && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground">User</div>
+                              <audio controls className="w-full" src={replay.userUrl} />
+                            </div>
+                          )}
+                          {replay.aiUrl && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground">AI</div>
+                              <audio controls className="w-full" src={replay.aiUrl} />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -756,13 +816,16 @@ function HomeComponent() {
               <AlertTriangle className="w-5 h-5 text-yellow-600" />
               <div>
                 <p className="text-sm font-medium text-yellow-800">
-                  {credits <= 0 ? 'No credits remaining!' : `Only ${credits} credits left!`}
+                  {typeof credits === 'number' 
+                    ? (credits <= 0 ? 'No credits remaining!' : `Only ${credits} credits left!`)
+                    : 'Checking credits...'}
                 </p>
                 <p className="text-xs text-yellow-600 mt-1">
-                  {credits <= 0 
-                    ? 'Purchase credits to continue learning.' 
-                    : `≈ ${credits} minutes of AI time remaining`
-                  }
+                  {typeof credits === 'number' 
+                    ? (credits <= 0 
+                      ? 'Purchase credits to continue learning.' 
+                      : `≈ ${credits} minutes of AI time remaining`)
+                    : ''}
                 </p>
               </div>
               <Button 

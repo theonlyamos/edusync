@@ -6,6 +6,7 @@ import AudioVisualizer from './AudioVisualizer';
 interface VoiceControlProps {
   /** Whether mic streaming should be active */
   active: boolean;
+  sessionId?: string | null;
   onError?: (error: string) => void;
   onToolCall?: (name: string, args: any) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
@@ -15,9 +16,10 @@ interface VoiceControlProps {
   onFeedbackFormChange?: (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => void;
   onFeedbackSubmit?: (feedback: any) => Promise<void>;
   onFeedbackClose?: () => void;
+  onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
 }
 
-export function VoiceControl({ active, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose }: VoiceControlProps) {
+export function VoiceControl({ active, sessionId, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -30,6 +32,8 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
     setToolCallListener,
     setOnAudioDataListener,
     setOnAiAudioDataListener,
+    setOnRecordingsReady,
+    setSessionId,
     sendText,
     sendMedia,
     sendViewport,
@@ -88,6 +92,19 @@ export function VoiceControl({ active, onError, onToolCall, onConnectionStatusCh
   useEffect(() => {
     setToolCallListener(onToolCall ?? (() => {}));
   }, [onToolCall, setToolCallListener]);
+
+  useEffect(() => {
+    if (!setOnRecordingsReady) return;
+    setOnRecordingsReady((payload) => {
+      if (typeof window !== 'undefined' && window?.navigator?.userAgent?.includes('Headless')) return;
+      (onRecordingsReady as any)?.(payload);
+    });
+  }, [setOnRecordingsReady, onRecordingsReady]);
+
+  useEffect(() => {
+    if (!setSessionId) return;
+    setSessionId(sessionId ?? null);
+  }, [sessionId, setSessionId]);
 
   useEffect(() => {
     setOnAudioDataListener((data) => {

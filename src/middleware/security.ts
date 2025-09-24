@@ -41,7 +41,7 @@ export function configureCORS(request: NextRequest, response: NextResponse): Nex
 
     // Define allowed origins
     const allowedOrigins = [
-        process.env.NEXT_PUBLIC_APP_URL,
+        process.env.NEXT_PUBLIC_BASE_URL,
         'http://localhost:3000',
         'http://localhost:3001',
     ].filter(Boolean);

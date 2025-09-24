@@ -18,6 +18,8 @@ interface AudioStreamingActions {
     setToolCallListener: (cb: (name: string, args: any) => void) => void;
     setOnAudioDataListener: (cb: (data: Float32Array<ArrayBufferLike>) => void) => void;
     setOnAiAudioDataListener: (cb: (data: Float32Array) => void) => void;
+    setOnRecordingsReady: (cb: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) => void;
+    setSessionId: (id: string | null) => void;
     sendText: (text: string) => void;
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
@@ -75,6 +77,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
+    const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
     // Session resumption
@@ -82,6 +85,73 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const sessionStartedAtRef = useRef<number | null>(null);
+    const currentSessionIdRef = useRef<string | null>(null);
+
+    const userRecorderRef = useRef<MediaRecorder | null>(null);
+    const userChunksRef = useRef<Blob[]>([]);
+    const aiRecorderRef = useRef<MediaRecorder | null>(null);
+    const aiChunksRef = useRef<Blob[]>([]);
+    const playbackDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+    const pendingUserChunkQueueRef = useRef<Blob[]>([]);
+    const pendingAiChunkQueueRef = useRef<Blob[]>([]);
+    const isUploadingRef = useRef<{ user: boolean; ai: boolean }>({ user: false, ai: false });
+    const segmentSizeMsRef = useRef<number>(60000);
+    const lastUserSegmentStartRef = useRef<number>(0);
+    const lastAiSegmentStartRef = useRef<number>(0);
+    const pendingUserSegmentsRef = useRef<Blob[]>([]);
+    const pendingAiSegmentsRef = useRef<Blob[]>([]);
+    const userSegmentIndexRef = useRef<number>(1);
+    const aiSegmentIndexRef = useRef<number>(1);
+
+    const setSessionId = useCallback((id: string | null) => {
+        currentSessionIdRef.current = id;
+    }, []);
+
+    const padIndex = (n: number) => n.toString().padStart(6, '0');
+
+    const drainUploads = useCallback(async (kind: 'user' | 'ai') => {
+        if (!currentSessionIdRef.current) return;
+        const segmentsRef = kind === 'user' ? pendingUserSegmentsRef : pendingAiSegmentsRef;
+        if (isUploadingRef.current[kind]) return;
+        const next = segmentsRef.current.shift();
+        if (!next) return;
+        isUploadingRef.current[kind] = true;
+        try {
+            const indexRef = kind === 'user' ? userSegmentIndexRef : aiSegmentIndexRef;
+            const idx = indexRef.current++;
+            const form = new FormData();
+            form.append('part', next);
+            form.append('index', String(idx));
+            form.append('type', kind);
+            await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/parts?type=${encodeURIComponent(kind)}&index=${encodeURIComponent(padIndex(idx))}`,
+                { method: 'POST', body: form });
+        } catch { }
+        finally {
+            isUploadingRef.current[kind] = false;
+            // Drain next if any
+            if ((kind === 'user' ? pendingUserSegmentsRef : pendingAiSegmentsRef).current.length > 0) {
+                // Yield to event loop
+                setTimeout(() => { void drainUploads(kind); }, 0);
+            }
+        }
+    }, []);
+
+    const maybeUploadSegment = useCallback((kind: 'user' | 'ai', force = false) => {
+        const now = Date.now();
+        const lastRef = kind === 'user' ? lastUserSegmentStartRef : lastAiSegmentStartRef;
+        if (lastRef.current === 0) lastRef.current = now;
+        const elapsed = now - lastRef.current;
+        if (!force && elapsed < segmentSizeMsRef.current) return;
+        const chunkQueueRef = kind === 'user' ? pendingUserChunkQueueRef : pendingAiChunkQueueRef;
+        if (chunkQueueRef.current.length === 0) return;
+        const blob = new Blob(chunkQueueRef.current, { type: 'audio/webm' });
+        chunkQueueRef.current = [];
+        lastRef.current = now;
+        const segRef = kind === 'user' ? pendingUserSegmentsRef : pendingAiSegmentsRef;
+        segRef.current.push(blob);
+        void drainUploads(kind);
+    }, [drainUploads]);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -152,9 +222,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         setIsSpeaking(false);
         setConnectionStatus('disconnected');
 
-        // Show feedback form for manual stop
-        setFeedbackTrigger('manual_stop');
-        setShowFeedbackForm(true);
+        // Do not show feedback form on manual stop
 
         // Clear resumption handle when manually stopping
         sessionResumptionHandleRef.current = null;
@@ -163,6 +231,46 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
         // Run the full cleanup for capture resources
         cleanupAudioResources();
+
+        const stopAndCollect = async () => {
+            const stopRecorder = (rec: MediaRecorder | null, chunksRef: React.MutableRefObject<Blob[]>) => new Promise<Blob | null>((resolve) => {
+                if (!rec) return resolve(null);
+                const handler = () => {
+                    rec?.removeEventListener('stop', handler as any);
+                    const blob = chunksRef.current.length > 0 ? new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' }) : null;
+                    chunksRef.current = [];
+                    resolve(blob);
+                };
+                rec.addEventListener('stop', handler as any);
+                try {
+                    if (rec.state !== 'inactive') rec.stop();
+                } catch {
+                    resolve(null);
+                }
+            });
+
+            const [userBlob, aiBlob] = await Promise.all([
+                stopRecorder(userRecorderRef.current, userChunksRef),
+                stopRecorder(aiRecorderRef.current, aiChunksRef),
+            ]);
+
+            userRecorderRef.current = null;
+            aiRecorderRef.current = null;
+
+            const started = sessionStartedAtRef.current || Date.now();
+            const durationMs = Date.now() - started;
+            sessionStartedAtRef.current = null;
+
+            onRecordingsReadyRef.current?.({ user: userBlob, ai: aiBlob, durationMs });
+
+            // Also finalize streaming parts if any
+            try {
+                if (currentSessionIdRef.current) {
+                    await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST' });
+                }
+            } catch { }
+        };
+        void stopAndCollect();
     }, [cleanupAudioResources]);
 
 
@@ -193,6 +301,38 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
             streamRef.current = stream;
+            sessionStartedAtRef.current = Date.now();
+
+            const pickType = () => {
+                const candidates = [
+                    'audio/webm;codecs=opus',
+                    'audio/webm',
+                    'audio/ogg;codecs=opus',
+                    'audio/ogg',
+                ];
+                for (const t of candidates) {
+                    // @ts-ignore
+                    if (typeof MediaRecorder !== 'undefined' && (MediaRecorder as any).isTypeSupported?.(t)) return t;
+                }
+                return 'audio/webm';
+            };
+            try {
+                // @ts-ignore
+                if (typeof MediaRecorder !== 'undefined') {
+                    const mimeType = pickType();
+                    userChunksRef.current = [];
+                    userRecorderRef.current = new MediaRecorder(stream, { mimeType });
+                    userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                        if (e.data && e.data.size > 0) {
+                            userChunksRef.current.push(e.data);
+                            pendingUserChunkQueueRef.current.push(e.data);
+                            maybeUploadSegment('user');
+                        }
+                    };
+                    userRecorderRef.current.start(1000);
+                    lastUserSegmentStartRef.current = Date.now();
+                }
+            } catch { }
 
             // Gemini native-audio models currently require 16 kHz PCM input.
             const desiredSampleRate = 16000;
@@ -382,7 +522,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     // Process Gemini Live response queue
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
-        const FRAGMENT_PARTS = 3;
+        const FRAGMENT_PARTS = 10;
 
         while (responseQueue.length > 0) {
             const message = responseQueue.shift();
@@ -487,6 +627,46 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 nextPlaybackTimeRef.current = ctx.currentTime;
             }
 
+            if (!playbackDestinationRef.current) {
+                try {
+                    playbackDestinationRef.current = ctx.createMediaStreamDestination();
+                } catch { }
+            }
+
+            const ensureAiRecorder = () => {
+                // @ts-ignore
+                if (typeof MediaRecorder === 'undefined') return;
+                if (!playbackDestinationRef.current) return;
+                if (aiRecorderRef.current) return;
+                const pickType = () => {
+                    const candidates = [
+                        'audio/webm;codecs=opus',
+                        'audio/webm',
+                        'audio/ogg;codecs=opus',
+                        'audio/ogg',
+                    ];
+                    for (const t of candidates) {
+                        // @ts-ignore
+                        if ((MediaRecorder as any).isTypeSupported?.(t)) return t;
+                    }
+                    return 'audio/webm';
+                };
+                aiChunksRef.current = [];
+                try {
+                    aiRecorderRef.current = new MediaRecorder(playbackDestinationRef.current.stream, { mimeType: pickType() });
+                    aiRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                        if (e.data && e.data.size > 0) {
+                            aiChunksRef.current.push(e.data);
+                            pendingAiChunkQueueRef.current.push(e.data);
+                            maybeUploadSegment('ai');
+                        }
+                    };
+                    aiRecorderRef.current.start(1000);
+                    lastAiSegmentStartRef.current = Date.now();
+                } catch { }
+            };
+            ensureAiRecorder();
+
             // Create or reuse analyser for visualization
             if (!analyserRef.current || analyserRef.current.context !== ctx || analyserRef.current.context.state === 'closed') {
                 try {
@@ -512,12 +692,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 if (analyserRef.current && analyserRef.current.context.state !== 'closed') {
                     source.connect(analyserRef.current);
                 } else {
-                    // Fallback: connect directly to destination if analyser is unavailable
                     source.connect(ctx.destination);
+                }
+                if (playbackDestinationRef.current) {
+                    try { source.connect(playbackDestinationRef.current); } catch { }
                 }
             } catch (e) {
                 console.error('Failed to connect audio source:', e);
-                // Fallback: try connecting directly to destination
                 try {
                     source.connect(ctx.destination);
                 } catch (fallbackError) {
@@ -605,6 +786,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
 
     const setOnAiAudioDataListener = useCallback((cb: (data: Float32Array) => void) => {
         onAiAudioDataListenerRef.current = cb;
+    }, []);
+
+    const setOnRecordingsReady = useCallback((cb: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) => {
+        onRecordingsReadyRef.current = cb;
     }, []);
 
     const clearError = useCallback(() => setError(''), []);
@@ -707,6 +892,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         setToolCallListener,
         setOnAudioDataListener,
         setOnAiAudioDataListener,
+        setOnRecordingsReady,
+        setSessionId,
         sendText,
         sendMedia,
         sendViewport,

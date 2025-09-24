@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+const AI_PROVIDER = process.env.AI_PROVIDER || 'GEMINI';
+const PROVIDER_BASE_URL = process.env[`${AI_PROVIDER}_BASE_URL`];
+const PROVIDER_API_KEY = process.env[`${AI_PROVIDER}_API_KEY`];
+const PROVIDER_MODEL = process.env[`${AI_PROVIDER}_MODEL`];
+
 const openai = new OpenAI({
-    baseURL: process.env.OPENROUTER_BASE_URL,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: PROVIDER_BASE_URL,
+    apiKey: PROVIDER_API_KEY,
 });
 
 const SYSTEM_PROMPT = `You are an expert in creating educational visualizations. Your task is to generate code and explanations for visual aids based on a given task description.
@@ -148,7 +153,7 @@ export async function POST(request: NextRequest) {
         const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo;
 
         const completion = await openai.chat.completions.create({
-            model: process.env.OPENROUTER_MODEL as string,
+            model: PROVIDER_MODEL as string,
             messages: [
                 { role: 'system', content: systemPromptWithDimensions },
                 { role: 'user', content: task_description }

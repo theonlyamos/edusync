@@ -69,16 +69,11 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
       c.textContent = 'Error: ' + (e.message || 'Unknown error');
       document.body.replaceChildren(c);
     });
+    ${code}
     try {
-      (function() {
-        ${code}
-      })();
-    } catch (error) {
-      var c2 = document.createElement('div');
-      c2.className = 'error';
-      c2.textContent = 'Error: ' + (error && error.message ? error.message : 'Unknown error');
-      document.body.replaceChildren(c2);
-    }
+      if (typeof setup === 'function' && !("setup" in window)) { window.setup = setup; }
+      if (typeof draw === 'function' && !("draw" in window)) { window.draw = draw; }
+    } catch (e) {}
   </script>`;
       } else if (library === 'three') {
         htmlContent += `
@@ -90,16 +85,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
       c.textContent = 'Error: ' + (e.message || 'Unknown error');
       document.body.replaceChildren(c);
     });
-    try {
-      (function() {
-        ${code}
-      })();
-    } catch (error) {
-      var c2 = document.createElement('div');
-      c2.className = 'error';
-      c2.textContent = 'Error: ' + (error && error.message ? error.message : 'Unknown error');
-      document.body.replaceChildren(c2);
-    }
+    ${code}
   </script>`;
       } else if (library === 'react') {
         // For React, we'll render a safe message instead of executing arbitrary code
