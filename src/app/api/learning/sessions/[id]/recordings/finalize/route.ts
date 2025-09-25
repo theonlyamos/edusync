@@ -35,6 +35,70 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const admin = createServerSupabase()
     const prefix = `${session.user.id}/${sessionId}`
 
+    const concatInterleaved = async () => {
+        const { data: list, error: listErr } = await admin.storage.from(BUCKET).list(prefix, { limit: 10000 })
+        if (listErr) throw listErr
+
+        const aiParts = (list || []).filter(f => f.name.startsWith('ai.part-') && (f.name.endsWith('.webm') || f.name.endsWith('.ogg')))
+        const userParts = (list || []).filter(f => f.name.startsWith('user.part-') && (f.name.endsWith('.webm') || f.name.endsWith('.ogg')))
+
+        if (aiParts.length === 0 && userParts.length === 0) return
+
+        aiParts.sort((a, b) => a.name.localeCompare(b.name))
+        userParts.sort((a, b) => a.name.localeCompare(b.name))
+
+        const indexFromName = (name: string) => {
+            const m = name.match(/\.part-(\d{6})\.(?:webm|ogg)$/)
+            return m ? m[1] : '000000'
+        }
+
+        const aiMap = new Map<string, string>()
+        for (const p of aiParts) aiMap.set(indexFromName(p.name), p.name)
+
+        const userMap = new Map<string, string>()
+        for (const p of userParts) userMap.set(indexFromName(p.name), p.name)
+
+        const indexSet = new Set<string>()
+        aiMap.forEach((_, k) => indexSet.add(k))
+        userMap.forEach((_, k) => indexSet.add(k))
+        const allIndexes = Array.from(indexSet)
+        allIndexes.sort()
+
+        const chunks: Uint8Array[] = []
+        let useWebm = false
+        for (const idx of allIndexes) {
+            const aiName = aiMap.get(idx)
+            if (aiName) {
+                if (aiName.endsWith('.webm')) useWebm = true
+                const { data, error } = await admin.storage.from(BUCKET).download(`${prefix}/${aiName}`)
+                if (error) throw error
+                const buf = new Uint8Array(await (data as any).arrayBuffer())
+                chunks.push(buf)
+            }
+            const userName = userMap.get(idx)
+            if (userName) {
+                if (userName.endsWith('.webm')) useWebm = true
+                const { data, error } = await admin.storage.from(BUCKET).download(`${prefix}/${userName}`)
+                if (error) throw error
+                const buf = new Uint8Array(await (data as any).arrayBuffer())
+                chunks.push(buf)
+            }
+        }
+
+        if (chunks.length === 0) return
+
+        const totalLen = chunks.reduce((acc, b) => acc + b.length, 0)
+        const merged = new Uint8Array(totalLen)
+        let offset = 0
+        for (const c of chunks) { merged.set(c, offset); offset += c.length }
+
+        const ext = useWebm ? 'webm' : 'ogg'
+        const blob = new Blob([merged], { type: useWebm ? 'audio/webm' : 'audio/ogg' })
+        const key = `${prefix}/conversation.${ext}`
+        const { error: upErr } = await admin.storage.from(BUCKET).upload(key, blob, { upsert: true, contentType: blob.type })
+        if (upErr) throw upErr
+    }
+
     const concat = async (kind: 'user' | 'ai') => {
         const { data: list, error: listErr } = await admin.storage.from(BUCKET).list(prefix, { limit: 10000 })
         if (listErr) throw listErr
@@ -65,6 +129,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     try {
         await ensureBucket()
+        await concatInterleaved()
         await Promise.all([concat('user'), concat('ai')])
         return NextResponse.json({ success: true })
     } catch (e: any) {

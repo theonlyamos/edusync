@@ -92,9 +92,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             return data?.signedUrl || null
         }
 
-        const [userUrl, aiUrl] = await Promise.all([
+        const [userUrl, aiUrl, conversationUrl] = await Promise.all([
             toSigned(`${prefix}/user.webm`).then(u => u || toSigned(`${prefix}/user.ogg`)),
             toSigned(`${prefix}/ai.webm`).then(u => u || toSigned(`${prefix}/ai.ogg`)),
+            toSigned(`${prefix}/conversation.webm`).then(u => u || toSigned(`${prefix}/conversation.ogg`)),
         ])
 
         // Also return any part URLs if finalize hasn't run yet
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             }
         } catch { }
 
-        return NextResponse.json({ userUrl, aiUrl, userParts, aiParts, durationMs })
+        return NextResponse.json({ userUrl, aiUrl, conversationUrl, userParts, aiParts, durationMs })
     } catch (e: any) {
         return NextResponse.json({ error: e.message || 'Failed to fetch recordings' }, { status: 500 })
     }

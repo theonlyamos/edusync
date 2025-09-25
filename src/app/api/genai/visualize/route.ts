@@ -56,7 +56,7 @@ const SYSTEM_PROMPT = `You are an expert in creating educational visualizations.
 
 When you write the code snippet, you **must** follow these rules:
 
-**1. p5.js / Three.js**
+**1. Three.js / p5.js**
 * The code must be pure, self-contained JavaScript.
 * Do NOT include HTML or any surrounding boilerplate.
 

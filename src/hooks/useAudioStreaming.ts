@@ -435,6 +435,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
+                        // Ensure we don't keep a stale session reference
+                        geminiLiveSessionRef.current = null;
 
                         // Don't show feedback form for errors - let auto-resume handle it
                         // Clear resumption handle on error
@@ -445,8 +447,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         console.log('close event', e)
                         console.log('sessionResumptionHandleRef.current', sessionResumptionHandleRef.current)
                         console.log('isStreamingRef.current', isStreamingRef.current)
+                        // Clear stale session to prevent sends to a closed socket
+                        geminiLiveSessionRef.current = null;
                         if (sessionResumptionHandleRef.current && isStreamingRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
                             // Delay resumption slightly to avoid immediate reconnection
+                            setConnectionStatus('connecting');
                             reconnectTimeoutRef.current = setTimeout(() => {
                                 console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
                                 isResumingSessionRef.current = true;
@@ -470,6 +475,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const audioContext = new AudioContext({ sampleRate });
             audioContextRef.current = audioContext;
             const source = audioContext.createMediaStreamSource(stream);
+
+            // Ensure we are not double-sending by disconnecting any previous processor
+            if (processorRef.current) {
+                try { processorRef.current.disconnect(); } catch { }
+                processorRef.current = null;
+            }
 
             try {
                 await audioContext.audioWorklet.addModule('/audio-processor.js');
@@ -498,12 +509,16 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     const uint8Array = new Uint8Array(pcmData.buffer);
                     const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
 
-                    geminiLiveSessionRef.current.sendRealtimeInput({
-                        audio: {
-                            data: base64Audio,
-                            mimeType: `audio/pcm;rate=${sampleRate}`
-                        }
-                    });
+                    try {
+                        geminiLiveSessionRef.current.sendRealtimeInput({
+                            audio: {
+                                data: base64Audio,
+                                mimeType: `audio/pcm;rate=${sampleRate}`
+                            }
+                        });
+                    } catch (err) {
+                        // Socket may be closing/closed; drop this frame
+                    }
                 }
             };
 
