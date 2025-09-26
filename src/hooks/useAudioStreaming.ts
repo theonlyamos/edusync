@@ -24,8 +24,11 @@ interface AudioStreamingActions {
     sendMedia: (base64Data: string, mimeType: string) => void;
     sendViewport: (width: number, height: number, dpr: number) => void;
     getAnalyser: () => AnalyserNode | null;
+    getMicAnalyser?: () => AnalyserNode | null;
     closeFeedbackForm: () => void;
     submitFeedback: (feedback: any) => Promise<void>;
+    setSaveOnlySpeech?: (enabled: boolean) => void;
+    setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
 }
 
 const systemPrompt = `You are a friendly, knowledgeable, and creative AI teacher for learners of all ages and levels. Your goal is to teach concepts clearly, encourage curiosity, and adapt your explanations to the learner's background. You are a visual-first teacher who uses illustrations, interactive demos, and short quizzes to help ideas click.
@@ -74,10 +77,12 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
+    const micAnalyserRef = useRef<AnalyserNode | null>(null);
     const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
+    const onVadStateListenerRef = useRef<((active: boolean, rms: number) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
     // Session resumption
@@ -103,6 +108,17 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     const pendingAiSegmentsRef = useRef<Blob[]>([]);
     const userSegmentIndexRef = useRef<number>(1);
     const aiSegmentIndexRef = useRef<number>(1);
+
+    // VAD (Voice Activity Detection) state for microphone recording gating
+    const saveOnlySpeechRef = useRef<boolean>(false);
+    const vadSpeechActiveRef = useRef<boolean>(false);
+    const vadSpeechSinceLastChunkRef = useRef<boolean>(false);
+    const vadSpeechAccumMsRef = useRef<number>(0);
+    const vadSilenceAccumMsRef = useRef<number>(0);
+    const vadStartThresholdRef = useRef<number>(0.015); // RMS start threshold
+    const vadStopThresholdRef = useRef<number>(0.007); // RMS stop threshold (hysteresis)
+    const vadMinSpeechMsRef = useRef<number>(150);
+    const vadMinSilenceMsRef = useRef<number>(300);
 
     const setSessionId = useCallback((id: string | null) => {
         currentSessionIdRef.current = id;
@@ -167,6 +183,11 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 // Ignore disconnect errors during cleanup
             }
             analyserRef.current = null;
+        }
+        // Clean up mic analyser
+        if (micAnalyserRef.current) {
+            try { micAnalyserRef.current.disconnect(); } catch (e) { }
+            micAnalyserRef.current = null;
         }
 
         // Close the playback AudioContext if it exists and is not already closed
@@ -324,6 +345,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     userRecorderRef.current = new MediaRecorder(stream, { mimeType });
                     userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
                         if (e.data && e.data.size > 0) {
+                            // Gate saving by VAD if enabled
+                            if (saveOnlySpeechRef.current) {
+                                const include = vadSpeechSinceLastChunkRef.current || vadSpeechActiveRef.current;
+                                vadSpeechSinceLastChunkRef.current = false;
+                                if (!include) {
+                                    return; // drop silent chunk
+                                }
+                            }
                             userChunksRef.current.push(e.data);
                             pendingUserChunkQueueRef.current.push(e.data);
                             maybeUploadSegment('user');
@@ -475,6 +504,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const audioContext = new AudioContext({ sampleRate });
             audioContextRef.current = audioContext;
             const source = audioContext.createMediaStreamSource(stream);
+            // Create mic analyser for VAD visualization
+            try {
+                micAnalyserRef.current = audioContext.createAnalyser();
+                micAnalyserRef.current.fftSize = 256;
+                micAnalyserRef.current.smoothingTimeConstant = 0.8;
+                source.connect(micAnalyserRef.current);
+            } catch { }
 
             // Ensure we are not double-sending by disconnecting any previous processor
             if (processorRef.current) {
@@ -497,6 +533,48 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 if (event.data.type === 'audioData') {
                     const float32Chunk = new Float32Array(event.data.data);
                     onAudioDataListenerRef.current?.(float32Chunk);
+
+                    // Simple RMS-based VAD with hysteresis
+                    try {
+                        let sumSquares = 0;
+                        for (let i = 0; i < float32Chunk.length; i++) {
+                            const s = float32Chunk[i];
+                            sumSquares += s * s;
+                        }
+                        const rms = Math.sqrt(sumSquares / Math.max(1, float32Chunk.length));
+
+                        const ms = (float32Chunk.length / sampleRate) * 1000;
+                        const startThresh = vadStartThresholdRef.current;
+                        const stopThresh = vadStopThresholdRef.current;
+                        if (!vadSpeechActiveRef.current) {
+                            if (rms >= startThresh) {
+                                vadSpeechAccumMsRef.current += ms;
+                                if (vadSpeechAccumMsRef.current >= vadMinSpeechMsRef.current) {
+                                    vadSpeechActiveRef.current = true;
+                                    vadSpeechAccumMsRef.current = 0;
+                                    vadSilenceAccumMsRef.current = 0;
+                                    vadSpeechSinceLastChunkRef.current = true;
+                                }
+                            } else {
+                                vadSpeechAccumMsRef.current = 0;
+                            }
+                        } else {
+                            // speech active
+                            if (rms < stopThresh) {
+                                vadSilenceAccumMsRef.current += ms;
+                                if (vadSilenceAccumMsRef.current >= vadMinSilenceMsRef.current) {
+                                    vadSpeechActiveRef.current = false;
+                                    vadSilenceAccumMsRef.current = 0;
+                                    vadSpeechAccumMsRef.current = 0;
+                                }
+                            } else {
+                                vadSilenceAccumMsRef.current = 0;
+                            }
+                            // mark that speech happened in this interval
+                            vadSpeechSinceLastChunkRef.current = true;
+                        }
+                        try { onVadStateListenerRef.current?.(vadSpeechActiveRef.current, rms); } catch { }
+                    } catch { }
 
                     // Convert the raw float audio data to 16-bit PCM format
                     const pcmData = new Int16Array(float32Chunk.length);
@@ -853,6 +931,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         return null;
     }, []);
 
+    const getMicAnalyser = useCallback(() => {
+        if (micAnalyserRef.current && micAnalyserRef.current.context.state !== 'closed') {
+            return micAnalyserRef.current;
+        }
+        return null;
+    }, []);
+
     const closeFeedbackForm = useCallback(() => {
         setShowFeedbackForm(false);
         setFeedbackTrigger(null);
@@ -884,6 +969,14 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         }
     }, []);
 
+    const setSaveOnlySpeech = useCallback((enabled: boolean) => {
+        saveOnlySpeechRef.current = enabled;
+    }, []);
+
+    const setOnVadStateListener = useCallback((cb: (active: boolean, rms: number) => void) => {
+        onVadStateListenerRef.current = cb;
+    }, []);
+
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
         return () => {
@@ -913,7 +1006,10 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         sendMedia,
         sendViewport,
         getAnalyser,
+        getMicAnalyser,
         closeFeedbackForm,
-        submitFeedback
+        submitFeedback,
+        setSaveOnlySpeech,
+        setOnVadStateListener
     };
 }

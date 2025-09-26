@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback, useMemo, useContext } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +9,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose } from 'lucide-react';
+import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose, RefreshCw } from 'lucide-react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
@@ -37,7 +37,7 @@ function HomeComponent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
-  type Visualization = { code: string; library: 'p5' | 'three' | 'react'; explanation?: string; taskDescription?: string; panelDimensions?: { width: number; height: number } };
+  type Visualization = { id?: string; code: string; library: 'p5' | 'three' | 'react'; explanation?: string; taskDescription?: string; panelDimensions?: { width: number; height: number } };
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
   const [currentVizIndex, setCurrentVizIndex] = useState<number>(-1);
   const [error, setError] = useState('');
@@ -59,9 +59,11 @@ function HomeComponent() {
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const [replay, setReplay] = useState<{ userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
+  const [replay, setReplay] = useState<{ conversationUrl?: string | null; userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
+  const [mode, setMode] = useState<'replay' | 'record'>('record');
+  const [recordingsChecked, setRecordingsChecked] = useState(false);
 
-  const showOverlay = (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
+  const showOverlay = (mode === 'record') && (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -174,7 +176,7 @@ function HomeComponent() {
       form.append('durationMs', String(durationMs));
       await axios.post(`/api/learning/sessions/${sid}/recordings`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
       const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
-      setReplay({ userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
+      setReplay({ conversationUrl: data.conversationUrl, userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
     } catch {}
   }, [currentSessionId, sessionIdFromUrl]);
 
@@ -324,6 +326,7 @@ function HomeComponent() {
               explanation: vizData.explanation,
               code: vizData.code,
               panel_dimensions: panelDimensions,
+              description: args.task_description,
               data: null,
             });
           } catch {}
@@ -410,10 +413,50 @@ function HomeComponent() {
     (async () => {
       try {
         const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
-        if (data?.userUrl || data?.aiUrl || (data?.userParts?.length || data?.aiParts?.length)) setReplay({ userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
-      } catch {}
+        if (data?.conversationUrl || data?.userUrl || data?.aiUrl || (data?.userParts?.length || data?.aiParts?.length)) {
+          setReplay({ conversationUrl: data.conversationUrl, userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
+          setMode('replay');
+        } else {
+          setMode('record');
+        }
+      } catch {
+        setMode('record');
+      } finally {
+        setRecordingsChecked(true);
+      }
     })();
   }, [sessionIdFromUrl, currentSessionId, connectionStatus]);
+
+  useEffect(() => {
+    if (mode !== 'replay') return;
+    const sid = sessionIdFromUrl || currentSessionId;
+    if (!sid) return;
+    (async () => {
+      try {
+        const { data } = await axios.get(`/api/learning/visualizations`, { params: { session_id: sid } });
+        const items = (data?.items || []) as any[];
+        const mapped = items.map((row) => ({
+          id: row.id as string,
+          code: row.code as string,
+          library: row.library as 'p5' | 'three' | 'react',
+          explanation: row.explanation as string | undefined,
+          taskDescription: (row.description || undefined) as string | undefined,
+          panelDimensions: row.panel_dimensions || undefined,
+        }));
+        setVisualizations(mapped);
+        if (mapped.length > 0) {
+          setCurrentVizIndex(0);
+          setCode(mapped[0].code);
+          setLibrary(mapped[0].library);
+        }
+        const msgs: Message[] = [];
+        items.forEach((row: any) => {
+          if (row.explanation) msgs.push({ role: 'assistant', content: row.explanation });
+        });
+        if (msgs.length > 0) setMessages(msgs);
+      } catch {}
+    })();
+  }, [mode, sessionIdFromUrl, currentSessionId]);
 
   useEffect(() => {
     if (connectionStatus === 'disconnected' && currentSessionId) {
@@ -450,13 +493,14 @@ function HomeComponent() {
     return () => window.removeEventListener('resetSession', handleResetSession);
   }, [resetSessionState]);
 
-  // Auto-start session when we have a session ID from URL
+  // Auto-start only if no recordings exist (record mode). If recordings exist, default to replay and do not start.
   useEffect(() => {
-    if (sessionIdFromUrl && !currentSessionId && !voiceActive && !sessionManuallyStopped) {
+    if (!recordingsChecked) return;
+    if (mode === 'record' && sessionIdFromUrl && !currentSessionId && !voiceActive && !sessionManuallyStopped) {
       setCurrentSessionId(sessionIdFromUrl);
       setVoiceActive(true);
     }
-  }, [sessionIdFromUrl, currentSessionId, voiceActive, sessionManuallyStopped]);
+  }, [mode, recordingsChecked, sessionIdFromUrl, currentSessionId, voiceActive, sessionManuallyStopped]);
 
   // Start credit deduction when voice becomes active and connected
   useEffect(() => {
@@ -534,7 +578,10 @@ function HomeComponent() {
             {showOverlay && (
               <div className="absolute inset-0 z-30">
                 <StartButtonOverlay 
-                  onStart={handleStartSession} 
+                  onStart={() => {
+                    setMode('record');
+                    setVoiceActive(true);
+                  }} 
                   connectionStatus={connectionStatus} 
                   creditsLoading={creditsLoading}
                   outOfCredits={credits !== null && credits <= 0}
@@ -592,28 +639,36 @@ function HomeComponent() {
                         </div>
                       </div>
                     </div>
-                    <VoiceControl
-                      active={voiceActive}
-                      sessionId={currentSessionId || sessionIdFromUrl}
-                      onError={setError}
-                      onToolCall={handleToolCall}
-                      onConnectionStatusChange={setConnectionStatus}
-                      onCountdownEnd={handleCountdownEnd}
-                      onCountdownChange={setCountdown}
-                      onFeedbackFormChange={handleFeedbackFormChange}
-                      onFeedbackSubmit={handleFeedbackSubmit}
-                      onFeedbackClose={handleFeedbackClose}
-                      onRecordingsReady={handleRecordingsReady}
-                    />
+                    {mode === 'record' && (
+                      <VoiceControl
+                        active={voiceActive}
+                        sessionId={currentSessionId || sessionIdFromUrl}
+                        onError={setError}
+                        onToolCall={handleToolCall}
+                        onConnectionStatusChange={setConnectionStatus}
+                        onCountdownEnd={handleCountdownEnd}
+                        onCountdownChange={setCountdown}
+                        onFeedbackFormChange={handleFeedbackFormChange}
+                        onFeedbackSubmit={handleFeedbackSubmit}
+                        onFeedbackClose={handleFeedbackClose}
+                        onRecordingsReady={handleRecordingsReady}
+                      />
+                    )}
                     {error && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                         <div className="text-red-700 text-sm">{error}</div>
                       </div>
                     )}
-                    {replay && (replay.userUrl || replay.aiUrl) && (
+                    {mode === 'replay' && replay && (replay.conversationUrl || replay.userUrl || replay.aiUrl) && (
                       <div className="p-3 border rounded-md">
                         <div className="text-sm font-medium mb-2">Session Replay</div>
                         <div className="grid grid-cols-1 gap-3">
+                          {replay.conversationUrl && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground">Conversation (interleaved)</div>
+                              <audio controls className="w-full" src={replay.conversationUrl} />
+                            </div>
+                          )}
                           {replay.userUrl && (
                             <div className="space-y-1">
                               <div className="text-xs text-muted-foreground">User</div>
@@ -626,6 +681,18 @@ function HomeComponent() {
                               <audio controls className="w-full" src={replay.aiUrl} />
                             </div>
                           )}
+                          <div>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setMode('record');
+                                setVoiceActive(true);
+                                setError('');
+                              }}
+                            >
+                              Record new attempt
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -673,6 +740,60 @@ function HomeComponent() {
                             <ToggleGroupItem value="code">Code</ToggleGroupItem>
                           </ToggleGroup>
                         )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Regenerate visualization"
+                          onClick={async () => {
+                            if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
+                            const current = visualizations[currentVizIndex];
+                            const panelElement = vizRef.current;
+                            let panelDimensions = { width: 800, height: 600 };
+                            if (panelElement) {
+                              const rect = panelElement.getBoundingClientRect();
+                              panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
+                            }
+                            try {
+                              setGeneratingVisualization(true);
+                              const response = await fetch('/api/genai/visualize', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions })
+                              });
+                              if (!response.ok) throw new Error('Failed to regenerate visualization');
+                              const vizData = await response.json();
+
+                              const updated: Visualization = { id: current.id, code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: current.taskDescription, panelDimensions };
+                              setVisualizations(prev => {
+                                const next = [...prev];
+                                next[currentVizIndex] = updated;
+                                return next;
+                              });
+                              setCode(vizData.code);
+                              setLibrary(vizData.library);
+                              if (vizData.explanation) {
+                                setMessages(prev => [...prev, { role: 'assistant', content: vizData.explanation }]);
+                              }
+
+                              if (current.id) {
+                                try {
+                                  await axios.put(`/api/learning/visualizations/${current.id}`, {
+                                    code: vizData.code,
+                                    library: vizData.library,
+                                    explanation: vizData.explanation ?? null,
+                                    panel_dimensions: panelDimensions
+                                  });
+                                } catch {}
+                              }
+                            } catch (e: any) {
+                              setError(e.message || 'Failed to regenerate visualization');
+                            } finally {
+                              setGeneratingVisualization(false);
+                            }
+                          }}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
                         {visualizations.length > 0 && (
                           <div className="flex items-center gap-2">
                             <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">

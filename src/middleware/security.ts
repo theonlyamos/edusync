@@ -5,11 +5,12 @@ export function addSecurityHeaders(response: NextResponse): NextResponse {
     // Content Security Policy
     const csp = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdn.supabase.io",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdn.supabase.io https://va.vercel-scripts.com",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         "img-src 'self' data: blob: https:",
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com",
+        "media-src 'self' blob: https://*.supabase.co",
+        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://vitals.vercel-insights.com",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",

@@ -4,9 +4,10 @@ interface AudioVisualizerProps {
   audioData: Float32Array;
   isActive: boolean;
   analyser?: AnalyserNode | null;
+  variant?: 'ai' | 'mic';
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, analyser }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, analyser, variant = 'ai' }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
 
@@ -46,18 +47,25 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
       const x = i * barWidth + barSpacing;
       const y = height - barHeight;
 
-      // Create modern gradient with vibrant colors
-      const gradient = canvasCtx.createLinearGradient(0, y, 0, height);
-      const hue = (i / numBars) * 120 + 200; // Blue to purple range
-      gradient.addColorStop(0, `hsla(${hue}, 70%, 60%, 0.9)`);
-      gradient.addColorStop(0.5, `hsla(${hue + 20}, 80%, 70%, 0.8)`);
-      gradient.addColorStop(1, `hsla(${hue + 40}, 90%, 80%, 0.6)`);
+      // Variant gradients
+      let gradient = canvasCtx.createLinearGradient(0, y, 0, height);
+      if (variant === 'ai') {
+        const hue = (i / numBars) * 120 + 200; // Blue to purple range
+        gradient.addColorStop(0, `hsla(${hue}, 70%, 60%, 0.9)`);
+        gradient.addColorStop(0.5, `hsla(${hue + 20}, 80%, 70%, 0.8)`);
+        gradient.addColorStop(1, `hsla(${hue + 40}, 90%, 80%, 0.6)`);
+      } else {
+        const hue = (i / numBars) * 60 + 20; // Green to yellow range
+        gradient.addColorStop(0, `hsla(${hue}, 80%, 45%, 0.9)`);
+        gradient.addColorStop(0.5, `hsla(${hue + 10}, 85%, 55%, 0.75)`);
+        gradient.addColorStop(1, `hsla(${hue + 20}, 90%, 65%, 0.6)`);
+      }
 
       canvasCtx.fillStyle = gradient;
       canvasCtx.fillRect(x, y, thinBarWidth, barHeight);
 
       // Add a subtle glow effect
-      canvasCtx.shadowColor = `hsla(${hue}, 80%, 70%, 0.5)`;
+      canvasCtx.shadowColor = variant === 'ai' ? 'rgba(99, 102, 241, 0.5)' : 'rgba(16, 185, 129, 0.5)';
       canvasCtx.shadowBlur = 4;
       canvasCtx.fillRect(x, y, thinBarWidth, barHeight);
       canvasCtx.shadowBlur = 0;

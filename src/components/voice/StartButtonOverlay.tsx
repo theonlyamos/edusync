@@ -17,7 +17,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
     return (
       <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10">
         <Loader className="w-12 h-12 animate-spin" />
-        <div className="mt-4 text-lg font-medium">Checking credits...</div>
+        {/* <div className="mt-4 text-lg font-medium">Checking credits...</div> */}
       </div>
     );
   }

@@ -38,13 +38,19 @@ export function VoiceControl({ active, sessionId, onError, onToolCall, onConnect
     sendMedia,
     sendViewport,
     getAnalyser,
+    getMicAnalyser,
+    setOnVadStateListener,
+    setSaveOnlySpeech,
     closeFeedbackForm,
     submitFeedback,
   } = useAudioStreaming();
+  setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
   const [audioData, setAudioData] = useState(new Float32Array(0));
   const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
+  const [vadActive, setVadActive] = useState(false);
+  const [vadRms, setVadRms] = useState(0);
   const [mobileContainer, setMobileContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -123,6 +129,13 @@ export function VoiceControl({ active, sessionId, onError, onToolCall, onConnect
       });
     }
   }, [setOnAiAudioDataListener]);
+
+  useEffect(() => {
+    setOnVadStateListener?.((active, rms) => {
+      setVadActive(active);
+      setVadRms(rms);
+    });
+  }, [setOnVadStateListener]);
 
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
@@ -267,15 +280,21 @@ export function VoiceControl({ active, sessionId, onError, onToolCall, onConnect
       {/* Desktop component - always render for status management, but hide on mobile */}
       <div className="flex flex-col gap-2 w-full">
         <div className="hidden lg:block">{statusBadge}</div>
-        <div className="w-full max-w-md h-12 sm:h-16 hidden lg:block">
-          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
+        <div className="w-full max-w-md h-12 sm:h-16 hidden lg:block relative">
+          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
+          <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
+            <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
+          </div>
         </div>
       </div>
       
       {/* Mobile/tablet visualizer via portal - shows when bottom panel is visible */}
       {mobileContainer && createPortal(
-        <div className="w-full h-full">
-          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} />
+        <div className="w-full h-full relative">
+          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
+          <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
+            <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
+          </div>
         </div>,
         mobileContainer
       )}
