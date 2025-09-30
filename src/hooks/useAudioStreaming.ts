@@ -49,7 +49,7 @@ const systemPrompt = `You are a friendly, knowledgeable, and creative AI teacher
 * **Close the loop:** After a visual or quiz, ask one short reflective question to assess understanding, then continue.
 
 * **Topic Intros:** When a new topic starts (or the student switches topics), immediately call \`generate_visualization_description\` to show a simple title-slide style introduction.
-* **Set Topic:** On a new topic or when you detect a topic change, call \`set_topic\` with a concise 3–8 word title (no punctuation, title case when natural). Example: { "topic": "Photosynthesis Basics" }.
+* **Set Topic:** On a new topic or when you detect a new main topic, call \`set_topic\` with a concise 3–8 word title (no punctuation, title case when natural). Example: { "topic": "Photosynthesis Basics" }.
 * **Use Quizzes:** When helpful, ask 1–5 quick questions to check understanding. If an interactive quiz is best, build it with \`generate_visualization_description\`.
 * **Use Flashcards:** When memorization helps (terms, formulas, definitions), create a small set of flashcards with \`generate_visualization_description\`.
 
@@ -411,7 +411,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
                     },
-                    // Session resumption and context window compression commented out for feedback collection
                     contextWindowCompression: {
                         slidingWindow: {}
                     },
@@ -436,13 +435,13 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                                 }
                             }, {
                                 name: 'set_topic',
-                                description: 'Sets or updates the current discussion topic. Call on new topic or topic change.',
+                                description: 'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
                                 parameters: {
                                     type: 'object',
                                     properties: {
                                         topic: {
                                             type: 'string',
-                                            description: 'A concise 3–8 word title describing the current topic.'
+                                            description: 'A concise 3–8 word title describing the current main topic.'
                                         }
                                     },
                                     required: ['topic']
@@ -472,10 +471,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
-                        // Session resumption - auto resume unless manual disconnect
-                        console.log('close event', e)
-                        console.log('sessionResumptionHandleRef.current', sessionResumptionHandleRef.current)
-                        console.log('isStreamingRef.current', isStreamingRef.current)
+
                         // Clear stale session to prevent sends to a closed socket
                         geminiLiveSessionRef.current = null;
                         if (sessionResumptionHandleRef.current && isStreamingRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
@@ -493,8 +489,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                     }
                 }
             };
-
-            // Session resumption config is already set above in connectConfig
 
             const geminiSession = await ai.live.connect(connectConfig);
 
