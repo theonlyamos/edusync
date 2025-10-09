@@ -31,33 +31,50 @@ interface AudioStreamingActions {
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
 }
 
-const systemPrompt = `You are a friendly, knowledgeable, and creative AI teacher for learners of all ages and levels. Your goal is to teach concepts clearly, encourage curiosity, and adapt your explanations to the learner's background. You are a visual-first teacher who uses illustrations, interactive demos, and short quizzes to help ideas click.
+const systemPrompt = `### **Persona**
 
-### Your Behavior
+You are "Eureka," a friendly, patient, and creative AI tutor. Your mission is to make learning feel like an adventure. You are a visual-first teacher who uses illustrations, diagrams, and simple interactive exercises to make complex topics "click." You are enthusiastic, encouraging, and celebrate curiosity.
 
-* **Be Conversational:** Explain concepts and answer questions in a clear, encouraging tone. Ask brief check-in questions to gauge understanding and adjust difficulty.
-* **Recognize Opportunities:** Notice when a visual or a quick quiz will make the concept clearer.
-* **Generate Visuals:** Use the \`generate_visualization_description\` tool to create a task description for a visual aid. This description will be used to generate the actual visual.
+### **Core Directives**
 
-### Proactive Visual Teaching Strategy
+1. **Be Visual-First, Always:** Your primary method of teaching is through visuals. Proactively generate a visual aid (diagram, demo, quiz, etc.) every 2-3 conversational turns, especially when introducing a new idea.  
+2. **Act, Don't Ask:** **Never ask for permission** to show a visual, demo, or quiz. Confidently decide what the learner needs and generate it.  
+3. **Listen and Adapt:** Gauge the learner's understanding from their responses. Ask short, simple check-in questions to adjust the complexity and pace of the lesson.
 
-* **Proactive, not reactive:** Do not ask if you should show a visual, demo, flashcards, or a quiz—just decide and call \`generate_visualization_description\`.
-* **Cycle through modalities:** As you teach, rotate across: illustration/diagram → interactive demo → flashcards → quick quiz → brief recap. Adapt this sequence to the topic and the learner's progress.
-* **Cadence:** Aim to present at least one visual aid every 2–3 exchanges, and more frequently at the start of a new subtopic.
-* **Topic changes:** On new topics, immediately show a title-slide style introduction via \`generate_visualization_description\`.
-* **Keep it lightweight:** Prefer small, instantly runnable visuals.
-* **Close the loop:** After a visual or quiz, ask one short reflective question to assess understanding, then continue.
+### **The Teaching Loop**
 
-* **Topic Intros:** When a new topic starts (or the student switches topics), immediately call \`generate_visualization_description\` to show a simple title-slide style introduction.
-* **Set Topic:** On a new topic or when you detect a new main topic, call \`set_topic\` with a concise 3–8 word title (no punctuation, title case when natural). Example: { "topic": "Photosynthesis Basics" }.
-* **Use Quizzes:** When helpful, ask 1–5 quick questions to check understanding. If an interactive quiz is best, build it with \`generate_visualization_description\`.
-* **Use Flashcards:** When memorization helps (terms, formulas, definitions), create a small set of flashcards with \`generate_visualization_description\`.
+When explaining a new concept, follow this general cycle to keep the learner engaged:
 
-### Explanation Rules
+1. **Introduce:** Start with a simple, high-level visual (like a title card).  
+2. **Explain & Illustrate:** Briefly explain the core idea, immediately supported by a clear illustration or diagram.  
+3. **Interact:** Follow up with an interactive demo or a small set of flashcards to reinforce the idea.  
+4. **Check:** Use a quick, 1-3 question quiz to check for understanding.  
+5. **Reflect:** Ask a single reflective question about the visual or quiz before moving on.
 
-* Adapt to the learner's level (beginner to advanced) and avoid unnecessary jargon.
-* Keep the focus on the core idea and how the visual/quiz builds intuition.
-`;
+### **Tool Usage**
+
+**1\. set\_topic**
+
+* **When to call:** At the very beginning of a new topic or when the learner clearly changes subjects.  
+* **Format:** A concise 3-8 word, title-cased phrase. No punctuation.  
+* **Example:** set\_topic({"topic": "How Photosynthesis Works"})
+
+**2\. generate\_visualization\_description**
+
+* **When to call:** Use this for **all** visual aids.  
+* **Format:** You must generate a JSON object matching one of the structures below, and then pass it as a **single JSON formatted string** to the visualization\_json parameter.  
+* **Examples of the required JSON structure:**  
+  * **Title Card:** {"type": "title-card", "title": "The Basics of Electricity", "subtitle": "From Atoms to Circuits"}  
+  * **Illustration:** {"type": "illustration", "description": "A simple diagram of the water cycle, showing evaporation from an ocean, condensation into clouds, and precipitation as rain. Use clear arrows and labels for each stage."}  
+  * **Interactive Demo:** {"type": "interactive-demo", "description": "A slider that lets the user adjust the resistance in a simple circuit containing a battery and a lightbulb. As resistance increases, the lightbulb should get dimmer."}  
+  * **Quiz:** {"type": "quiz", "questions": \[{"question": "What part of the cell is the 'powerhouse'?", "options": \["Nucleus", "Mitochondria", "Ribosome"\], "answer": "Mitochondria"}\]}  
+  * **Flashcards:** {"type": "flashcards", "cards": \[{"term": "Evaporation", "definition": "The process where a liquid turns into a gas."}, {"term": "Condensation", "definition": "The process where a gas turns into a liquid."}\]}
+
+### **Constraints**
+
+* Keep your text explanations brief and focused. Let the visuals do the heavy lifting.  
+* After a visual or quiz, ask only **one** short question to check understanding (e.g., "Does that diagram make sense?", "What did you notice when you moved the slider?").  
+* Avoid jargon. If you must use a technical term, define it immediately with a simple analogy or a visual.`;
 
 export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
@@ -168,6 +185,42 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
         segRef.current.push(blob);
         void drainUploads(kind);
     }, [drainUploads]);
+
+    const waitForUploads = useCallback(async () => {
+        if (!currentSessionIdRef.current) {
+            pendingUserChunkQueueRef.current = [];
+            pendingAiChunkQueueRef.current = [];
+            pendingUserSegmentsRef.current = [];
+            pendingAiSegmentsRef.current = [];
+            return;
+        }
+
+        maybeUploadSegment('user', true);
+        maybeUploadSegment('ai', true);
+
+        const withTimeout = async (kind: 'user' | 'ai') => {
+            const chunkQueueRef = kind === 'user' ? pendingUserChunkQueueRef : pendingAiChunkQueueRef;
+            const segmentsRef = kind === 'user' ? pendingUserSegmentsRef : pendingAiSegmentsRef;
+            const start = Date.now();
+            const timeoutMs = 10000;
+
+            return new Promise<void>((resolve) => {
+                const check = () => {
+                    const queuesEmpty = chunkQueueRef.current.length === 0 && segmentsRef.current.length === 0;
+                    const uploading = isUploadingRef.current[kind];
+                    const expired = Date.now() - start > timeoutMs;
+                    if ((queuesEmpty && !uploading) || expired) {
+                        resolve();
+                        return;
+                    }
+                    setTimeout(check, 50);
+                };
+                check();
+            });
+        };
+
+        await Promise.all([withTimeout('user'), withTimeout('ai')]);
+    }, [maybeUploadSegment]);
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
@@ -282,17 +335,18 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const durationMs = Date.now() - started;
             sessionStartedAtRef.current = null;
 
-            onRecordingsReadyRef.current?.({ user: userBlob, ai: aiBlob, durationMs });
-
             // Also finalize streaming parts if any
             try {
                 if (currentSessionIdRef.current) {
+                    await waitForUploads();
                     await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST' });
                 }
             } catch { }
+
+            onRecordingsReadyRef.current?.({ user: userBlob, ai: aiBlob, durationMs });
         };
         void stopAndCollect();
-    }, [cleanupAudioResources]);
+    }, [cleanupAudioResources, waitForUploads]);
 
 
 
@@ -422,13 +476,17 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         {
                             functionDeclarations: [{
                                 name: 'generate_visualization_description',
-                                description: "Generates a detailed description of the visual aid to be created.",
+                                description: "Generates a detailed, natural language description of a visual aid. This description will be used by a separate system to create the actual visual.",
                                 parameters: {
                                     type: 'object',
                                     properties: {
                                         task_description: {
                                             type: 'string',
-                                            description: "A detailed description of the visual aid to be generated. This should include all the necessary information for another AI to create the visual."
+                                            description: `A robust, detailed text description of the visual aid to be generated. Be specific and clear.
+                            - For a Title Card: Clearly state the title and subtitle. Example: "A title card with the title 'The Water Cycle' and the subtitle 'From Rain to Rivers'."
+                            - For an Illustration or Diagram: Describe all elements, their relationships, labels, and any important text. Example: "A simple diagram of the water cycle. Show a blue ocean on the left. An arrow labeled 'Evaporation' points up from the ocean to a white, fluffy cloud. An arrow labeled 'Condensation' shows the cloud forming. A gray cloud on the right has an arrow labeled 'Precipitation' pointing down as rain onto green land with a river."
+                            - For an Interactive Demo: Describe the components and how the user can interact with them. Example: "An interactive demo of a simple circuit with a battery, a switch, and a lightbulb. The user can click the switch to open and close the circuit, turning the lightbulb on and off."
+                            - For a Quiz or Flashcards: Provide the full text for all questions, options, and answers, or all terms and definitions. Example: "A quiz with one question: 'What is the powerhouse of the cell?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."`
                                         }
                                     },
                                     required: ['task_description']
@@ -595,6 +653,9 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             };
 
             source.connect(workletNode);
+            try {
+                workletNode.connect(audioContext.destination);
+            } catch { }
             processorRef.current = workletNode;
 
             // Session resumption initial message
@@ -674,7 +735,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 const part = message.serverContent.modelTurn.parts[0];
                 if (part?.inlineData?.data) {
                     audioParts.push(part.inlineData.data);
-                    console.log('Received AI audio chunk, total parts:', audioParts.length);
                 }
             }
 
@@ -683,7 +743,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                 (message?.serverContent?.turnComplete && audioParts.length > 0);
 
             if (shouldFlush) {
-                console.log('Flushing AI audio chunks:', audioParts.length);
                 playGeminiAudioChunks(audioParts.slice());
                 audioParts.length = 0;
             }
@@ -693,7 +752,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
     // Play audio chunks from Gemini
     const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
         try {
-            console.log('Playing AI audio chunks:', rawData.length, 'chunks');
             const pcmData = rawData.map(data => {
                 const binaryString = atob(data);
                 const bytes = new Uint8Array(binaryString.length);
@@ -704,7 +762,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             });
 
             const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
-            console.log('Total audio data length:', totalDataLength);
             const wavBuffer = convertToWav(rawData, 24000);
 
             let ctx = playbackCtxRef.current;
@@ -768,7 +825,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
-            console.log('Audio buffer decoded, duration:', audioBuffer.duration, 'seconds');
             const float32Data = audioBuffer.getChannelData(0);
             onAiAudioDataListenerRef.current?.(float32Data);
             const source = ctx.createBufferSource();
@@ -795,7 +851,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             }
 
             const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
-            console.log('Starting audio playback at:', startAt, 'duration:', audioBuffer.duration);
             source.start(startAt);
             nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
 
@@ -955,8 +1010,6 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             if (!response.ok) {
                 throw new Error('Failed to submit feedback');
             }
-
-            console.log('Feedback submitted successfully');
         } catch (error) {
             console.error('Failed to submit feedback:', error);
             // Don't throw error to user - feedback is optional

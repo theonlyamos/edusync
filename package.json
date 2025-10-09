@@ -41,7 +41,7 @@
     "axios": "^1.8.4",
     "bcryptjs": "^2.4.3",
     "bufferutil": "^4.0.9",
-    "caniuse-lite": "",
+    "caniuse-lite": "^1.0.30001749",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

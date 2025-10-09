@@ -166,17 +166,12 @@ function HomeComponent() {
     setFeedbackTrigger(null);
   };
 
-  const handleRecordingsReady = useCallback(async ({ user, ai, durationMs }: { user: Blob | null; ai: Blob | null; durationMs: number }) => {
+  const handleRecordingsReady = useCallback(async ({ durationMs }: { user: Blob | null; ai: Blob | null; durationMs: number }) => {
     try {
       const sid = currentSessionId || sessionIdFromUrl;
       if (!sid) return;
-      const form = new FormData();
-      if (user) form.append('user', user);
-      if (ai) form.append('ai', ai);
-      form.append('durationMs', String(durationMs));
-      await axios.post(`/api/learning/sessions/${sid}/recordings`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
       const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
-      setReplay({ conversationUrl: data.conversationUrl, userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs });
+      setReplay({ conversationUrl: data.conversationUrl, userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs ?? durationMs });
     } catch {}
   }, [currentSessionId, sessionIdFromUrl]);
 

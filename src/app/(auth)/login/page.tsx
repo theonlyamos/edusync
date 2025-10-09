@@ -40,7 +40,7 @@ function LoginContent() {
           router.push('/students/dashboard');
           break;
         default:
-          router.push('/');
+          router.push('/session');
       }
     }
   }, [session, status, router, redirectedFrom]);

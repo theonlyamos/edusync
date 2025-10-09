@@ -61,7 +61,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
 
       if (library === 'p5') {
         htmlContent += `
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.0.5/lib/p5.min.js"></script>
   <script>
     window.addEventListener('error', function(e) {
       var c = document.createElement('div');
@@ -77,8 +77,9 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
   </script>`;
       } else if (library === 'three') {
         htmlContent += `
-  <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
-  <script>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/+esm';
+    window.THREE = THREE;
     window.addEventListener('error', function(e) {
       var c = document.createElement('div');
       c.className = 'error';
