@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useContext } from 'react';
-import { useRouter } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 export const dynamic = 'force-dynamic';
@@ -29,15 +28,8 @@ interface Lesson {
 
 export default function StudentLessonsPage() {
   const session = useContext(SupabaseSessionContext);
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-
-  useEffect(() => {
-    if (!session || (session?.user?.role !== 'student')) {
-      router.push('/login');
-    }
-  }, [session, router]);
 
   useEffect(() => {
     fetchLessons();

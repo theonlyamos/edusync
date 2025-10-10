@@ -3,7 +3,6 @@
 import { useState, useEffect, useContext } from 'react';
 
 export const dynamic = 'force-dynamic';
-import { useRouter } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -16,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   GraduationCap,
@@ -46,22 +46,7 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!session) {
-      router.replace('/login');
-      return;
-    }
-    
     if (session?.user?.role !== 'admin') {
-      switch (session?.user?.role) {
-        case 'teacher':
-          router.replace('/teachers/dashboard');
-          break;
-        case 'student':
-          router.replace('/students/dashboard');
-          break;
-        default:
-          router.replace('/login');
-      }
       return;
     }
 
@@ -84,7 +69,7 @@ export default function AdminDashboard() {
     };
 
     fetchStats();
-  }, [session, router, toast]);
+  }, [session, toast]);
 
   if (!session || isLoading) {
     return (
@@ -94,10 +79,6 @@ export default function AdminDashboard() {
         </div>
       </DashboardLayout>
     );
-  }
-
-  if (session?.user?.role !== 'admin') {
-    return null;
   }
 
   return (

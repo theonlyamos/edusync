@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,7 +52,6 @@ interface PageProps {
 export default function StudentDetailsPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const { data: session, status } = useSession();
-  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,26 +65,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.replace('/login');
-      return;
-    }
-    
-    if (status === 'authenticated') {
-      if (session?.user?.role !== 'admin') {
-        switch (session?.user?.role) {
-          case 'teacher':
-            router.replace('/teachers/dashboard');
-            break;
-          case 'student':
-            router.replace('/students/dashboard');
-            break;
-          default:
-            router.replace('/login');
-        }
-        return;
-      }
-
+    if (status === 'authenticated' && session?.user?.role === 'admin') {
       const fetchStudentData = async () => {
         try {
           // Fetch student details
@@ -122,7 +101,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
 
       fetchStudentData();
     }
-  }, [session, status, router, resolvedParams.id, toast]);
+  }, [session, status, resolvedParams.id, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

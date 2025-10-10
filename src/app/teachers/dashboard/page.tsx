@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useContext } from 'react';
+import { useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
@@ -20,14 +20,6 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 export default function TeacherDashboard() {
   const session = useContext(SupabaseSessionContext);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!session) {
-      router.replace('/login');
-    } else if (session?.user?.role !== 'teacher') {
-      router.replace('/students/dashboard');
-    }
-  }, [session, router]);
 
   if (!session) {
     return (

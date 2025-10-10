@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,19 +47,10 @@ interface Student {
 
 export default function StudentsPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.replace('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
-      router.replace('/');
-    }
-  }, [session, status, router]);
 
   useEffect(() => {
     const fetchStudents = async () => {

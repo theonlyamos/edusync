@@ -1,11 +1,29 @@
-import { NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession, type CookieAdapter } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server'
 import { initializeUserCredits } from '@/lib/credits'
+import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const session = await getServerSession()
+        let response = NextResponse.next({
+            request: {
+                headers: request.headers,
+            },
+        });
+
+        // Add security headers to all responses
+        response = addSecurityHeaders(response);
+
+        // Configure CORS
+        response = configureCORS(request, response);
+        const adapter: CookieAdapter = {
+            getAll: () => request.cookies.getAll().map(({ name, value }) => ({ name, value })),
+            setAll: (cookiesToSet) => {
+                cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+            },
+        };
+        const session = await getServerSession(adapter)
         if (!session?.user?.id) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }

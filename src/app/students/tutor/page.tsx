@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useContext } from 'react';
-import { useRouter } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 export const dynamic = 'force-dynamic';
@@ -50,7 +49,6 @@ const suggestedQuestions = [
 
 export default function TutorPage() {
   const session = useContext(SupabaseSessionContext);
-  const router = useRouter();
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -65,12 +63,6 @@ export default function TutorPage() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session || (session?.user?.role !== 'student')) {
-      router.push('/login');
-      return;
-    }
-
-    // Fetch student's grade level
     const fetchGradeLevel = async () => {
       try {
         const response = await fetch('/api/students/profile');
@@ -104,9 +96,11 @@ export default function TutorPage() {
       }
     };
 
-    fetchGradeLevel();
-    fetchLessons();
-  }, [session, router, toast]);
+    if (session?.user?.role === 'student') {
+      fetchGradeLevel();
+      fetchLessons();
+    }
+  }, [session, toast]);
 
   useEffect(() => {
     if (session) {

@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,7 +57,6 @@ interface Lesson {
 export default function LessonPage({ params }: { params: Promise<{ lessonId: string }> }) {
   const resolvedParams = use(params);
   const { data: session, status } = useSession();
-  const router = useRouter();
   const { toast } = useToast();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [contents, setContents] = useState<LessonContent[]>([]);
@@ -68,12 +65,6 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   const [practicing, setPracticing] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
   const [generatingPractice, setGeneratingPractice] = useState(false);
-
-  useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'student')) {
-      router.push('/login');
-    }
-  }, [session, status, router]);
 
   useEffect(() => {
     if (resolvedParams.lessonId) {
@@ -203,7 +194,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
       <DashboardLayout>
         <div className="p-6">
           <h2 className="text-2xl font-bold mb-4">Lesson not found</h2>
-          <Button onClick={() => router.push('/students/lessons')}>
+          <Button onClick={() => window.location.assign('/students/lessons')}>
             Back to Lessons
           </Button>
         </div>

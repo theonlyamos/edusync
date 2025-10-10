@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useContext } from 'react';
+import { useContext } from 'react';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 export const dynamic = 'force-dynamic';
@@ -20,12 +20,6 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 export default function StudentDashboard() {
   const session = useContext(SupabaseSessionContext);
   const router = useRouter();
-
-  useEffect(() => {
-    if (!session || (session?.user?.role !== 'student')) {
-      router.push('/login');
-    }
-  }, [session, router]);
 
   if (!session) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;

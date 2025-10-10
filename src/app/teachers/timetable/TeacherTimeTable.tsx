@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar, BookOpen, GraduationCap, Book, X } from 'lucide-react';
@@ -41,7 +40,6 @@ interface Lesson {
 
 export function TeacherTimeTable() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [timeTable, setTimeTable] = useState<TimeTable>({});
@@ -52,11 +50,7 @@ export function TeacherTimeTable() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'teacher') {
-      router.push('/');
-    } else if (status === 'authenticated') {
+    if (status === 'authenticated' && session?.user?.role === 'teacher') {
       fetchTimeTableAndLessons();
     }
   }, [status, session]);

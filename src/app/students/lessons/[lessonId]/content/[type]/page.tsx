@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,17 +43,10 @@ export default function LessonContentPage({
 }) {
   const resolvedParams = use(params);
   const { data: session, status } = useSession();
-  const router = useRouter();
   const { toast } = useToast();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [contents, setContents] = useState<LessonContent[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (status === 'unauthenticated' || (session?.user?.role !== 'student')) {
-      router.push('/login');
-    }
-  }, [session, status, router]);
 
   useEffect(() => {
     fetchLesson();
@@ -112,7 +104,7 @@ export default function LessonContentPage({
       <DashboardLayout>
         <div className="p-6">
           <h2 className="text-2xl font-bold mb-4">Lesson not found</h2>
-          <Button onClick={() => router.push('/students/lessons')}>
+          <Button onClick={() => window.location.assign('/students/lessons')}>
             Back to Lessons
           </Button>
         </div>
