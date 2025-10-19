@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useEffect, useState, useContext } from 'react';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar, BookOpen, BookA, User } from 'lucide-react';
@@ -38,7 +38,7 @@ interface Lesson {
 }
 
 export function StudentTimeTable() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [timeTable, setTimeTable] = useState<TimeTable>({});
@@ -47,12 +47,7 @@ export function StudentTimeTable() {
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-  useEffect(() => {
-    if (status === 'authenticated' && session?.user?.role === 'student') {
-      fetchTimeTableAndLessons();
-    }
-  }, [status, session]);
-
+  
   const fetchTimeTableAndLessons = async () => {
     try {
       setLoading(true);
@@ -77,6 +72,11 @@ export function StudentTimeTable() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchTimeTableAndLessons();
+  }, []);
+
 
   if (loading) {
     return (
