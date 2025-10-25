@@ -50,12 +50,24 @@ Choose the correct technology based on the task requirements:
 * **Available Hooks (No Import Needed):** useState, useEffect, useMemo, useCallback.  
 * **Available UI Components:** Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Slider, etc.  
 * **Available Chart Components (Recharts):** LineChart, BarChart, PieChart, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, etc.  
-* **Available Map Components (React-Leaflet):** MapContainer, TileLayer (use OpenStreetMap), Marker, Popup, etc.
+* **Available Map Components (React-Leaflet):** MapContainer, TileLayer (use OpenStreetMap), Marker, Popup, etc.  
+* **Images:** For images in React, use standard 'img' elements with React.createElement('img', { src: 'url', alt: 'description', style: {...} }). Extract image URLs from markdown syntax in the task description.
 
 #### **2\. Three.js & p5.js**
 
 * The code must be pure, self-contained JavaScript.  
-* Do **NOT** include any HTML, CSS, or surrounding boilerplate.
+* Do **NOT** include any HTML, CSS, or surrounding boilerplate.  
+* **Images:** For p5.js, use loadImage(url) and image() functions. For Three.js, use THREE.TextureLoader to load images for materials.
+
+### **Image Handling**
+
+* **Detection:** Scan the task description for markdown image syntax: ![alt text](image_url).  
+* **Extraction:** Extract all image URLs from the task description.  
+* **Integration:** Incorporate these images into your visualization:  
+  * For React: Use img elements or as backgrounds  
+  * For p5.js: Use loadImage() in preload() or setup(), then image() to display  
+  * For Three.js: Load as textures using THREE.TextureLoader  
+* **Placement:** Position images logically within the visualization according to the task description's instructions.
 
 ### **Final Output Format**
 
@@ -92,7 +104,7 @@ const displayVisualAidFunctionDeclaration = {
 export async function POST(request: NextRequest) {
     try {
 
-        const { task_description, panel_dimensions } = await request.json();
+        const { task_description, panel_dimensions, theme, theme_colors } = await request.json();
 
         if (!task_description) {
             return NextResponse.json(
@@ -105,7 +117,29 @@ export async function POST(request: NextRequest) {
             ? `\n\nVisualization Panel Dimensions: ${panel_dimensions.width}px wide × ${panel_dimensions.height}px tall\nEnsure your visualization fits within these exact dimensions.`
             : '';
 
-        const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo;
+        const themeInfo = theme && theme_colors
+            ? `\n\n**CRITICAL: Color Theme Requirements**
+The application is currently in ${theme} mode. You MUST use the following color palette to ensure perfect visual harmony and readability:
+
+**Theme Color Palette (${theme} mode):**
+- Background: ${theme_colors.background} - Use this for canvas/container backgrounds
+- Foreground/Text: ${theme_colors.foreground} - Use this for all body text and labels
+- Primary: ${theme_colors.primary} with text color ${theme_colors.primaryForeground} - Use for primary buttons and key interactive elements
+- Secondary: ${theme_colors.secondary} with text color ${theme_colors.secondaryForeground} - Use for secondary actions
+- Accent: ${theme_colors.accent} - Use sparingly for highlights and emphasis
+- Muted: ${theme_colors.muted} with text ${theme_colors.mutedForeground} - Use for less prominent text and subtle backgrounds
+- Border: ${theme_colors.border} - Use for dividers and borders
+
+**MANDATORY RULES:**
+1. ALL text must use either Foreground (${theme_colors.foreground}) or MutedForeground (${theme_colors.mutedForeground})
+2. ALL buttons must use Primary/Secondary colors with their corresponding foreground colors
+3. ALL backgrounds must be either Background or Muted colors
+4. NEVER use arbitrary colors - only use colors from this palette
+5. For charts/graphs, you may use variations of Primary, Secondary, and Accent colors
+6. Ensure all text has sufficient contrast against its background`
+            : '';
+
+        const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo;
 
         const completion = await openai.chat.completions.create({
             model: PROVIDER_MODEL as string,

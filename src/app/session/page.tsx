@@ -62,6 +62,19 @@ function HomeComponent() {
   const [replay, setReplay] = useState<{ conversationUrl?: string | null; userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
   const [mode, setMode] = useState<'replay' | 'record'>('record');
   const [recordingsChecked, setRecordingsChecked] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [themeColors, setThemeColors] = useState<{
+    background: string;
+    foreground: string;
+    primary: string;
+    primaryForeground: string;
+    secondary: string;
+    secondaryForeground: string;
+    accent: string;
+    muted: string;
+    mutedForeground: string;
+    border: string;
+  } | null>(null);
 
   const showOverlay = (mode === 'record') && (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
 
@@ -234,7 +247,7 @@ function HomeComponent() {
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_description: taskDescription, panel_dimensions: panelDimensions })
+        body: JSON.stringify({ task_description: taskDescription, panel_dimensions: panelDimensions, theme, theme_colors: themeColors })
       });
       if (!response.ok) throw new Error('Failed to regenerate visualization');
       const vizData = await response.json();
@@ -293,7 +306,9 @@ function HomeComponent() {
           },
           body: JSON.stringify({ 
             task_description: args.task_description,
-            panel_dimensions: panelDimensions
+            panel_dimensions: panelDimensions,
+            theme,
+            theme_colors: themeColors
           }),
         });
 
@@ -487,6 +502,43 @@ function HomeComponent() {
     window.addEventListener('resetSession', handleResetSession);
     return () => window.removeEventListener('resetSession', handleResetSession);
   }, [resetSessionState]);
+
+  // Detect theme changes and extract actual colors
+  useEffect(() => {
+    const detectThemeAndColors = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      setTheme(isDark ? 'dark' : 'light');
+
+      const computedStyle = getComputedStyle(document.documentElement);
+      const getColor = (varName: string) => {
+        const hsl = computedStyle.getPropertyValue(varName).trim();
+        return hsl ? `hsl(${hsl})` : '';
+      };
+
+      setThemeColors({
+        background: getColor('--background'),
+        foreground: getColor('--foreground'),
+        primary: getColor('--primary'),
+        primaryForeground: getColor('--primary-foreground'),
+        secondary: getColor('--secondary'),
+        secondaryForeground: getColor('--secondary-foreground'),
+        accent: getColor('--accent'),
+        muted: getColor('--muted'),
+        mutedForeground: getColor('--muted-foreground'),
+        border: getColor('--border'),
+      });
+    };
+
+    detectThemeAndColors();
+
+    const observer = new MutationObserver(detectThemeAndColors);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   // Auto-start only if no recordings exist (record mode). If recordings exist, default to replay and do not start.
   useEffect(() => {
@@ -753,7 +805,7 @@ function HomeComponent() {
                               const response = await fetch('/api/genai/visualize', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions })
+                                body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions, theme, theme_colors: themeColors })
                               });
                               if (!response.ok) throw new Error('Failed to regenerate visualization');
                               const vizData = await response.json();

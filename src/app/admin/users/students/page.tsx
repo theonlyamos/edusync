@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
+import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,7 +47,8 @@ interface Student {
 }
 
 export default function StudentsPage() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
+  const router = useRouter();
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,10 +73,10 @@ export default function StudentsPage() {
       }
     };
 
-    if (session?.user?.role === 'admin') {
+    if (session?.user) {
       fetchStudents();
     }
-  }, [session, toast]);
+  }, [session?.user, toast]);
 
   const handleStatusChange = async (studentId: string, newStatus: 'active' | 'inactive') => {
     try {
@@ -142,7 +144,7 @@ export default function StudentsPage() {
     student.grade.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (status === 'loading' || isLoading) {
+  if (isLoading || !session) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -152,7 +154,8 @@ export default function StudentsPage() {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
+  if (session?.user?.role !== 'admin') {
+    router.push('/');
     return null;
   }
 

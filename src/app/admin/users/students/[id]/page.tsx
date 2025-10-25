@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
+import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,7 +52,8 @@ interface PageProps {
 
 export default function StudentDetailsPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
+  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,7 +67,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.role === 'admin') {
+    if (session?.user?.role === 'admin') {
       const fetchStudentData = async () => {
         try {
           // Fetch student details
@@ -101,7 +103,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
 
       fetchStudentData();
     }
-  }, [session, status, resolvedParams.id, toast]);
+  }, [session, resolvedParams.id, toast, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +165,7 @@ export default function StudentDetailsPage({ params }: PageProps) {
     }));
   };
 
-  if (status === 'loading' || isLoading) {
+  if (isLoading || !session) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -173,7 +175,8 @@ export default function StudentDetailsPage({ params }: PageProps) {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
+  if (session?.user?.role !== 'admin') {
+    router.push('/');
     return null;
   }
 

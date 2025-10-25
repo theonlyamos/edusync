@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useContext } from 'react';
+import { useRouter } from 'next/navigation';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,7 +58,8 @@ interface Lesson {
 
 export default function LessonPage({ params }: { params: Promise<{ lessonId: string }> }) {
   const resolvedParams = use(params);
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
+  const router = useRouter();
   const { toast } = useToast();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [contents, setContents] = useState<LessonContent[]>([]);
@@ -179,7 +182,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
     handleStartPractice();
   };
 
-  if (status === 'loading' || loading) {
+  if (loading || !session) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">

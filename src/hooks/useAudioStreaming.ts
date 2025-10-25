@@ -62,13 +62,18 @@ When explaining a new concept, follow this general cycle to keep the learner eng
 **2\. generate\_visualization\_description**
 
 * **When to call:** Use this for **all** visual aids.  
-* **Format:** You must generate a JSON object matching one of the structures below, and then pass it as a **single JSON formatted string** to the visualization\_json parameter.  
-* **Examples of the required JSON structure:**  
-  * **Title Card:** {"type": "title-card", "title": "The Basics of Electricity", "subtitle": "From Atoms to Circuits"}  
-  * **Illustration:** {"type": "illustration", "description": "A simple diagram of the water cycle, showing evaporation from an ocean, condensation into clouds, and precipitation as rain. Use clear arrows and labels for each stage."}  
-  * **Interactive Demo:** {"type": "interactive-demo", "description": "A slider that lets the user adjust the resistance in a simple circuit containing a battery and a lightbulb. As resistance increases, the lightbulb should get dimmer."}  
-  * **Quiz:** {"type": "quiz", "questions": \[{"question": "What part of the cell is the 'powerhouse'?", "options": \["Nucleus", "Mitochondria", "Ribosome"\], "answer": "Mitochondria"}\]}  
-  * **Flashcards:** {"type": "flashcards", "cards": \[{"term": "Evaporation", "definition": "The process where a liquid turns into a gas."}, {"term": "Condensation", "definition": "The process where a gas turns into a liquid."}\]}
+* **Format:** Provide a clear, detailed text description of what should be visualized. Include specific instructions about layout, labels, colors, and interactions.  
+* **Using Images:** When a real photograph, scientific diagram, historical image, or illustration would significantly enhance understanding, include the image URL using markdown syntax: ![description](url). The system has access to search for relevant images. Examples of when to use images:  
+  * Scientific concepts (e.g., anatomical diagrams, molecular structures, astronomical photos)  
+  * Historical events (e.g., historical photographs, maps, artifacts)  
+  * Geographic features (e.g., satellite imagery, topographical maps)  
+  * Biological specimens (e.g., plant/animal photos, microscopy images)  
+* **Example descriptions:**  
+  * **Title Card:** "A title card with the title 'The Basics of Electricity' and the subtitle 'From Atoms to Circuits'"  
+  * **Illustration with Image:** "Show the anatomy of a human heart with this reference diagram: ![Human heart anatomy](https://example.com/heart-diagram.jpg). Add interactive labels pointing to the four chambers, aorta, and major blood vessels."  
+  * **Interactive Demo:** "A slider that lets the user adjust the resistance in a simple circuit containing a battery and a lightbulb. As resistance increases, the lightbulb should get dimmer."  
+  * **Quiz:** "A quiz with one question: 'What part of the cell is the powerhouse?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."  
+  * **Diagram with Context:** "Display this image of the solar system ![Solar system](https://example.com/solar-system.jpg) and add an interactive slider to show the relative distances of planets from the sun with scale labels."
 
 ### **Constraints**
 
@@ -492,7 +497,7 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const audioParts: string[] = [];
 
             const connectConfig: any = {
-                model: 'models/gemini-live-2.5-flash-preview',
+                model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
                 // Session resumption
                 config: {
@@ -522,7 +527,8 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                             - For a Title Card: Clearly state the title and subtitle. Example: "A title card with the title 'The Water Cycle' and the subtitle 'From Rain to Rivers'."
                             - For an Illustration or Diagram: Describe all elements, their relationships, labels, and any important text. Example: "A simple diagram of the water cycle. Show a blue ocean on the left. An arrow labeled 'Evaporation' points up from the ocean to a white, fluffy cloud. An arrow labeled 'Condensation' shows the cloud forming. A gray cloud on the right has an arrow labeled 'Precipitation' pointing down as rain onto green land with a river."
                             - For an Interactive Demo: Describe the components and how the user can interact with them. Example: "An interactive demo of a simple circuit with a battery, a switch, and a lightbulb. The user can click the switch to open and close the circuit, turning the lightbulb on and off."
-                            - For a Quiz or Flashcards: Provide the full text for all questions, options, and answers, or all terms and definitions. Example: "A quiz with one question: 'What is the powerhouse of the cell?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."`
+                            - For a Quiz or Flashcards: Provide the full text for all questions, options, and answers, or all terms and definitions. Example: "A quiz with one question: 'What is the powerhouse of the cell?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."
+                            - Including Images: If a real photograph, diagram, or illustration would enhance understanding, include image URLs using markdown image syntax: ![alt text](image_url). You can search for and include relevant educational images from reliable sources. The visualization generator will incorporate these images into the final output. Example: "Show the structure of DNA with this reference image: ![DNA double helix structure](https://example.com/dna.jpg). Include labels pointing to the sugar-phosphate backbone and base pairs."`
                                         }
                                     },
                                     required: ['task_description']
