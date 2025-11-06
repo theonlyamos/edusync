@@ -35,7 +35,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
           )}
           <div className="mt-4">
             <Button asChild>
-              <a href="/session/credits">Buy Credits</a>
+              <a href="/learn/credits">Buy Credits</a>
             </Button>
           </div>
         </div>

@@ -201,7 +201,7 @@ function HomeComponent() {
       const sessionId = response.data.id;
       
       // Navigate to the dynamic session page
-      router.push(`/session/${sessionId}`);
+      router.push(`/learn/${sessionId}`);
     } catch (error: any) {
       console.error('Failed to create session:', error);
       setError(error.response?.data?.error || 'Failed to create session');
@@ -998,7 +998,7 @@ function HomeComponent() {
               </div>
               <Button 
                 size="sm" 
-                onClick={() => window.open('/session/credits', '_blank')}
+                onClick={() => window.open('/learn/credits', '_blank')}
                 className="ml-auto"
               >
                 Buy Credits

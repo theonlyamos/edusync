@@ -94,12 +94,12 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   };
 
   const handleNewSession = () => {
-    if (pathname === '/session') {
+    if (pathname === '/learn') {
       // If already on session page, dispatch event to reset session state
       window.dispatchEvent(new CustomEvent('resetSession'));
     } else {
       // Navigate to session page
-      router.push('/session');
+      router.push('/learn');
     }
   };
 
@@ -172,12 +172,12 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           {/* Credits Display */}
           <div className="pb-4">
             {collapsed ? (
-                <Link href="/session/credits" className="flex items-center justify-center p-2 rounded-md hover:bg-muted/50 transition-colors">
+                <Link href="/learn/credits" className="flex items-center justify-center p-2 rounded-md hover:bg-muted/50 transition-colors">
                   <Coins className="w-5 h-5 text-yellow-500" />
                   <span className="text-sm font-medium ml-2">{loadingCredits ? '...' : credits}</span>
                 </Link>
             ) : (
-              <Link href="/session/credits" className="block">
+              <Link href="/learn/credits" className="block">
                 <div className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors border">
                   <div className="flex items-center gap-2">
                     <Coins className="w-4 h-4 text-yellow-500" />
@@ -193,7 +193,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
             )}
             {!collapsed && (
               <div className="mt-2">
-                <Link href="/session/credits">
+                <Link href="/learn/credits">
                   <Button size="sm" variant="outline" className="w-full">
                     <Plus className="w-3 h-3 mr-1" />
                     Buy Credits
@@ -222,8 +222,8 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                     <div className="text-xs text-muted-foreground px-2 py-1">No sessions</div>
                   ) : (
                     sessionHistory.map(s => (
-                      <Link key={s.id} href={`/session/${s.id}`} title={s.topic || 'Chat'}
-                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      <Link key={s.id} href={`/learn/${s.id}`} title={s.topic || 'Chat'}
+                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/learn/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                       >
                         {s.topic || 'New Session'}
                       </Link>
@@ -309,7 +309,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           </Button>
           
           <div className="flex items-center gap-3 flex-1">
-            <Link href="/session/credits" className="flex items-center gap-2 text-sm">
+            <Link href="/learn/credits" className="flex items-center gap-2 text-sm">
               <Coins className="w-4 h-4 text-yellow-500" />
               <span className="font-medium">{loadingCredits ? '...' : credits}</span>
             </Link>
@@ -383,7 +383,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
               {/* Credits Section */}
               <div className="mb-6">
-                <Link href="/session/credits" className="block mb-2" onClick={closeMobileMenu}>
+                <Link href="/learn/credits" className="block mb-2" onClick={closeMobileMenu}>
                   <div className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors border">
                     <div className="flex items-center gap-2">
                       <Coins className="w-4 h-4 text-yellow-500" />
@@ -396,7 +396,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                     )}
                   </div>
                 </Link>
-                <Link href="/session/credits" onClick={closeMobileMenu}>
+                <Link href="/learn/credits" onClick={closeMobileMenu}>
                   <Button size="sm" variant="outline" className="w-full">
                     <Plus className="w-3 h-3 mr-1" />
                     Buy Credits
@@ -419,9 +419,9 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                       sessionHistory.map(s => (
                         <Link 
                           key={s.id} 
-                          href={`/session/${s.id}`} 
+                          href={`/learn/${s.id}`} 
                           title={s.topic || 'Chat'}
-                          className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/session/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                          className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/learn/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                           onClick={closeMobileMenu}
                         >
                           {s.topic || 'New Session'}

@@ -56,7 +56,7 @@ function SessionCreditsSuccessContent() {
               We couldn't verify your payment session.
             </p>
             <Button asChild>
-              <Link href="/session/credits">Back to Credits</Link>
+              <Link href="/learn/credits">Back to Credits</Link>
             </Button>
           </CardContent>
         </Card>
@@ -100,14 +100,14 @@ function SessionCreditsSuccessContent() {
 
           <div className="space-y-3">
             <Button asChild className="w-full">
-              <Link href="/session" className="flex items-center justify-center space-x-2">
+              <Link href="/learn" className="flex items-center justify-center space-x-2">
                 <span>Start Learning</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
             
             <Button variant="outline" asChild className="w-full">
-              <Link href="/session/credits">View Credit History</Link>
+              <Link href="/learn/credits">View Credit History</Link>
             </Button>
           </div>
 

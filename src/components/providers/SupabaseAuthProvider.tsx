@@ -36,7 +36,7 @@ export function SupabaseAuthProvider({ children }: Props) {
           window.location.replace(redirectedFrom);
           return;
         }
-        window.location.replace('/session');
+        window.location.replace('/learn');
       }).catch(() => {});
     }
   }, [supabase]);

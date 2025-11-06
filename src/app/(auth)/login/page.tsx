@@ -40,7 +40,7 @@ function LoginContent() {
           router.push('/students/dashboard');
           break;
         default:
-          router.push('/session');
+          router.push('/learn');
       }
     }
   }, [session, status, router, redirectedFrom]);
@@ -74,7 +74,7 @@ function LoginContent() {
 
   const handleOAuth = async (provider: 'google') => {
     try {
-      const redirectTo = `${window.location.origin}/login?redirectedFrom=${encodeURIComponent(redirectedFrom || '/session')}`;
+      const redirectTo = `${window.location.origin}/login?redirectedFrom=${encodeURIComponent(redirectedFrom || '/learn')}`;
       const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) throw error;
     } catch (error) {

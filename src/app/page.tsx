@@ -138,7 +138,7 @@ function HomeContent() {
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
-                <Link href="/session" className="flex items-center gap-2">
+                <Link href="/learn" className="flex items-center gap-2">
                   <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   Start Learning Now
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -352,7 +352,7 @@ function HomeContent() {
             Watch how students interact with complex topics through voice and receive instant visual feedback
           </p>
           <Button asChild size="lg" className="rounded-full px-8 py-6 text-base shadow-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white">
-            <Link href="/session" className="flex items-center gap-2">
+            <Link href="/learn" className="flex items-center gap-2">
               <Play className="w-5 h-5" />
               Try Live Demo
               <ArrowRight className="w-4 h-4" />
@@ -467,7 +467,7 @@ function HomeContent() {
         
         <div className="grid gap-8 md:grid-cols-3">
           <Card className="relative overflow-hidden border-2 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group">
-            <Link href="/session" className="block">
+            <Link href="/learn" className="block">
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 group-hover:from-indigo-500/10 group-hover:to-violet-500/10 transition-all duration-300"></div>
               <CardContent className="relative p-8">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center mb-6">
@@ -562,7 +562,7 @@ function HomeContent() {
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
                 <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
-                  <Link href="/session" className="flex items-center gap-2">
+                  <Link href="/learn" className="flex items-center gap-2">
                     <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     Try Live Demo
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -610,7 +610,7 @@ function HomeContent() {
               </p>
               <div className="flex items-center gap-3">
                 <Button asChild size="sm" className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white">
-                  <Link href="/session">Try Demo</Link>
+                  <Link href="/learn">Try Demo</Link>
                 </Button>
               </div>
             </div>

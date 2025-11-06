@@ -45,7 +45,7 @@ export async function middleware(request: NextRequest) {
   const isAdminArea = pathname.startsWith('/admin');
   const isTeacherArea = pathname.startsWith('/teachers');
   const isStudentArea = pathname.startsWith('/students');
-  const isSessionArea = pathname.startsWith('/session');
+  const isSessionArea = pathname.startsWith('/learn');
   const isProtected = isAdminArea || isTeacherArea || isStudentArea || isSessionArea;
 
   if (!isProtected) {
@@ -89,5 +89,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/session/:path*', '/admin/:path*', '/teachers/:path*', '/students/:path*'],
+  matcher: ['/learn/:path*', '/admin/:path*', '/teachers/:path*', '/students/:path*'],
 };
