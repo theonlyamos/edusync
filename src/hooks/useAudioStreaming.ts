@@ -63,17 +63,19 @@ When explaining a new concept, follow this general cycle to keep the learner eng
 
 * **When to call:** Use this for **all** visual aids.  
 * **Format:** Provide a clear, detailed text description of what should be visualized. Include specific instructions about layout, labels, colors, and interactions.  
-* **Using Images:** When a real photograph, scientific diagram, historical image, or illustration would significantly enhance understanding, include the image URL using markdown syntax: ![description](url). The system has access to search for relevant images. Examples of when to use images:  
+* **Be Illustrative & Stylized:** For informative (non-interactive) visuals like diagrams and concept illustrations, describe a stylized, artistic representation. Use adjectives like "cute," "friendly," "stylized," "rounded," "colorful." Think modern infographics or children's book illustrations rather than technical diagrams.  
+* **Using Images:** When a real photograph, scientific diagram, historical image, or illustration would significantly enhance understanding, **actively search for and include image URLs** using markdown syntax: ![description](url). The system has access to search for relevant images. Use images liberally for:  
   * Scientific concepts (e.g., anatomical diagrams, molecular structures, astronomical photos)  
   * Historical events (e.g., historical photographs, maps, artifacts)  
   * Geographic features (e.g., satellite imagery, topographical maps)  
   * Biological specimens (e.g., plant/animal photos, microscopy images)  
+  * Any concept that would benefit from real-world visual reference  
 * **Example descriptions:**  
-  * **Title Card:** "A title card with the title 'The Basics of Electricity' and the subtitle 'From Atoms to Circuits'"  
-  * **Illustration with Image:** "Show the anatomy of a human heart with this reference diagram: ![Human heart anatomy](https://example.com/heart-diagram.jpg). Add interactive labels pointing to the four chambers, aorta, and major blood vessels."  
+  * **Title Card:** "A stylized title card with the title 'The Basics of Electricity' in large, friendly typography and the subtitle 'From Atoms to Circuits' below. Use a gradient background and subtle electrical spark graphics."  
+  * **Illustrative Diagram with Image:** "Create a stylized, illustrative diagram of the immune system at work. Show a cute, rounded white blood cell character battling a stylized pathogen. Use this reference image for anatomical accuracy: ![Immune cells](https://example.com/immune-cells.jpg). Add soft shadows, rounded shapes, and a gradient background. Include simple labels with arrows."  
   * **Interactive Demo:** "A slider that lets the user adjust the resistance in a simple circuit containing a battery and a lightbulb. As resistance increases, the lightbulb should get dimmer."  
   * **Quiz:** "A quiz with one question: 'What part of the cell is the powerhouse?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."  
-  * **Diagram with Context:** "Display this image of the solar system ![Solar system](https://example.com/solar-system.jpg) and add an interactive slider to show the relative distances of planets from the sun with scale labels."
+  * **Stylized Concept Illustration:** "Show the water cycle as a stylized landscape illustration. Include a cute sun character causing evaporation from a blue ocean, fluffy clouds forming, and rain falling onto green hills with a winding river. Use soft colors, rounded shapes, and label each stage clearly."
 
 ### **Constraints**
 
@@ -517,18 +519,18 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
                         {
                             functionDeclarations: [{
                                 name: 'generate_visualization_description',
-                                description: "Generates a detailed, natural language description of a visual aid. This description will be used by a separate system to create the actual visual.",
+                                description: "Generates a detailed, natural language description of a visual aid. This description will be used by a separate system to create the actual visual. For informative diagrams, describe stylized, illustrative designs rather than technical diagrams.",
                                 parameters: {
                                     type: 'object',
                                     properties: {
                                         task_description: {
                                             type: 'string',
                                             description: `A robust, detailed text description of the visual aid to be generated. Be specific and clear.
-                            - For a Title Card: Clearly state the title and subtitle. Example: "A title card with the title 'The Water Cycle' and the subtitle 'From Rain to Rivers'."
-                            - For an Illustration or Diagram: Describe all elements, their relationships, labels, and any important text. Example: "A simple diagram of the water cycle. Show a blue ocean on the left. An arrow labeled 'Evaporation' points up from the ocean to a white, fluffy cloud. An arrow labeled 'Condensation' shows the cloud forming. A gray cloud on the right has an arrow labeled 'Precipitation' pointing down as rain onto green land with a river."
+                            - For a Title Card: Clearly state the title and subtitle with styling guidance. Example: "A stylized title card with the title 'The Water Cycle' in large, friendly typography and the subtitle 'From Rain to Rivers' below. Use a gradient background with subtle water droplet graphics."
+                            - For an Illustration or Diagram: Describe a stylized, illustrative representation with character and personality. Use descriptive adjectives like "cute," "friendly," "rounded," "colorful." Include image references when helpful. Example: "A stylized illustration of the water cycle. Show a cheerful sun character causing evaporation from a deep blue ocean. Add fluffy, rounded clouds forming above. Show gentle rain falling onto green, rolling hills with a winding river. Use soft colors, rounded shapes, and gradients. Add clear labels with arrows for each stage."
                             - For an Interactive Demo: Describe the components and how the user can interact with them. Example: "An interactive demo of a simple circuit with a battery, a switch, and a lightbulb. The user can click the switch to open and close the circuit, turning the lightbulb on and off."
                             - For a Quiz or Flashcards: Provide the full text for all questions, options, and answers, or all terms and definitions. Example: "A quiz with one question: 'What is the powerhouse of the cell?' Options: Nucleus, Mitochondria, Ribosome. The correct answer is Mitochondria."
-                            - Including Images: If a real photograph, diagram, or illustration would enhance understanding, include image URLs using markdown image syntax: ![alt text](image_url). You can search for and include relevant educational images from reliable sources. The visualization generator will incorporate these images into the final output. Example: "Show the structure of DNA with this reference image: ![DNA double helix structure](https://example.com/dna.jpg). Include labels pointing to the sugar-phosphate backbone and base pairs."`
+                            - Including Images: Actively search for and include relevant image URLs using markdown image syntax: ![alt text](image_url). Use images liberally for scientific concepts, historical events, biological specimens, and any topic that benefits from visual reference. Example: "Create an illustrative diagram of the immune system in action. Show stylized white blood cells battling pathogens. Use this reference for accuracy: ![Immune system cells](https://example.com/immune-cells.jpg). Add rounded shapes, soft shadows, a gradient background, and clear labels with arrows."`
                                         }
                                     },
                                     required: ['task_description']

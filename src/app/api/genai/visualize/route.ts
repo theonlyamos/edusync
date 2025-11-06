@@ -1,15 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+interface OpenAIConfig {
+    baseURL: string;
+    apiKey: string;
+    defaultHeaders?: Record<string, string>;
+}
+
 const AI_PROVIDER = process.env.AI_PROVIDER || 'GEMINI';
-const PROVIDER_BASE_URL = process.env[`${AI_PROVIDER}_BASE_URL`];
+const PROVIDER_BASE_URL = process.env[`${AI_PROVIDER}_BASE_URL`] || '';
 const PROVIDER_API_KEY = process.env[`${AI_PROVIDER}_API_KEY`];
 const PROVIDER_MODEL = process.env[`${AI_PROVIDER}_MODEL`];
+let HELICONE_BASE_URL = process.env.HELICONE_BASE_URL || '';
+const HELICONE_API_KEY = process.env.HELICONE_API_KEY;
 
-const openai = new OpenAI({
-    baseURL: PROVIDER_BASE_URL,
-    apiKey: PROVIDER_API_KEY,
-});
+if (AI_PROVIDER === 'GEMINI') {
+    HELICONE_BASE_URL = HELICONE_BASE_URL + 'beta';
+}
+
+const openaiConfig: OpenAIConfig = {
+    baseURL: AI_PROVIDER === 'GROQ' ? PROVIDER_BASE_URL : HELICONE_BASE_URL,
+    apiKey: PROVIDER_API_KEY || '',
+};
+
+if (AI_PROVIDER !== 'GROQ') {
+    openaiConfig.defaultHeaders = {
+        "Helicone-Auth": `Bearer ${HELICONE_API_KEY}`,
+        "Helicone-Target-Url": HELICONE_BASE_URL,
+        "Helicone-Target-Provider": AI_PROVIDER,
+    };
+}
+
+const openai = new OpenAI(openaiConfig);
 
 const SYSTEM_PROMPT = `### **Persona & Core Goal**
 
@@ -21,6 +43,18 @@ You are an expert AI that creates high-quality, educational visualizations. Your
 2. **Cleanliness:** All visuals must have a modern, clean aesthetic. Use ample spacing, readable fonts, rounded corners, and a simple color palette.  
 3. **Constraints:** You **must** strictly adhere to all rules regarding component names, available libraries, and syntax (especially the React.createElement rule).  
 4. **Concealment:** **Never** use technical jargon like "React," "JavaScript," "useState," etc., in your user-facing explanation. Explain the *concept*, not the code.
+
+### **Visual Style Guide for Informative Illustrations**
+
+For non-interactive, informative illustrations (diagrams, title cards, concept explanations):
+
+* **Be Illustrative:** Create stylized, artistic representations rather than plain diagrams. Think children's book illustrations or modern infographic style.
+* **Character & Personality:** When illustrating concepts with objects or entities, give them character (e.g., cute immune cells, friendly atoms, expressive planets).
+* **Rounded & Soft:** Use rounded corners, soft shadows, and smooth curves. Avoid sharp, technical-looking diagrams.
+* **Layered Compositions:** Create depth with background elements, foreground subjects, and atmospheric effects (gradients, subtle textures).
+* **Integrate Reference Images:** When image URLs are provided in the task description (markdown format: ![alt](url)), seamlessly integrate them as key visual elements, not afterthoughts.
+* **Visual Hierarchy:** Use size, color saturation, and positioning to guide the eye through the educational narrative.
+* **Whitespace & Balance:** Don't overcrowd. Let elements breathe with generous spacing.
 
 ### **Technology Selection Framework**
 
@@ -51,7 +85,8 @@ Choose the correct technology based on the task requirements:
 * **Available UI Components:** Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Slider, etc.  
 * **Available Chart Components (Recharts):** LineChart, BarChart, PieChart, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, etc.  
 * **Available Map Components (React-Leaflet):** MapContainer, TileLayer (use OpenStreetMap), Marker, Popup, etc.  
-* **Images:** For images in React, use standard 'img' elements with React.createElement('img', { src: 'url', alt: 'description', style: {...} }). Extract image URLs from markdown syntax in the task description.
+* **Images:** For images in React, use standard 'img' elements with React.createElement('img', { src: 'url', alt: 'description', style: {...} }). Extract image URLs from markdown syntax in the task description. Style images to fit the illustrative aesthetic with border-radius, box-shadow, and proper sizing.
+* **Styling for Illustrations:** Use inline styles with theme colors, gradients (linear-gradient, radial-gradient), border-radius for rounded shapes, box-shadow for depth, and CSS transforms for dynamic positioning. Create layered compositions with absolutely positioned elements when needed.
 
 #### **2\. Three.js & p5.js**
 
