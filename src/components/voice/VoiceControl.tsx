@@ -7,6 +7,7 @@ interface VoiceControlProps {
   /** Whether mic streaming should be active */
   active: boolean;
   sessionId?: string | null;
+  topic?: string | null;
   onError?: (error: string) => void;
   onToolCall?: (name: string, args: any) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
@@ -19,7 +20,7 @@ interface VoiceControlProps {
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
 }
 
-export function VoiceControl({ active, sessionId, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, sessionId, topic, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -43,7 +44,7 @@ export function VoiceControl({ active, sessionId, onError, onToolCall, onConnect
     setSaveOnlySpeech,
     closeFeedbackForm,
     submitFeedback,
-  } = useAudioStreaming();
+  } = useAudioStreaming(topic);
   setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);

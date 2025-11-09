@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { getServerSession, type CookieAdapter } from '@/lib/auth';
 import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 import { rateLimit } from '@/lib/rate-limiter';
+import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/auth-middleware';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -11,20 +12,15 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Add security headers to all responses
   response = addSecurityHeaders(response);
-
-  // Configure CORS
   response = configureCORS(request, response);
 
-  // Handle CORS preflight early
   if (request.method === 'OPTIONS') {
     return response;
   }
 
   const pathname = request.nextUrl.pathname;
 
-  // Apply rate limiting to API routes
   if (pathname.startsWith('/api/')) {
     let rateLimitType: 'api' | 'auth' | 'upload' | 'admin' = 'api';
 
@@ -40,6 +36,39 @@ export async function middleware(request: NextRequest) {
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
+
+    const authMode = getAuthModeForPath(pathname);
+
+    if (authMode !== 'none') {
+      const { authorized, authContext, error } = await authenticateRequest(request, response);
+
+      if (!authorized) {
+        return NextResponse.json(
+          { error: error || 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+
+      if (authContext) {
+        if (authMode === 'session' && authContext.authType !== 'session') {
+          return NextResponse.json(
+            { error: 'This endpoint requires session authentication' },
+            { status: 401 }
+          );
+        }
+
+        if (authMode === 'apiKey' && authContext.authType !== 'apiKey') {
+          return NextResponse.json(
+            { error: 'This endpoint requires API key authentication' },
+            { status: 401 }
+          );
+        }
+
+        response = setAuthHeaders(response, authContext);
+      }
+    }
+
+    return response;
   }
 
   const isAdminArea = pathname.startsWith('/admin');
@@ -89,5 +118,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/learn/:path*', '/admin/:path*', '/teachers/:path*', '/students/:path*'],
+  matcher: [
+    '/learn/:path*',
+    '/admin/:path*',
+    '/teachers/:path*',
+    '/students/:path*',
+    '/api/:path*',
+  ],
 };

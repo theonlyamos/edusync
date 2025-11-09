@@ -130,4 +130,43 @@ export interface DBProgress {
     updatedAt?: string;
 }
 
+export interface DBOrganization {
+    id: string;
+    name: string;
+    description?: string;
+    owner_id: string;
+    credits: number;
+    total_credits_purchased: number;
+    total_credits_used: number;
+    is_active: boolean;
+    settings?: Record<string, any>;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface DBOrganizationMember {
+    id: string;
+    organization_id: string;
+    user_id: string;
+    role: 'owner' | 'admin' | 'member';
+    credits_allocated: number;
+    credits_used: number;
+    joined_at?: string;
+    invited_by?: string;
+    invitation_accepted_at?: string;
+    is_active: boolean;
+}
+
+export interface DBOrganizationInvitation {
+    id: string;
+    organization_id: string;
+    email: string;
+    role: 'admin' | 'member';
+    invited_by: string;
+    token: string;
+    expires_at: string;
+    accepted_at?: string;
+    created_at?: string;
+}
+
 

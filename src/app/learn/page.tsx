@@ -690,6 +690,7 @@ function HomeComponent() {
                       <VoiceControl
                         active={voiceActive}
                         sessionId={currentSessionId || sessionIdFromUrl}
+                        topic={topic}
                         onError={setError}
                         onToolCall={handleToolCall}
                         onConnectionStatusChange={setConnectionStatus}

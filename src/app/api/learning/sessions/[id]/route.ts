@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSSRUserSupabase } from '@/lib/supabase.server'
-import { getServerSession } from '@/lib/auth'
+import { getAuthContext } from '@/lib/get-auth-context'
+import { createClient } from '@supabase/supabase-js'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getServerSession()
-        if (!session || !session.user) {
+        const authContext = getAuthContext(request);
+        
+        if (!authContext) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
         const body = await request.json().catch(() => ({}))
-        const supabase = await createSSRUserSupabase()
-
         const { id } = await params
 
         const updates: any = {}
@@ -21,16 +21,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (typeof body.session_handle === 'string') updates.session_handle = body.session_handle
         if (body.ended === true) updates.ended_at = new Date().toISOString()
 
+        const supabase = authContext.authType === 'apiKey'
+            ? createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!
+              )
+            : await createSSRUserSupabase();
+
         const { data: existing, error: fetchErr } = await supabase
             .from('learning_sessions')
-            .select('id, user_id')
+            .select('id, user_id, api_key_id')
             .eq('id', id)
             .maybeSingle()
 
         if (fetchErr || !existing) {
             return NextResponse.json({ error: 'Not found' }, { status: 404 })
         }
-        if (existing.user_id !== session.user.id) {
+        if (existing.user_id !== authContext.userId) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 

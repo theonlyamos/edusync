@@ -138,7 +138,6 @@ const displayVisualAidFunctionDeclaration = {
 
 export async function POST(request: NextRequest) {
     try {
-
         const { task_description, panel_dimensions, theme, theme_colors } = await request.json();
 
         if (!task_description) {

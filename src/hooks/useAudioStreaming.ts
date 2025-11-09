@@ -119,7 +119,7 @@ When explaining a new concept, follow this general cycle to keep the learner eng
 * Overly formal constructions like "one might consider," "it is important to note," "in order to," or "due to the fact that."  
 * Any tone that feels stiff, distant, or performative.`;
 
-export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions {
+export function useAudioStreaming(topic?: string | null): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -498,13 +498,16 @@ export function useAudioStreaming(): AudioStreamingState & AudioStreamingActions
             const responseQueue: LiveServerMessage[] = [];
             const audioParts: string[] = [];
 
+            const topicContext = topic ? `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.` : '';
+            const finalSystemPrompt = systemPrompt + topicContext;
+
             const connectConfig: any = {
                 model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
                 // Session resumption
                 config: {
                     responseModalities: ['AUDIO'],
-                    systemInstruction: systemPrompt,
+                    systemInstruction: finalSystemPrompt,
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
                     },
