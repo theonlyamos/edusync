@@ -118,8 +118,17 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     }, 300); // Match the animation duration
   };
 
-  const avatarUrl = session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || '/next.svg'
+  const avatarUrl = session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture
   const displayName = session?.user?.user_metadata?.name || session?.user?.email || 'User'
+  
+  const getInitials = (name: string) => {
+    const names = name.split(' ').filter(n => n.length > 0)
+    if (names.length === 0) return 'U'
+    if (names.length === 1) return names[0].charAt(0).toUpperCase()
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
+  }
+  
+  const userInitials = getInitials(displayName)
 
   return (
     <div className="flex h-screen bg-background">
@@ -291,7 +300,19 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           {/* User Info & Logout */}
           <div className={`flex items-center gap-3 ${collapsed ? 'flex-col' : 'justify-between'}`}>
             <div className="flex items-center gap-3">
-              <img src={avatarUrl} alt="avatar" referrerPolicy="no-referrer" crossOrigin="anonymous" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/next.svg' }} className="w-8 h-8 rounded-full object-cover" />
+              {avatarUrl ? (
+                <img 
+                  src={avatarUrl} 
+                  alt="avatar" 
+                  referrerPolicy="no-referrer" 
+                  crossOrigin="anonymous" 
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }} 
+                  className="w-8 h-8 rounded-full object-cover" 
+                />
+              ) : null}
+              <div className={`${avatarUrl ? 'hidden' : ''} w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm`}>
+                {userInitials}
+              </div>
               {!collapsed && (
                 <span className="text-sm font-medium truncate max-w-[8rem]">{displayName}</span>
               )}
@@ -361,14 +382,19 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
             <div className="p-4 border-b border-border">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <img 
-                    src={avatarUrl} 
-                    alt="avatar" 
-                    referrerPolicy="no-referrer" 
-                    crossOrigin="anonymous" 
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/next.svg' }} 
-                    className="w-8 h-8 rounded-full object-cover" 
-                  />
+                  {avatarUrl ? (
+                    <img 
+                      src={avatarUrl} 
+                      alt="avatar" 
+                      referrerPolicy="no-referrer" 
+                      crossOrigin="anonymous" 
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }} 
+                      className="w-8 h-8 rounded-full object-cover" 
+                    />
+                  ) : null}
+                  <div className={`${avatarUrl ? 'hidden' : ''} w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm`}>
+                    {userInitials}
+                  </div>
                   <span className="text-lg font-semibold">{displayName}</span>
                 </div>
                 <Button
