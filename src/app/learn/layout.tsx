@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, SquarePen, Library, Menu, X, Code2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, SquarePen, Library, Menu, X, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
 
@@ -204,16 +204,22 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           </div>
 
           {/* Organization Link */}
-          {!collapsed && (
-            <div className="pb-4">
+          <div className="pb-4">
+            {collapsed ? (
+              <Link href="/learn/org">
+                <Button variant="outline" size="icon" className="w-full">
+                  <Building2 className="w-4 h-4" />
+                </Button>
+              </Link>
+            ) : (
               <Link href="/learn/org">
                 <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Code2 className="w-4 h-4 mr-2" />
+                  <Building2 className="w-4 h-4 mr-2" />
                   Organization
                 </Button>
               </Link>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Divider */}
           <div className="my-4">
@@ -420,7 +426,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               <div className="mb-6">
                 <Link href="/learn/org" onClick={closeMobileMenu}>
                   <Button variant="outline" size="sm" className="w-full justify-start">
-                    <Code2 className="w-4 h-4 mr-2" />
+                    <Building2 className="w-4 h-4 mr-2" />
                     Organization
                   </Button>
                 </Link>
