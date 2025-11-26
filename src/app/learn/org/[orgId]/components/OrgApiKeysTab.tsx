@@ -84,7 +84,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
       setApiKeys([response.data.apiKey, ...apiKeys]);
       setNewKeyData({ name: '', description: '', allowed_domains: '' });
       setShowNewKeyForm(false);
-      
+
       setVisibleKeys(new Set([response.data.apiKey.id]));
     } catch (err: any) {
       onError(err.response?.data?.error || 'Failed to create API key');
@@ -254,7 +254,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
                           size="sm"
                           className="h-7 text-xs"
                           onClick={() => copyToClipboard(
-                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
                             `embed-${key.id}`
                           )}
                         >
@@ -273,13 +273,13 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
                       </div>
                       <div className="relative">
                         <pre className="bg-muted p-3 rounded text-xs overflow-x-auto select-all hover:bg-muted/80 transition-colors cursor-pointer"
-                             onClick={() => copyToClipboard(
-                               `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
-                               `embed-click-${key.id}`
-                             )}
-                             title="Click to copy">
-{`<iframe 
-  src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic"
+                          onClick={() => copyToClipboard(
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `embed-click-${key.id}`
+                          )}
+                          title="Click to copy">
+                          {`<iframe 
+  src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic"
   width="100%" 
   height="600px"
   frameborder="0"
@@ -335,8 +335,8 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
           <div>
             <h4 className="font-semibold mb-2">1. Embed with iframe (Simple - Recommended)</h4>
             <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`<iframe 
-  src="https://yourapp.com/learn/embed/new?apiKey=YOUR_API_KEY&topic=Photosynthesis"
+              {`<iframe 
+  src="https://yourapp.com/embed/new?apiKey=YOUR_API_KEY&topic=Photosynthesis"
   width="100%" 
   height="600px"
   frameborder="0"
@@ -351,7 +351,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
           <div>
             <h4 className="font-semibold mb-2">2. Create session via API (Advanced)</h4>
             <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`fetch('https://yourapp.com/api/embed/sessions', {
+              {`fetch('https://yourapp.com/api/embed/sessions', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_API_KEY',

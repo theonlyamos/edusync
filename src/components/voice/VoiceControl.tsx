@@ -97,7 +97,7 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
 
   // Register tool call listener
   useEffect(() => {
-    setToolCallListener(onToolCall ?? (() => {}));
+    setToolCallListener(onToolCall ?? (() => { }));
   }, [onToolCall, setToolCallListener]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
       }
       return;
     }
-    
+
     const checkForContainer = () => {
       const container = document.getElementById('mobile-visualizer-container');
       if (container) {
@@ -184,16 +184,16 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
       }
       return false;
     };
-    
+
     // Check immediately
     checkForContainer();
-    
+
     // Also check periodically in case the container is added later
     // This handles viewport resizing and delayed rendering
     const interval = setInterval(() => {
       checkForContainer();
     }, 100);
-    
+
     // Cleanup
     return () => clearInterval(interval);
   }, [active, connectionStatus]);
@@ -288,17 +288,17 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
           </div>
         </div>
       </div>
-      
+
       {/* Mobile/tablet visualizer via portal - shows when bottom panel is visible */}
-      {mobileContainer && createPortal(
-        <div className="w-full h-full relative">
-          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
-          <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
-            <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
-          </div>
-        </div>,
-        mobileContainer
-      )}
+      {/* {mobileContainer && createPortal( */}
+      <div className="w-full h-full relative">
+        <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
+        <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
+          <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
+        </div>
+      </div>,
+      {/* mobileContainer
+      )} */}
     </>
   );
 } 

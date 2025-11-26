@@ -119,6 +119,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/embed/:path*',
     '/learn/:path*',
     '/admin/:path*',
     '/teachers/:path*',

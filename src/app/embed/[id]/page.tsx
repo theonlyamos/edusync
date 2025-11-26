@@ -304,7 +304,7 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
               </div>
             )}
 
-            <div className="w-1/3 flex flex-col border-r">
+            {/* <div className="w-1/3 flex flex-col border-r">
               <Card className="flex-1 flex flex-col h-full">
                 <CardHeader>
                   <CardTitle className="text-sm">AI Explainer</CardTitle>
@@ -358,7 +358,7 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
                   )}
                 </CardContent>
               </Card>
-            </div>
+            </div> */}
 
             <div className="flex-1 flex flex-col" ref={vizRef}>
               {code && library ? (
