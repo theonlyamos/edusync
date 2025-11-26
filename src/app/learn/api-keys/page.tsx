@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,11 +33,11 @@ type Organization = {
   name: string;
 };
 
-export default function ApiKeysPage() {
+function ApiKeysContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const organizationId = searchParams.get('organization_id');
-  
+
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
@@ -71,7 +71,7 @@ export default function ApiKeysPage() {
   const fetchApiKeys = async () => {
     try {
       setLoading(true);
-      const url = organizationId 
+      const url = organizationId
         ? `/api/embed/keys?organization_id=${organizationId}`
         : '/api/embed/keys';
       const response = await axios.get(url);
@@ -107,7 +107,7 @@ export default function ApiKeysPage() {
       setApiKeys([response.data.apiKey, ...apiKeys]);
       setNewKeyData({ name: '', description: '', allowed_domains: '' });
       setShowNewKeyForm(false);
-      
+
       setVisibleKeys(new Set([response.data.apiKey.id]));
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create API key');
@@ -179,7 +179,7 @@ export default function ApiKeysPage() {
           Back to Organization
         </Button>
       )}
-      
+
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">
           {organization ? `${organization.name} - API Keys` : 'API Keys'}
@@ -310,91 +310,91 @@ export default function ApiKeysPage() {
                     </div>
                   </div>
 
-                      <div className="space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-xs text-muted-foreground">API Key</Label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-xs"
-                            onClick={() => copyToClipboard(key.api_key, `key-${key.id}`)}
-                          >
-                            {copiedKey === `key-${key.id}` ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                                Copied!
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3 mr-1" />
-                                Copy Key
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 bg-muted p-2 rounded text-sm font-mono overflow-x-auto">
-                            {visibleKeys.has(key.id)
-                              ? key.api_key
-                              : key.api_key.slice(0, 12) + '•'.repeat(48)}
-                          </code>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toggleKeyVisibility(key.id)}
-                            title={visibleKeys.has(key.id) ? 'Hide key' : 'Show key'}
-                          >
-                            {visibleKeys.has(key.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </Button>
-                        </div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs text-muted-foreground">API Key</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() => copyToClipboard(key.api_key, `key-${key.id}`)}
+                        >
+                          {copiedKey === `key-${key.id}` ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 mr-1" />
+                              Copy Key
+                            </>
+                          )}
+                        </Button>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-muted p-2 rounded text-sm font-mono overflow-x-auto">
+                          {visibleKeys.has(key.id)
+                            ? key.api_key
+                            : key.api_key.slice(0, 12) + '•'.repeat(48)}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleKeyVisibility(key.id)}
+                          title={visibleKeys.has(key.id) ? 'Hide key' : 'Show key'}
+                        >
+                          {visibleKeys.has(key.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <Label className="text-xs text-muted-foreground">Embed Code (Copy & Paste)</Label>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => copyToClipboard(
-                              `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
-                              `embed-${key.id}`
-                            )}
-                          >
-                            {copiedKey === `embed-${key.id}` ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Copied!
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3 mr-1" />
-                                Copy Embed Code
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                        <div className="relative">
-                          <pre className="bg-muted p-3 rounded text-xs overflow-x-auto select-all hover:bg-muted/80 transition-colors cursor-pointer"
-                               onClick={() => copyToClipboard(
-                                 `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
-                                 `embed-click-${key.id}`
-                               )}
-                               title="Click to copy">
-{`<iframe 
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs text-muted-foreground">Embed Code (Copy & Paste)</Label>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => copyToClipboard(
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `embed-${key.id}`
+                          )}
+                        >
+                          {copiedKey === `embed-${key.id}` ? (
+                            <>
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 mr-1" />
+                              Copy Embed Code
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="relative">
+                        <pre className="bg-muted p-3 rounded text-xs overflow-x-auto select-all hover:bg-muted/80 transition-colors cursor-pointer"
+                          onClick={() => copyToClipboard(
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `embed-click-${key.id}`
+                          )}
+                          title="Click to copy">
+                          {`<iframe 
   src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic"
   width="100%" 
   height="600px"
   frameborder="0"
   allow="microphone"
 ></iframe>`}
-                          </pre>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            💡 Tip: Replace "Your%20Topic" with your desired topic (URL-encoded)
-                          </p>
-                        </div>
+                        </pre>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          💡 Tip: Replace "Your%20Topic" with your desired topic (URL-encoded)
+                        </p>
                       </div>
+                    </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                       <div>
@@ -439,7 +439,7 @@ export default function ApiKeysPage() {
           <div>
             <h4 className="font-semibold mb-2">1. Embed with iframe (Simple - Recommended)</h4>
             <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`<iframe 
+              {`<iframe 
   src="https://yourapp.com/learn/embed/new?apiKey=YOUR_API_KEY&topic=Photosynthesis"
   width="100%" 
   height="600px"
@@ -455,7 +455,7 @@ export default function ApiKeysPage() {
           <div>
             <h4 className="font-semibold mb-2">2. Create session via API (Advanced)</h4>
             <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
-{`fetch('https://yourapp.com/api/embed/sessions', {
+              {`fetch('https://yourapp.com/api/embed/sessions', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_API_KEY',
@@ -483,3 +483,11 @@ export default function ApiKeysPage() {
   );
 }
 
+
+export default function ApiKeysPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto p-6 max-w-6xl text-center">Loading...</div>}>
+      <ApiKeysContent />
+    </Suspense>
+  );
+}
