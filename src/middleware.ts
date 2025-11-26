@@ -38,7 +38,6 @@ export async function middleware(request: NextRequest) {
     }
 
     const authMode = getAuthModeForPath(pathname);
-
     if (authMode !== 'none') {
       const { authorized, authContext, error } = await authenticateRequest(request, response);
 
@@ -75,7 +74,8 @@ export async function middleware(request: NextRequest) {
   const isTeacherArea = pathname.startsWith('/teachers');
   const isStudentArea = pathname.startsWith('/students');
   const isSessionArea = pathname.startsWith('/learn');
-  const isProtected = isAdminArea || isTeacherArea || isStudentArea || isSessionArea;
+  const isUnprotectedPath = pathname.startsWith('/learn/embed/new');
+  const isProtected = (isAdminArea || isTeacherArea || isStudentArea || isSessionArea) && !isUnprotectedPath;
 
   if (!isProtected) {
     return response;

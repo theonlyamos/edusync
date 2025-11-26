@@ -78,7 +78,7 @@ export async function validateApiKey(
   const domain = extractDomain(origin);
 
   if (apiKeyData.allowed_domains && apiKeyData.allowed_domains.length > 0) {
-    const domainAllowed = apiKeyData.allowed_domains.some(allowedDomain => {
+    const domainAllowed = apiKeyData.allowed_domains.some((allowedDomain: string) => {
       if (allowedDomain.startsWith('*.')) {
         const baseDomain = allowedDomain.slice(2);
         return domain.endsWith(baseDomain);

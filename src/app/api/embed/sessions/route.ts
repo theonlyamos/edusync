@@ -20,11 +20,15 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: credits } = await supabase
-      .from('user_credits')
+    const { data: user } = await supabase
+      .from('users')
       .select('credits')
-      .eq('user_id', userId)
-      .maybeSingle();
+      .eq('id', userId)
+      .single();
+
+    const credits = user?.credits;
+
+    console.log('credits', userId, credits);
 
     if (!credits || credits.credits < 1) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server'
 import { getServerSession } from '@/lib/auth'
+import { getAuthContext } from '@/lib/get-auth-context'
 
 const BUCKET = 'insyteai'
 
@@ -26,14 +27,15 @@ async function assertSessionOwnership(userId: string, sessionId: string) {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getServerSession()
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authContext = getAuthContext(request)
+    const userId = authContext?.userId
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { id: sessionId } = await params
-    const owns = await assertSessionOwnership(session.user.id, sessionId)
+    const owns = await assertSessionOwnership(userId, sessionId)
     if (!owns) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const admin = createServerSupabase()
-    const prefix = `${session.user.id}/${sessionId}`
+    const prefix = `${userId}/${sessionId}`
 
     const concatInterleaved = async () => {
         const { data: list, error: listErr } = await admin.storage.from(BUCKET).list(prefix, { limit: 10000 })

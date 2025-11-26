@@ -200,8 +200,16 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
             form.append('part', next);
             form.append('index', String(idx));
             form.append('type', kind);
+            form.append('id', currentSessionIdRef.current);
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiKey = urlParams.get('apiKey');
+            const headers: Record<string, string> = {};
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
             await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/parts?type=${encodeURIComponent(kind)}&index=${encodeURIComponent(padIndex(idx))}`,
-                { method: 'POST', body: form });
+                { method: 'POST', body: form, headers });
         } catch { }
         finally {
             isUploadingRef.current[kind] = false;
@@ -382,7 +390,13 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
             try {
                 if (currentSessionIdRef.current) {
                     await waitForUploads();
-                    await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST' });
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const apiKey = urlParams.get('apiKey');
+                    const headers: Record<string, string> = {};
+                    if (apiKey) {
+                        headers['Authorization'] = `Bearer ${apiKey}`;
+                    }
+                    await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST', headers });
                 }
             } catch { }
 
@@ -481,7 +495,16 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
     const startGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number) => {
         try {
             // Get ephemeral token
-            const tokenResponse = await fetch('/api/genai/ephemeral', { method: 'POST' });
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiKey = urlParams.get('apiKey');
+            const headers: Record<string, string> = {};
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+            const tokenResponse = await fetch('/api/genai/ephemeral', {
+                method: 'POST',
+                headers
+            });
             if (!tokenResponse.ok) {
                 throw new Error('Failed to get ephemeral token');
             }

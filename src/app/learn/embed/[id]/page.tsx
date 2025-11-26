@@ -21,13 +21,13 @@ type Message = {
   content: string;
 };
 
-type Visualization = { 
-  id?: string; 
-  code: string; 
-  library: 'p5' | 'three' | 'react'; 
-  explanation?: string; 
-  taskDescription?: string; 
-  panelDimensions?: { width: number; height: number } 
+type Visualization = {
+  id?: string;
+  code: string;
+  library: 'p5' | 'three' | 'react';
+  explanation?: string;
+  taskDescription?: string;
+  panelDimensions?: { width: number; height: number }
 };
 
 function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
@@ -113,13 +113,13 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
 
     if (currentSessionId) {
       try {
-        await axios.patch(`/api/learning/sessions/${currentSessionId}`, { 
-          status: 'ended', 
-          ended: true 
+        await axios.patch(`/api/learning/sessions/${currentSessionId}`, {
+          status: 'ended',
+          ended: true
         }, {
           headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
         });
-      } catch {}
+      } catch { }
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
@@ -145,7 +145,7 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
       try {
         const panelElement = vizRef.current;
         let panelDimensions = { width: 800, height: 600 };
-        
+
         if (panelElement) {
           const rect = panelElement.getBoundingClientRect();
           panelDimensions = {
@@ -160,7 +160,7 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             task_description: args.task_description,
             panel_dimensions: panelDimensions,
             theme,
@@ -201,8 +201,9 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     if (connectionStatus === 'connected' && voiceActive && !currentSessionId && apiKey) {
       (async () => {
+        console.log('apiKey', apiKey)
         try {
-          const res = await axios.post('/api/embed/sessions', 
+          const res = await axios.post('/api/embed/sessions',
             { topic: topic || topicFromUrl || null },
             { headers: { Authorization: `Bearer ${apiKey}` } }
           );
@@ -281,8 +282,8 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
             {showOverlay && (
               <div className="absolute inset-0 z-30 bg-background/95 backdrop-blur-sm">
                 {apiKey ? (
-                  <StartButtonOverlay 
-                    onStart={() => setVoiceActive(true)} 
+                  <StartButtonOverlay
+                    onStart={() => setVoiceActive(true)}
                     connectionStatus={connectionStatus}
                     creditsLoading={false}
                     outOfCredits={false}
@@ -343,12 +344,12 @@ function EmbedComponent({ params }: { params: Promise<{ id: string }> }) {
                     onError={setError}
                     onToolCall={handleToolCall}
                     onConnectionStatusChange={setConnectionStatus}
-                    onCountdownEnd={() => {}}
+                    onCountdownEnd={() => { }}
                     onCountdownChange={setCountdown}
-                    onFeedbackFormChange={() => {}}
-                    onFeedbackSubmit={async () => {}}
-                    onFeedbackClose={() => {}}
-                    onRecordingsReady={async () => {}}
+                    onFeedbackFormChange={() => { }}
+                    onFeedbackSubmit={async () => { }}
+                    onFeedbackClose={() => { }}
+                    onRecordingsReady={async () => { }}
                   />
                   {error && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-md mt-2">

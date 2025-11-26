@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
 import { deductCreditsFromApiKey } from '@/lib/api-key-auth';
 import { createClient } from '@supabase/supabase-js';
+import { deductCreditsForMinute } from '@/lib/credits';
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,24 +52,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await deductCreditsFromApiKey(apiKeyId, userId, 1);
+    const result = await deductCreditsForMinute(userId, sessionId)
 
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: result.error || 'Failed to deduct credits',
-          remainingCredits: result.remainingCredits,
-        },
-        { status: result.error === 'Insufficient credits' ? 402 : 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      remainingCredits: result.remainingCredits,
-      message: 'Credit deducted successfully',
-    });
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Failed to deduct credit:', error);
     return NextResponse.json(

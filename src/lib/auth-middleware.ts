@@ -37,6 +37,7 @@ export async function authenticateRequest(
 
     const apiKeyValidation = await validateApiKey(request);
 
+
     if (apiKeyValidation.valid && apiKeyValidation.userId) {
         return {
             authorized: true,
@@ -77,6 +78,7 @@ export const API_AUTH_CONFIG: Record<string, ApiAuthMode> = {
     '/api/embed/sessions/*': 'apiKey',
     '/api/embed/credits/*': 'apiKey',
     '/api/genai/visualize': 'both',
+    '/api/genai/ephemeral': 'both',
     '/api/learning/sessions': 'session',
     '/api/learning/sessions/*/recordings': 'both',
     '/api/learning/sessions/*/recordings/*': 'both',
