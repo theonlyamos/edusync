@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSSRUserSupabase } from '@/lib/supabase.server'
-import { getServerSession } from '@/lib/auth'
+import { getAuthContext } from '@/lib/get-auth-context'
+import { createClient } from '@supabase/supabase-js'
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const session = await getServerSession()
-        if (!session || !session.user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const authContext = getAuthContext(request)
+        const userId = authContext?.userId
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const { id } = await params
         const payload = await request.json()
 
-        const supabase = await createSSRUserSupabase()
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
 
         const { data: viz, error: vizErr } = await supabase
             .from('learning_visualizations')
@@ -30,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             .eq('id', viz.session_id)
             .maybeSingle()
 
-        if (sessErr || !sess || sess.user_id !== session.user.id) {
+        if (sessErr || !sess || sess.user_id !== userId) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 

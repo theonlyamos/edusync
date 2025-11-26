@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSSRUserSupabase } from '@/lib/supabase.server'
-import { getServerSession } from '@/lib/auth'
+import { getAuthContext } from '@/lib/get-auth-context'
+import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
     try {
-        const session = await getServerSession()
-        if (!session || !session.user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const authContext = getAuthContext(request)
+        const userId = authContext?.userId
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const { searchParams } = new URL(request.url)
         const sessionId = searchParams.get('session_id')
@@ -36,17 +36,19 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await getServerSession()
-        if (!session || !session.user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const authContext = getAuthContext(request)
+        const userId = authContext?.userId
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const { session_id, library, explanation, code, panel_dimensions, description, data } = await request.json()
         if (!session_id || !library || !explanation || !code) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        const supabase = await createSSRUserSupabase()
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
 
         // Verify ownership of session
         const { data: sess, error: sessErr } = await supabase
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
         if (sessErr || !sess) {
             return NextResponse.json({ error: 'Session not found' }, { status: 404 })
         }
-        if (sess.user_id !== session.user.id) {
+        if (sess.user_id !== userId) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth'
 import { deductCreditsForMinute } from '@/lib/credits'
+import { getAuthContext } from '@/lib/get-auth-context'
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await getServerSession()
-        if (!session?.user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+        const authContext = getAuthContext(request)
+        const userId = authContext?.userId
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const { sessionId } = await request.json()
 
@@ -15,7 +14,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Session ID required' }, { status: 400 })
         }
 
-        const result = await deductCreditsForMinute(session.user.id, sessionId)
+        const result = await deductCreditsForMinute(userId, sessionId)
 
         return NextResponse.json(result)
     } catch (error: any) {

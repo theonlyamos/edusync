@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server'
-import { getServerSession } from '@/lib/auth'
+import { createServerSupabase } from '@/lib/supabase.server'
 import { getAuthContext } from '@/lib/get-auth-context'
+import { createClient } from '@supabase/supabase-js';
 
 const BUCKET = 'insyteai'
 
@@ -16,7 +16,10 @@ async function ensureBucket() {
 }
 
 async function assertSessionOwnership(userId: string, sessionId: string) {
-    const supabase = await createSSRUserSupabase()
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     const { data, error } = await supabase
         .from('learning_sessions')
         .select('id, user_id')

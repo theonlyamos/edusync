@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server'
-import { getServerSession } from '@/lib/auth'
+import { createServerSupabase } from '@/lib/supabase.server'
+import { createClient } from '@supabase/supabase-js';
+import { getAuthContext } from '@/lib/get-auth-context';
 
 const BUCKET = 'insyteai'
 
@@ -15,7 +16,10 @@ async function ensureBucket() {
 }
 
 async function assertSessionOwnership(userId: string, sessionId: string) {
-    const supabase = await createSSRUserSupabase()
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     const { data, error } = await supabase
         .from('learning_sessions')
         .select('id, user_id')
@@ -26,10 +30,11 @@ async function assertSessionOwnership(userId: string, sessionId: string) {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getServerSession()
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authContext = getAuthContext(request)
+    const userId = authContext?.userId
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { id: sessionId } = await params
-    const owns = await assertSessionOwnership(session.user.id, sessionId)
+    const owns = await assertSessionOwnership(userId, sessionId)
     if (!owns) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     await ensureBucket()
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const aiBlob = form.get('ai') as Blob | null
         const durationMs = Number(form.get('durationMs') || 0)
 
-        const prefix = `${session.user.id}/${sessionId}`
+        const prefix = `${userId}/${sessionId}`
         const uploads: any = {}
 
         const tasks: Promise<void>[] = []
@@ -75,17 +80,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getServerSession()
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authContext = getAuthContext(request)
+    const userId = authContext?.userId
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const { id: sessionId } = await params
-    const owns = await assertSessionOwnership(session.user.id, sessionId)
+    const owns = await assertSessionOwnership(userId, sessionId)
     if (!owns) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     await ensureBucket()
     const admin = createServerSupabase()
 
     try {
-        const prefix = `${session.user.id}/${sessionId}`
+        const prefix = `${userId}/${sessionId}`
         const toSigned = async (key: string) => {
             const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(key, 60 * 60)
             if (error) return null

@@ -242,63 +242,12 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
     return () => window.removeEventListener('voice-send-media', handler as EventListener);
   }, [sendMedia]);
 
-  const statusBadge = (
-    <div className="flex items-center gap-2 text-xs">
-      {connectionStatus === 'disconnected' && (
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <span className="w-2 h-2 rounded-full bg-gray-300" />
-          <span>Disconnected</span>
-        </div>
-      )}
-      {connectionStatus === 'connecting' && (
-        <div className="flex items-center gap-1 text-amber-600">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          <span>Connecting…</span>
-        </div>
-      )}
-      {connectionStatus === 'connected' && (
-        <div className="flex items-center gap-2 text-emerald-600">
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Connected</span>
-          </div>
-          <span className="text-xs font-mono text-muted-foreground">
-            {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-          </span>
-        </div>
-      )}
-      {isStreaming && connectionStatus === 'connected' && (
-        <div className="flex items-center gap-1 text-red-600 ml-3">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <span>Streaming mic</span>
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <>
-      {/* Desktop component - always render for status management, but hide on mobile */}
-      <div className="flex flex-col gap-2 w-full">
-        <div className="hidden lg:block">{statusBadge}</div>
-        <div className="w-full max-w-md h-12 sm:h-16 hidden lg:block relative">
-          <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
-          <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
-            <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
-          </div>
-        </div>
+    <div className="h-12 w-[500px] max-w-full relative">
+      <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
+      <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
+        <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
       </div>
-
-      {/* Mobile/tablet visualizer via portal - shows when bottom panel is visible */}
-      {/* {mobileContainer && createPortal( */}
-      <div className="w-full h-full relative">
-        <AudioVisualizer audioData={aiAudioData} isActive={isSpeaking} analyser={getAnalyser()} variant="ai" />
-        <div className="absolute inset-0 pointer-events-none mix-blend-plus-lighter">
-          <AudioVisualizer audioData={audioData} isActive={vadActive} analyser={getMicAnalyser?.()} variant="mic" />
-        </div>
-      </div>,
-      {/* mobileContainer
-      )} */}
-    </>
+    </div>
   );
 } 

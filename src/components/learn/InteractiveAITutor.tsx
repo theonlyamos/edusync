@@ -95,7 +95,12 @@ export const InteractiveAITutorComponent = () => {
     }
 
     if (currentSessionId) {
-      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { }
+      try {
+        await axios.patch(`/api/learning/sessions/${currentSessionId}`,
+          { status: 'ended', ended: true },
+          { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+        );
+      } catch { }
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
@@ -190,7 +195,7 @@ export const InteractiveAITutorComponent = () => {
       setGeneratingVisualization(true);
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...apiKey ? { Authorization: `Bearer ${apiKey}` } : {} },
         body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions, theme, theme_colors: themeColors })
       });
       if (!response.ok) throw new Error('Failed to regenerate visualization');
@@ -212,7 +217,9 @@ export const InteractiveAITutorComponent = () => {
             library: vizData.library,
             explanation: vizData.explanation ?? null,
             panel_dimensions: panelDimensions
-          });
+          },
+            { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+          );
         } catch { }
       }
     } catch (e: any) {
@@ -266,6 +273,7 @@ export const InteractiveAITutorComponent = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
             task_description: args.task_description,
@@ -297,7 +305,9 @@ export const InteractiveAITutorComponent = () => {
               panel_dimensions: panelDimensions,
               description: args.task_description,
               data: null,
-            });
+            },
+              { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+            );
           } catch { }
         }
       } catch (e: any) {
@@ -313,7 +323,12 @@ export const InteractiveAITutorComponent = () => {
         if (t) {
           setTopic(t);
           if (currentSessionId) {
-            try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t }); } catch { }
+            try {
+              await axios.patch(`/api/learning/sessions/${currentSessionId}`,
+                { topic: t },
+                { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+              );
+            } catch { }
           }
         }
       } catch { }
@@ -689,6 +704,34 @@ export const InteractiveAITutorComponent = () => {
           onFeedbackClose={handleFeedbackClose}
         />
       </div>
+
+      {voiceActive && connectionStatus === 'connected' && (
+        <div className={`fixed bottom-0 left-0 right-0 z-50`}>
+          <div className="flex flex-col items-center py-3 px-4">
+            {/* Audio Visualizer - visualizer only, no audio initialization */}
+            <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">
+              {/* Visualizer will be rendered here by the main VoiceControl */}
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-4">
+              <span className="w-3 h-3 rounded-full bg-emerald-500" />
+              <Button
+                type="button"
+                size="icon"
+                className="rounded-full bg-red-500 hover:bg-red-600 text-white w-12 h-12"
+                onClick={handleVoiceStop}
+                title="Disconnect"
+              >
+                <X className="w-6 h-6" />
+              </Button>
+              <span className="text-sm font-mono text-muted-foreground">
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Feedback Form - positioned relative to main content only */}
       {
