@@ -27,7 +27,7 @@ const openaiConfig: OpenAIConfig = {
 if (AI_PROVIDER !== 'GROQ') {
     openaiConfig.defaultHeaders = {
         "Helicone-Auth": `Bearer ${HELICONE_API_KEY}`,
-        "Helicone-Target-Url": HELICONE_BASE_URL,
+        "Helicone-Target-Url": PROVIDER_BASE_URL,
         "Helicone-Target-Provider": AI_PROVIDER,
     };
 }
