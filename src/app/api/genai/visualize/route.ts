@@ -24,8 +24,6 @@ const openaiConfig: OpenAIConfig = {
     apiKey: PROVIDER_API_KEY || '',
 };
 
-console.log(openaiConfig);
-
 if (AI_PROVIDER !== 'GROQ') {
     openaiConfig.defaultHeaders = {
         "Helicone-Auth": `Bearer ${HELICONE_API_KEY}`,
@@ -211,7 +209,7 @@ The application is currently in ${theme} mode. You MUST use the following color 
         }
 
     } catch (error: any) {
-        console.error('Failed to generate visualization:', AI_PROVIDER, process.env[`${AI_PROVIDER}_BASE_URL`], error);
+        console.error('Failed to generate visualization:', error);
         return NextResponse.json(
             { error: 'Failed to generate visualization', details: error.message },
             { status: 500 }
