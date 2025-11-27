@@ -211,7 +211,7 @@ The application is currently in ${theme} mode. You MUST use the following color 
         }
 
     } catch (error: any) {
-        console.error('Failed to generate visualization:', openaiConfig, error);
+        console.error('Failed to generate visualization:', AI_PROVIDER, process.env[`${AI_PROVIDER}_BASE_URL`], error);
         return NextResponse.json(
             { error: 'Failed to generate visualization', details: error.message },
             { status: 500 }
