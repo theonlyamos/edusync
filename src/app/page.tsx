@@ -11,10 +11,10 @@ import { Loader2, Mic, Zap, Code2, Sparkles, Play, ArrowRight, Volume2, Eye, Mes
 function HomeContent() {
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
-  
+
   // Theme toggle state (default to dark)
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
-  
+
   useEffect(() => {
     // On mount, read saved theme or default to dark
     const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
@@ -22,7 +22,7 @@ function HomeContent() {
     setTheme(initial)
     document.documentElement.classList.toggle('dark', initial === 'dark')
   }, [])
-  
+
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
     localStorage.setItem('theme', next)
@@ -51,7 +51,7 @@ function HomeContent() {
             </div>
             <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
           </div>
-          
+
           <nav className="hidden gap-8 lg:flex text-sm font-medium">
             <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors relative group">
               Features
@@ -70,7 +70,7 @@ function HomeContent() {
               <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 group-hover:w-full transition-all duration-300"></div>
             </Link>
           </nav>
-          
+
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -119,7 +119,7 @@ function HomeContent() {
               Talk. Visualize. Learn.
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
-              Experience the future of education with <span className="font-semibold text-foreground">voice-controlled AI tutoring</span> that generates 
+              Experience the future of education with <span className="font-semibold text-foreground">voice-controlled AI tutoring</span> that generates
               <span className="font-semibold text-foreground"> interactive visualizations</span> in real-time.
             </p>
             <div className="flex flex-wrap gap-3 text-sm">
@@ -194,7 +194,7 @@ function HomeContent() {
                     <div className="flex items-center gap-2">
                       <Volume2 className="w-4 h-4 text-muted-foreground" />
                       <div className="flex gap-1">
-                        {[1,2,3,4,5].map((i) => (
+                        {[1, 2, 3, 4, 5].map((i) => (
                           <div key={i} className={`w-1 h-4 bg-indigo-500 rounded-full ${i <= 3 ? 'animate-pulse' : 'opacity-30'}`}></div>
                         ))}
                       </div>
@@ -219,7 +219,7 @@ function HomeContent() {
             Advanced AI capabilities that transform how students and teachers interact with complex concepts
           </p>
         </div>
-        
+
         <div className="grid gap-8 md:grid-cols-3 mb-16">
           <Card className="relative overflow-hidden border-2 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 group-hover:from-indigo-500/10 group-hover:to-violet-500/10 transition-all duration-300"></div>
@@ -333,13 +333,13 @@ function HomeContent() {
       {/* Demo Section */}
       <section id="demo" className="relative container mx-auto px-4 py-24 overflow-hidden">
         <div className="absolute inset-0 -z-10">
-           <Image
-             src="/hero_image.jpg"
-             alt="AI Learning Demo Background"
-             fill
-             sizes="100vw"
-             className="object-cover saturate-150 contrast-125 brightness-110 scale-x-[-1]"
-           />
+          <Image
+            src="/hero_image.jpg"
+            alt="AI Learning Demo Background"
+            fill
+            sizes="100vw"
+            className="object-cover saturate-150 contrast-125 brightness-110 scale-x-[-1]"
+          />
           <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
         </div>
         <div className="text-center mb-16">
@@ -352,7 +352,7 @@ function HomeContent() {
             Watch how students interact with complex topics through voice and receive instant visual feedback
           </p>
           <Button asChild size="lg" className="rounded-full px-8 py-6 text-base shadow-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white">
-            <Link href="/learn" className="flex items-center gap-2">
+            <Link href="/demo" className="flex items-center gap-2">
               <Play className="w-5 h-5" />
               Try Live Demo
               <ArrowRight className="w-4 h-4" />
@@ -408,14 +408,14 @@ function HomeContent() {
                       <span className="text-xs text-muted-foreground">Recording</span>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-3">
                     <div className="flex justify-end">
                       <div className="bg-primary text-primary-foreground px-3 py-2 rounded-2xl rounded-br-md max-w-[85%] text-sm">
                         How do neural networks work? Can you show me?
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-start">
                       <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md max-w-[85%] text-sm">
                         I'll create an interactive visualization showing how artificial neurons work together...
@@ -443,7 +443,7 @@ function HomeContent() {
                     <div className="flex items-center gap-2">
                       <Volume2 className="w-3 h-3 text-muted-foreground" />
                       <div className="flex gap-1">
-                        {[1,2,3,4].map((i) => (
+                        {[1, 2, 3, 4].map((i) => (
                           <div key={i} className={`w-1 h-3 bg-indigo-500 rounded-full ${i <= 2 ? 'animate-pulse' : 'opacity-30'}`}></div>
                         ))}
                       </div>
@@ -464,7 +464,7 @@ function HomeContent() {
             Tailored experiences for students, teachers, and administrators
           </p>
         </div>
-        
+
         <div className="grid gap-8 md:grid-cols-3">
           <Card className="relative overflow-hidden border-2 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group">
             <Link href="/learn" className="block">
@@ -545,7 +545,7 @@ function HomeContent() {
             Join thousands of students and teachers already using AI-powered visual learning
           </p>
         </div>
-        
+
         <div className="relative max-w-4xl mx-auto">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-violet-500/20 to-cyan-500/20 rounded-3xl blur-3xl"></div>
           <Card className="relative backdrop-blur-sm bg-background/90 border-2 border-gradient shadow-2xl">
@@ -554,12 +554,12 @@ function HomeContent() {
                 <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">Free to start</span>
               </div>
-              
+
               <h3 className="text-3xl font-bold mb-4">Start free, upgrade when you grow</h3>
               <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
                 All core features included. No credit card required. Experience the future of education today.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
                 <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
                   <Link href="/learn" className="flex items-center gap-2">
@@ -574,7 +574,7 @@ function HomeContent() {
                   </Link>
                 </Button>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
                 <div>
                   <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-1">✨</div>

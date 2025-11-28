@@ -1,8 +1,24 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function addSecurityHeaders(response: NextResponse): NextResponse {
-    // Content Security Policy
+export function addSecurityHeaders(response: NextResponse, request?: NextRequest): NextResponse {
+    const pathname = request?.nextUrl?.pathname || '';
+
+    // Check for different embed routes
+    // /embed/[id] - embeddable on any website (for public sharing)
+    // /embed/new - same-origin only
+    const isEmbedWithId = pathname.match(/^\/embed\/[^/]+$/);
+
+    // Content Security Policy - configure frame-ancestors based on route
+    let frameAncestors: string;
+    if (isEmbedWithId) {
+        // Allow embedding on any website for /embed/[id]
+        frameAncestors = "frame-ancestors *";
+    } else {
+        // No embedding allowed for other routes
+        frameAncestors = "frame-ancestors 'none'";
+    }
+
     const csp = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdn.supabase.io https://va.vercel-scripts.com",
@@ -11,22 +27,25 @@ export function addSecurityHeaders(response: NextResponse): NextResponse {
         "img-src 'self' data: blob: https:",
         "media-src 'self' blob: https://*.supabase.co",
         "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://vitals.vercel-insights.com",
-        "frame-ancestors 'none'",
+        frameAncestors,
         "base-uri 'self'",
         "form-action 'self'",
         "upgrade-insecure-requests"
     ].join('; ');
 
-    // Apply security headers
     response.headers.set('Content-Security-Policy', csp);
     response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'DENY');
+
+    if (isEmbedWithId) {
+        response.headers.delete('X-Frame-Options');
+    } else {
+        response.headers.set('X-Frame-Options', 'DENY');
+    }
+
     response.headers.set('X-XSS-Protection', '1; mode=block');
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    // Allow microphone on same-origin pages; keep geolocation and camera disabled
-    response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(self), camera=()');
+    response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(*), camera=()');
 
-    // Strict Transport Security (HSTS) - only in production
     if (process.env.NODE_ENV === 'production') {
         response.headers.set(
             'Strict-Transport-Security',
@@ -39,18 +58,28 @@ export function addSecurityHeaders(response: NextResponse): NextResponse {
 
 export function configureCORS(request: NextRequest, response: NextResponse): NextResponse {
     const origin = request.headers.get('origin');
+    const pathname = request.nextUrl?.pathname || '';
 
-    // Define allowed origins
-    const allowedOrigins = [
-        process.env.NEXT_PUBLIC_BASE_URL,
-        'http://localhost:3000',
-        'http://localhost:3001',
-    ].filter(Boolean);
+    // For embed routes, allow any origin for public embedding
+    const isEmbedWithId = pathname.match(/^\/embed\/[^/]+$/) && pathname !== '/embed/new';
 
-    // Check if origin is allowed
-    if (origin && allowedOrigins.includes(origin)) {
+    if (isEmbedWithId && origin) {
+        // Allow any origin for public embed routes
         response.headers.set('Access-Control-Allow-Origin', origin);
         response.headers.set('Access-Control-Allow-Credentials', 'true');
+    } else {
+        // Define allowed origins for non-embed routes
+        const allowedOrigins = [
+            process.env.NEXT_PUBLIC_BASE_URL,
+            'http://localhost:3000',
+            'http://localhost:3001',
+        ].filter(Boolean);
+
+        // Check if origin is allowed
+        if (origin && allowedOrigins.includes(origin)) {
+            response.headers.set('Access-Control-Allow-Origin', origin);
+            response.headers.set('Access-Control-Allow-Credentials', 'true');
+        }
     }
 
     // Handle preflight requests

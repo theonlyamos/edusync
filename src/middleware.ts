@@ -12,7 +12,7 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  response = addSecurityHeaders(response);
+  response = addSecurityHeaders(response, request);
   response = configureCORS(request, response);
 
   if (request.method === 'OPTIONS') {
