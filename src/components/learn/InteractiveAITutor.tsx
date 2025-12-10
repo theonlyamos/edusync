@@ -537,6 +537,11 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         try {
           const response = await axios.post('/api/credits/deduct-minute', {
             sessionId: currentSessionId
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+            }
           });
 
           if (response.data.success) {
