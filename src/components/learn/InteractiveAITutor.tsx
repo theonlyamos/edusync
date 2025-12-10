@@ -26,13 +26,17 @@ type Visualization = {
   panelDimensions?: { width: number; height: number }
 };
 
-export const InteractiveAITutorComponent = () => {
+type InteractiveAITutorProps = {
+  onSessionStarted?: (sessionId: string) => void;
+  onSessionEnded?: (sessionId: string | null) => void;
+};
+
+export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }: InteractiveAITutorProps) => {
   const searchParams = useSearchParams();
   const apiKey = searchParams.get('apiKey');
   const topicFromUrl = searchParams.get('topic');
   const debugMode = searchParams.get('debug') === 'true';
-  const [showStartOverlay, setShowStartOverlay] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const getFeedback  = searchParams.get('getFeedback') === 'true';
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -67,6 +71,8 @@ export const InteractiveAITutorComponent = () => {
     mutedForeground: string;
     border: string;
   } | null>(null);
+  const previousSessionIdRef = useRef<string | null>(null);
+  const lastEndedSessionIdRef = useRef<string | null>(null);
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -75,6 +81,7 @@ export const InteractiveAITutorComponent = () => {
           { status: 'ended', ended: true },
           { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
         );
+        lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
       } catch { }
     }
@@ -101,6 +108,7 @@ export const InteractiveAITutorComponent = () => {
           { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
         );
       } catch { }
+      lastEndedSessionIdRef.current = currentSessionId;
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
@@ -125,9 +133,10 @@ export const InteractiveAITutorComponent = () => {
     setCurrentVizIndex(-1);
     setError('');
     setTopic(null);
+    lastEndedSessionIdRef.current = currentSessionId;
     setCurrentSessionId(null);
-    setShowFeedbackForm(false);
-    setFeedbackTrigger(null);
+    setShowFeedbackForm(getFeedback);
+    setFeedbackTrigger(getFeedback ? 'manual_stop' : null);
     setGeneratingVisualization(false);
     setShowCreditWarning(false);
     setSessionManuallyStopped(false);
@@ -139,22 +148,25 @@ export const InteractiveAITutorComponent = () => {
     }
   }, [voiceActive, handleVoiceStop, creditDeductionInterval]);
 
-  const handleFeedbackFormChange = (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
+  const handleFeedbackFormChange = useCallback((show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
     setFeedbackTrigger(trigger);
-  };
+  }, []);
 
   const handleFeedbackSubmit = async (feedback: FeedbackData) => {
     try {
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
+      };
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           ...feedback,
           timestamp: new Date().toISOString(),
           userAgent: navigator.userAgent,
+          sessionId: currentSessionId || lastEndedSessionIdRef.current,
         }),
       });
 
@@ -422,10 +434,27 @@ export const InteractiveAITutorComponent = () => {
             { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
           );
         } catch { }
+        lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
       })();
     }
   }, [connectionStatus, currentSessionId]);
+
+  useEffect(() => {
+    const previous = previousSessionIdRef.current;
+    if (!previous && currentSessionId && onSessionStarted) {
+      onSessionStarted(currentSessionId);
+    }
+    if (previous && !currentSessionId && onSessionEnded) {
+      onSessionEnded(previous);
+      if (getFeedback) {
+        lastEndedSessionIdRef.current = previous;
+        setShowFeedbackForm(true);
+        setFeedbackTrigger('manual_stop');
+      }
+    }
+    previousSessionIdRef.current = currentSessionId;
+  }, [currentSessionId, onSessionEnded, onSessionStarted, getFeedback]);
 
   // Fetch initial credits
   useEffect(() => {
@@ -556,7 +585,7 @@ export const InteractiveAITutorComponent = () => {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
-      {(!voiceActive || (voiceActive && connectionStatus !== 'connected')) && (
+      {(!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm && (
         <div className="absolute inset-0 z-30">
           <StartButtonOverlay
             onStart={() => {
@@ -784,10 +813,10 @@ export const InteractiveAITutorComponent = () => {
   );
 }
 
-export default function InteractiveAITutor() {
+export default function InteractiveAITutor(props: InteractiveAITutorProps) {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <InteractiveAITutorComponent />
+      <InteractiveAITutorComponent {...props} />
     </Suspense>
   );
 }

@@ -88,7 +88,7 @@ export const API_AUTH_CONFIG: Record<string, ApiAuthMode> = {
     '/api/credits/deduct-minute': 'both',
     '/api/credits/*': 'both',
     '/api/sessions': 'both',
-    '/api/feedback': 'none',
+    '/api/feedback': 'both',
     '/api/auth/*': 'none',
 };
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSSRUserSupabase } from '@/lib/supabase.server';
-import { getServerSession } from '@/lib/auth';
 import { feedbackSchema } from '@/lib/validation/api';
 import { rateLimit } from '@/lib/rate-limiter';
+import { getAuthContext } from '@/lib/get-auth-context';
+import { createClient } from '@supabase/supabase-js';
 
 // Type is now inferred from the Zod schema
 type FeedbackData = typeof feedbackSchema._output;
@@ -16,15 +16,27 @@ export async function POST(request: NextRequest) {
         }
 
         // Check authentication
-        const session = await getServerSession();
-        if (!session?.user) {
-            return NextResponse.json(
-                { error: 'Authentication required' },
-                { status: 401 }
-            );
-        }
+        const authContext = getAuthContext(request)
+        const userId = authContext?.userId
+        const authType = authContext?.authType
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const body = await request.json();
+        const originHeader = request.headers.get('origin') || request.headers.get('referer');
+        let domain: string | null = null;
+        if (originHeader) {
+            try {
+                domain = new URL(originHeader).hostname;
+            } catch {
+                domain = null;
+            }
+        }
+        if (!domain) {
+            domain = request.nextUrl.hostname ?? null;
+        }
+
+        const forwardedFor = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
+        const ipAddress = forwardedFor?.split(',')[0]?.trim() || null;
 
         // Validate input with Zod schema
         const validation = feedbackSchema.safeParse(body);
@@ -38,11 +50,14 @@ export async function POST(request: NextRequest) {
         const feedback = validation.data;
 
         // Create Supabase client
-        const supabase = await createSSRUserSupabase();
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
 
         // Prepare data for database insertion
         const dbData = {
-            user_id: session.user.id, // Add user_id from session
+            user_id: userId,
             rating: feedback.rating,
             experience: feedback.experience.trim(), // Required field, already validated
             improvements: feedback.improvements || null,
@@ -53,6 +68,10 @@ export async function POST(request: NextRequest) {
             session_duration_seconds: feedback.sessionDurationSeconds || null,
             connection_count: feedback.connectionCount || null,
             error_message: feedback.errorMessage || null,
+            domain,
+            ip_address: ipAddress,
+            auth_type: authType,
+            session_id: feedback.sessionId || null,
         };
 
         // Insert feedback into database

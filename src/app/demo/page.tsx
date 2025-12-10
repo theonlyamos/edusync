@@ -8,7 +8,7 @@ export default function DemoPage() {
 
   useEffect(() => {
     // This only runs on the client side
-    setIframeUrl(`${window.location.origin}/embed/new?apiKey=isk_472ad9c8113b2dd06f7c225fc134b0d17ff39615a9b0b71a54830e6aeac29b9f`)
+    setIframeUrl(`${window.location.origin}/embed/new?apiKey=isk_472ad9c8113b2dd06f7c225fc134b0d17ff39615a9b0b71a54830e6aeac29b9f&getFeedback=true`)
   }, [])
 
   if (!iframeUrl) {

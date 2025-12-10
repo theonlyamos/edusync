@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Send, ThumbsUp, ThumbsDown, Meh, CheckCircle } from 'lucide-react';
+import { Send, ThumbsUp, ThumbsDown, Meh, CheckCircle, Loader2 } from 'lucide-react';
 
 interface FeedbackFormProps {
   isOpen: boolean;
@@ -83,13 +83,13 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
   const getTriggerMessage = () => {
     switch (trigger) {
       case 'manual_stop':
-        return 'You stopped the voice session';
+        return 'You stopped the learning session';
       case 'connection_reset':
-        return 'Session ended';
+        return 'Learning session ended';
       case 'error':
         return 'An error occurred';
       default:
-        return 'Session ended';
+        return 'Learning session ended';
     }
   };
 
@@ -119,6 +119,9 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
           <div className="text-sm text-muted-foreground">
             Reload the page to try the app again.
           </div>
+          <Button className="mt-6 w-full" onClick={onClose}>
+            Close
+          </Button>
         </CardContent>
       </Card>
     );
@@ -242,7 +245,10 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
               className="w-full flex items-center gap-2"
             >
               {isSubmitting ? (
-                <>Submitting...</>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting...
+                </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />

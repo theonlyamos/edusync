@@ -14,6 +14,7 @@ export const feedbackSchema = z.object({
     sessionDurationSeconds: z.number().min(0).optional(),
     connectionCount: z.number().min(0).optional(),
     errorMessage: z.string().max(1000).optional(),
+    sessionId: z.string().uuid().optional(),
 });
 
 // Assessment validation
