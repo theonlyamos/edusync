@@ -5,7 +5,7 @@ import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 import { rateLimit } from '@/lib/rate-limiter';
 import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/auth-middleware';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
