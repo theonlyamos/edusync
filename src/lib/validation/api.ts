@@ -10,7 +10,6 @@ export const feedbackSchema = z.object({
     wouldRecommend: z.enum(['yes', 'no', 'maybe']),
     trigger: z.enum(['manual_stop', 'connection_reset', 'error']),
     timestamp: z.string(),
-    userAgent: z.string(),
     sessionDurationSeconds: z.number().min(0).optional(),
     connectionCount: z.number().min(0).optional(),
     errorMessage: z.string().max(1000).optional(),

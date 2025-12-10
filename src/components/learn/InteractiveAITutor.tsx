@@ -165,7 +165,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         body: JSON.stringify({
           ...feedback,
           timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent,
           sessionId: currentSessionId || lastEndedSessionIdRef.current,
         }),
       });

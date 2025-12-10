@@ -18,26 +18,9 @@ export async function POST(request: NextRequest) {
         // Check authentication
         const authContext = getAuthContext(request)
         const userId = authContext?.userId
-        const authType = authContext?.authType
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const body = await request.json();
-        const originHeader = request.headers.get('origin') || request.headers.get('referer');
-        let domain: string | null = null;
-        if (originHeader) {
-            try {
-                domain = new URL(originHeader).hostname;
-            } catch {
-                domain = null;
-            }
-        }
-        if (!domain) {
-            domain = request.nextUrl.hostname ?? null;
-        }
-
-        const forwardedFor = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
-        const ipAddress = forwardedFor?.split(',')[0]?.trim() || null;
-
         // Validate input with Zod schema
         const validation = feedbackSchema.safeParse(body);
         if (!validation.success) {
@@ -63,14 +46,10 @@ export async function POST(request: NextRequest) {
             improvements: feedback.improvements || null,
             would_recommend: feedback.wouldRecommend,
             trigger_type: feedback.trigger,
-            user_agent: feedback.userAgent,
             timestamp: feedback.timestamp,
             session_duration_seconds: feedback.sessionDurationSeconds || null,
             connection_count: feedback.connectionCount || null,
             error_message: feedback.errorMessage || null,
-            domain,
-            ip_address: ipAddress,
-            auth_type: authType,
             session_id: feedback.sessionId || null,
         };
 

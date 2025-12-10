@@ -45,12 +45,32 @@ export async function POST(request: NextRequest) {
 
     const { session_id, session_handle, topic } = await request.json().catch(() => ({}))
 
+    const originHeader = request.headers.get('origin') || request.headers.get('referer');
+    let domain: string | null = null;
+    if (originHeader) {
+      try {
+        domain = new URL(originHeader).hostname;
+      } catch {
+        domain = null;
+      }
+    }
+    if (!domain) {
+      domain = request.nextUrl.hostname ?? null;
+    }
+
+    const forwardedFor = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip');
+    const ipAddress = forwardedFor?.split(',')[0]?.trim() || null;
+    const userAgent = request.headers.get('user-agent') || null;
+
     const insertPayload: any = {
       user_id: userId,
       status: 'active',
       topic: topic || null,
       session_id: session_id || null,
       session_handle: session_handle || null,
+      domain,
+      ip_address: ipAddress,
+      user_agent: userAgent,
     };
 
     if (authContext.authType === 'apiKey') {
