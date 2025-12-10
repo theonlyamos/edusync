@@ -8,11 +8,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 // Disable body parsing for webhook signature verification
-export const config = {
-    api: {
-        bodyParser: false,
-    },
-}
+// export const config = {
+//    api: {
+//        bodyParser: false,
+//    },
+// }
+
 
 export async function POST(request: NextRequest) {
     let body: string
