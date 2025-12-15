@@ -138,7 +138,7 @@ function HomeContent() {
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
-                <Link href="/learn" className="flex items-center gap-2">
+                <Link href="/demo" className="flex items-center gap-2">
                   <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
                   Start Learning Now
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
