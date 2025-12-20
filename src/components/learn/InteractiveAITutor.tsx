@@ -606,10 +606,10 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         {code && library ? (
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end bg-background/95">
+                {/* <div className="flex items-center gap-2">
                   <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
-                </div>
+                </div> */}
                 <div className="flex items-center gap-2">
                   {debugMode && (
                     <ToggleGroup
@@ -646,7 +646,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
               <div className="flex-1 p-6">
                 {show === 'render' && (
                   !generatingVisualization ? (
-                    <div className="h-full">
+                    <div className="h-full w-full flex justify-center items-center">
                       {renderVisualization}
                     </div>
                   ) : (

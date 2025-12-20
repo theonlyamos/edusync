@@ -146,7 +146,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
       <iframe
         ref={iframeRef}
         title="Code Preview"
-        className="w-full h-full min-h-[400px] border border-gray-200 rounded bg-white"
+        className="w-full h-screen border border-gray-200 rounded bg-white"
         sandbox="allow-scripts"
         style={{ display: isLoading || error ? 'none' : 'block' }}
       />
