@@ -606,7 +606,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         {code && library ? (
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
-              <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end bg-background/95">
+              <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end">
                 {/* <div className="flex items-center gap-2">
                   <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
                 </div> */}
@@ -630,7 +630,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                   {visualizations.length > 0 && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 bg-background/95">
                       <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
