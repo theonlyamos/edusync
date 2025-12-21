@@ -28,6 +28,23 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileMenuAnimating, setMobileMenuAnimating] = useState(false)
+  const [orgUrl, setOrgUrl] = useState<string>('/learn/org')
+
+  const fetchOrganizations = async () => {
+    try {
+      const response = await axios.get('/api/organizations');
+      const orgs = response.data.organizations || [];
+      if (orgs.length === 1) {
+        setOrgUrl(`/learn/org/${orgs[0].id}`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch organizations:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, []);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
@@ -134,11 +151,11 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
     <div className="flex h-screen bg-background">
       {/* Desktop Sidebar */}
       <aside 
-        className={`hidden lg:flex border-r bg-card transition-all duration-300 ${collapsed ? 'w-16 hover:cursor-pointer' : 'w-60'} flex-col shadow-none z-20`}
+        className={`hidden lg:flex border-r bg-card transition-all duration-300 relative ${collapsed ? 'hover:cursor-pointer' : ''} flex-col shadow-none z-20`}
         onClick={handleSidebarClick}
       >
         {/* Header */}
-        <div className="p-4">
+        <div className="p-4 border-b border-border">
           {collapsed ? (
             <Button
               size="icon"
@@ -159,11 +176,13 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 className="justify-start flex-grow hover:bg-transparent group"
                 onClick={handleNewSession}
                >
-                <SquarePen className="w-4 h-4 mr-2 transition-transform text-muted-foreground group-hover:text-primary" />
+                <SquarePen className="w-5 h-5 mr-2 transition-transform text-muted-foreground group-hover:text-primary" />
                 New Session
               </Button>
-              <button
-                className="rounded-md border p-1 text-sm flex items-center justify-center hover:bg-muted ml-2"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-md p-1 text-sm flex items-center justify-center hover:bg-muted ml-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   setCollapsed(true);
@@ -171,130 +190,77 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 aria-label="Collapse sidebar"
               >
                 <ChevronLeft className="h-5 w-5" />
-              </button>
+              </Button>
             </div>
           )}
           
         </div>
 
-        <div className="p-4 flex-grow">
-          {/* Credits Display */}
-          <div className="pb-4">
-            {collapsed ? (
-                <Link href="/learn/credits" className="flex items-center justify-center p-2 rounded-md hover:bg-muted/50 transition-colors">
-                  <Coins className="w-5 h-5 text-yellow-500" />
-                  <span className="text-sm font-medium ml-2">{loadingCredits ? '...' : credits}</span>
-                </Link>
+        <div className={`flex flex-col gap-2 py-4 border-b border-border ${collapsed ? 'items-center' : ''}`}>
+          <Link href="/learn/credits" className="flex items-center justify-start py-2 px-7 rounded-md hover:bg-muted/50 transition-colors">
+            <Coins className="w-5 h-5 text-yellow-500" />
+            <span className="text-sm font-medium ml-2">{loadingCredits ? '...' : credits} {collapsed ? '' : ' Credits'}</span>
+          </Link>
+          <Link href={orgUrl} className="flex items-center justify-start py-2 px-7 rounded-md hover:bg-muted/50 transition-colors">
+            <Building2 className="w-5 h-5 mr-2" />
+            {collapsed ? '' : 'Organization'}
+          </Link>
+        </div>
+
+        <div className={`${collapsed ? 'hidden' : ''} p-4`}>
+          <h2 className="text-xs font-semibold text-muted-foreground px-2 mb-2">Sessions</h2>
+          <div className="space-y-1 overflow-y-auto">
+            {loadingHistory ? (
+              [...Array(5)].map((_, i) => (
+                <div key={i} className="h-8 rounded-md w-full bg-muted animate-pulse" />
+              ))
             ) : (
-              <Link href="/learn/credits" className="block">
-                <div className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 transition-colors border">
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm font-medium">
-                      {loadingCredits ? '...' : `${credits} Credits`}
-                    </span>
-                  </div>
-                  {credits < 10 && (
-                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                  )}
-                </div>
-              </Link>
-            )}
-            {!collapsed && (
-              <div className="mt-2">
-                <Link href="/learn/credits">
-                  <Button size="sm" variant="outline" className="w-full">
-                    <Plus className="w-3 h-3 mr-1" />
-                    Buy Credits
-                  </Button>
-                </Link>
-              </div>
+              sessionHistory.length === 0 ? (
+                <div className="text-xs text-muted-foreground px-2 py-1">No sessions</div>
+              ) : (
+                sessionHistory.map(s => (
+                  <Link key={s.id} href={`/learn/${s.id}`} title={s.topic || 'Chat'}
+                    className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/learn/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                  >
+                    {s.topic || 'New Session'}
+                  </Link>
+                ))
+              )
             )}
           </div>
-
-          {/* Organization Link */}
-          <div className="pb-4">
-            {collapsed ? (
-              <Link href="/learn/org">
-                <Button variant="outline" size="icon" className="w-full">
-                  <Building2 className="w-4 h-4" />
-                </Button>
-              </Link>
-            ) : (
-              <Link href="/learn/org">
-                <Button variant="outline" size="sm" className="w-full justify-start">
-                  <Building2 className="w-4 h-4 mr-2" />
-                  Organization
-                </Button>
-              </Link>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="my-4">
-            <div className="border-t border-border"></div>
-          </div>
-
-          {/* Session History */}
-          {!collapsed && (
-            <div>
-              <h2 className="text-xs font-semibold text-muted-foreground px-2 mb-2">Sessions</h2>
-              <div className="space-y-1 overflow-y-auto">
-                {loadingHistory ? (
-                  [...Array(5)].map((_, i) => (
-                    <div key={i} className="h-8 rounded-md w-full bg-muted animate-pulse" />
-                  ))
-                ) : (
-                  sessionHistory.length === 0 ? (
-                    <div className="text-xs text-muted-foreground px-2 py-1">No sessions</div>
-                  ) : (
-                    sessionHistory.map(s => (
-                      <Link key={s.id} href={`/learn/${s.id}`} title={s.topic || 'Chat'}
-                        className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/learn/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                      >
-                        {s.topic || 'New Session'}
-                      </Link>
-                    ))
-                  )
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer Section */}
-        <div className="p-4 border-t border-border">
-
-          {/* Theme Toggle */}
-          <div className="pb-4">
-            {collapsed ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-full"
-                onClick={toggleTheme}
-                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {theme === 'dark' ? (
-                  <Sun className="h-5 w-5" />
-                ) : (
-                  <Moon className="h-5 w-5" />
-                )}
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                className="w-full justify-center"
-                onClick={toggleTheme}
-              >
-                {theme === 'dark' ? (
-                  <Sun className="h-5 w-5 mr-2" />
-                ) : (
-                  <Moon className="h-5 w-5 mr-2" />
-                )}
-                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-              </Button>
-            )}
+        <div className="p-4 flex flex-col gap-3 border-t border-border absolute bottom-0 left-0 right-0">
+          <div className={`flex gap-3 ${collapsed ? 'flex-col' : ''}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-full"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+              {collapsed ? '' : theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            </Button>
+            <Button
+              variant="ghost"
+              size={collapsed ? "icon" : "default"}
+              className={`text-red-500 hover:bg-red-500 hover:text-white ${collapsed ? 'w-full' : ''}`}
+              onClick={async () => {
+                await supabase?.auth.signOut()
+                const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
+                router.replace(`/login${back}`)
+              }}
+              title="Logout"
+            >
+              <LogOut className="h-5 w-5" />
+              {!collapsed && <span className="ml-2">Logout</span>}
+            </Button>
           </div>
 
           {/* User Info & Logout */}
@@ -317,20 +283,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 <span className="text-sm font-medium truncate max-w-[8rem]">{displayName}</span>
               )}
             </div>
-            <Button
-              variant="ghost"
-              size={collapsed ? "icon" : "default"}
-              className={`text-red-500 hover:bg-red-500 hover:text-white ${collapsed ? 'w-full' : ''}`}
-              onClick={async () => {
-                await supabase?.auth.signOut()
-                const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
-                router.replace(`/login${back}`)
-              }}
-              title="Logout"
-            >
-              <LogOut className="h-5 w-5" />
-              {!collapsed && <span className="ml-2">Logout</span>}
-            </Button>
+            
           </div>
         </div>
       </aside>
@@ -450,7 +403,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
               {/* Organization Link */}
               <div className="mb-6">
-                <Link href="/learn/org" onClick={closeMobileMenu}>
+                <Link href={orgUrl} onClick={closeMobileMenu}>
                   <Button variant="outline" size="sm" className="w-full justify-start">
                     <Building2 className="w-4 h-4 mr-2" />
                     Organization
