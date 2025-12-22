@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling } from '@google/genai';
+import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity, EndSensitivity } from '@google/genai';
 
 interface AudioStreamingState {
     isStreaming: boolean;
@@ -529,7 +529,17 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
                 // Configuration is locked server-side via ephemeral token liveConnectConstraints
                 // Session resumption
                 config: {
-                    responseModalities: ['AUDIO'],
+                    responseModalities: [Modality.AUDIO],
+                    proactivity: { proactiveAudio: true },
+                    realtimeInputConfig: {
+                        automaticActivityDetection: {
+                            disabled: false,
+                            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+                            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+                            prefixPaddingMs: 20,
+                            silenceDurationMs: 100,
+                        }
+                    },
                     systemInstruction: finalSystemPrompt,
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
