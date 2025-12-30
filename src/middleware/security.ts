@@ -25,7 +25,7 @@ export function addSecurityHeaders(response: NextResponse, request?: NextRequest
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
         "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
         "font-src 'self' https://fonts.gstatic.com",
-        "img-src 'self' data: blob: https:",
+        "img-src 'self' data: blob: https: https://images.unsplash.com",
         "media-src 'self' blob: https://*.supabase.co",
         "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://vitals.vercel-insights.com https://cdn.jsdelivr.net https://esm.sh",
         frameAncestors,
