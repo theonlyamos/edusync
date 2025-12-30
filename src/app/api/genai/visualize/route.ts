@@ -80,14 +80,40 @@ Choose the correct technology based on the task requirements:
 
 #### **1\. React (React.createElement Syntax ONLY)**
 
-* **CRITICAL SYNTAX:** You **MUST** use React.createElement() for all components. **NEVER use JSX tags (e.g., \<Card\>).**  
-* **CRITICAL NAMING:** Your main component function **MUST** be named exactly one of the following: Component, App, Quiz, InteractiveComponent, Calculator, or Game.  
-* **Available Hooks (No Import Needed):** useState, useEffect, useMemo, useCallback.  
-* **Available UI Components:** Button, Input, Card, CardContent, CardHeader, CardTitle, Badge, Slider, etc.  
-* **Available Chart Components (Recharts):** LineChart, BarChart, PieChart, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, etc.  
-* **Available Map Components (React-Leaflet):** MapContainer, TileLayer (use OpenStreetMap), Marker, Popup, etc.  
+**IMPORTANT: Sandboxed Execution Environment**
+* React components run in an isolated iframe for security
+* All dependencies (React, Recharts, React-Leaflet) are loaded as ES Modules (ESM) from esm.sh globally
+* UI components are simplified versions that use Tailwind CSS classes directly
+* **CRITICAL: NO IMPORTS/EXPORTS:** The code is evaluated in a sandboxed function body. You **MUST NOT** use \`import\` or \`export\` statements.All dependencies(React, Recharts, React - Leaflet, UI components) are injected globally.
+* ** CRITICAL SYNTAX:** You ** MUST ** use React.createElement() for all components. ** NEVER use JSX tags(e.g., \<Card\>).**  
+* ** CRITICAL NAMING:** Your main component function ** MUST ** be named exactly one of the following: Component, App, Quiz, InteractiveComponent, Calculator, or Game.  
+* ** Available Hooks(No Import Needed):** useState, useEffect, useMemo, useCallback, useRef.  
+* ** Available UI Components(Simplified Versions):** 
+  * ** Button:** Supports \`variant\` prop: 'default', 'destructive', 'outline', 'secondary', 'ghost', 'link'. Supports \`size\` prop: 'default', 'sm', 'lg', 'icon'.
+  * **Input:** Standard text input with styling.
+  * **Card, CardHeader, CardTitle, CardContent:** Basic card components for layout.
+  * **Badge:** Supports \`variant\` prop: 'default', 'secondary', 'destructive', 'outline'.
+  * **Textarea:** Multi-line text input.
+  * **Label:** Form label component.
+  * **RadioGroup, RadioGroupItem:** Basic radio button group (simplified - use native radio inputs).
+  * **Checkbox:** Standard checkbox input.
+  * **Select, SelectContent, SelectItem, SelectTrigger, SelectValue:** Simplified select component (uses native HTML select - limited styling).
+  * **Slider:** Range input slider.
+  * **NOTE:** These are simplified versions running in a sandboxed iframe. They use Tailwind CSS classes directly (not CSS variables). Complex interactions like portals, animations, or advanced Radix UI features are not available.
+  * **Component Limitations:**
+    * Select components use native HTML select (limited styling, no custom dropdown)
+    * RadioGroup and Checkbox are basic HTML inputs with styling
+    * No advanced features like tooltips, popovers, or dropdown menus beyond native select
+    * All components support standard HTML props (onClick, onChange, className, style, etc.)
+* **Available Chart Components (Recharts):** LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart. All Recharts components work normally.
+* **Available Map Components (React-Leaflet):** MapContainer, TileLayer (use OpenStreetMap), Marker, Popup, Polyline, Polygon, Circle, Rectangle, useMap, useMapEvent. All React-Leaflet components work normally.
+* **Styling Notes:**
+  * Components use Tailwind CSS utility classes directly (e.g., 'bg-blue-600', 'text-white', 'rounded-md').
+  * For theme colors, use appropriate Tailwind color classes that match the theme (e.g., 'bg-blue-600' for primary, 'bg-gray-200' for secondary).
+  * You can add custom \`className\` props to components for additional styling.
+  * Use inline \`style\` props for dynamic values or gradients.
 * **Images:** For images in React, use standard 'img' elements with React.createElement('img', { src: 'url', alt: 'description', style: {...} }). Extract image URLs from markdown syntax in the task description. Style images to fit the illustrative aesthetic with border-radius, box-shadow, and proper sizing.
-* **Styling for Illustrations:** Use inline styles with theme colors, gradients (linear-gradient, radial-gradient), border-radius for rounded shapes, box-shadow for depth, and CSS transforms for dynamic positioning. Create layered compositions with absolutely positioned elements when needed.
+* **Styling for Illustrations:** Use inline styles with gradients (linear-gradient, radial-gradient), border-radius for rounded shapes, box-shadow for depth, and CSS transforms for dynamic positioning. Create layered compositions with absolutely positioned elements when needed. Use Tailwind classes for standard styling.
 
 #### **2\. Three.js & p5.js**
 
@@ -154,24 +180,27 @@ export async function POST(request: NextRequest) {
 
         const themeInfo = theme && theme_colors
             ? `\n\n**CRITICAL: Color Theme Requirements**
-The application is currently in ${theme} mode. You MUST use the following color palette to ensure perfect visual harmony and readability:
+The application is currently in ${theme} mode. You MUST use Tailwind CSS classes that match the theme colors to ensure perfect visual harmony and readability.
 
-**Theme Color Palette (${theme} mode):**
-- Background: ${theme_colors.background} - Use this for canvas/container backgrounds
-- Foreground/Text: ${theme_colors.foreground} - Use this for all body text and labels
-- Primary: ${theme_colors.primary} with text color ${theme_colors.primaryForeground} - Use for primary buttons and key interactive elements
-- Secondary: ${theme_colors.secondary} with text color ${theme_colors.secondaryForeground} - Use for secondary actions
-- Accent: ${theme_colors.accent} - Use sparingly for highlights and emphasis
-- Muted: ${theme_colors.muted} with text ${theme_colors.mutedForeground} - Use for less prominent text and subtle backgrounds
-- Border: ${theme_colors.border} - Use for dividers and borders
+**Theme Color Mapping (${theme} mode):**
+Since components run in a sandboxed environment, use Tailwind CSS utility classes that approximate the theme colors:
+
+- **Background:** Use 'bg-white' for light mode or 'bg-gray-900'/'bg-slate-900' for dark mode for canvas/container backgrounds
+- **Foreground/Text:** Use 'text-gray-900' for light mode or 'text-gray-100'/'text-white' for dark mode for all body text and labels
+- **Primary:** Use 'bg-blue-600' with 'text-white' for primary buttons and key interactive elements (or 'bg-blue-500'/'bg-blue-700' for variations)
+- **Secondary:** Use 'bg-gray-200' with 'text-gray-900' for light mode, or 'bg-gray-700' with 'text-gray-100' for dark mode for secondary actions
+- **Accent:** Use 'bg-blue-500', 'bg-purple-500', or 'bg-indigo-500' sparingly for highlights and emphasis
+- **Muted:** Use 'bg-gray-100' with 'text-gray-600' for light mode, or 'bg-gray-800' with 'text-gray-400' for dark mode for less prominent text and subtle backgrounds
+- **Border:** Use 'border-gray-300' for light mode or 'border-gray-700' for dark mode for dividers and borders
 
 **MANDATORY RULES:**
-1. ALL text must use either Foreground (${theme_colors.foreground}) or MutedForeground (${theme_colors.mutedForeground})
-2. ALL buttons must use Primary/Secondary colors with their corresponding foreground colors
-3. ALL backgrounds must be either Background or Muted colors
-4. NEVER use arbitrary colors - only use colors from this palette
-5. For charts/graphs, you may use variations of Primary, Secondary, and Accent colors
-6. Ensure all text has sufficient contrast against its background`
+1. ALL text must use appropriate text color classes ('text-gray-900', 'text-gray-600', 'text-white', 'text-gray-100', etc.) based on the theme
+2. ALL buttons must use appropriate background and text color classes (e.g., 'bg-blue-600 text-white' for primary, 'bg-gray-200 text-gray-900' for secondary)
+3. ALL backgrounds must use appropriate background classes ('bg-white', 'bg-gray-100', 'bg-gray-900', 'bg-gray-800', etc.) based on the theme
+4. Use Tailwind CSS utility classes - do NOT use CSS variables or inline color values
+5. For charts/graphs, use Tailwind color classes that match the theme (blue, indigo, purple shades for primary/accent, gray shades for neutral)
+6. Ensure all text has sufficient contrast against its background (use darker text on lighter backgrounds and lighter text on darker backgrounds)
+7. When in doubt, use the standard Tailwind color palette with appropriate shades for ${theme} mode`
             : '';
 
         const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo;

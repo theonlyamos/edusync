@@ -36,7 +36,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const apiKey = searchParams.get('apiKey');
   const topicFromUrl = searchParams.get('topic');
   const debugMode = searchParams.get('debug') === 'true';
-  const getFeedback  = searchParams.get('getFeedback') === 'true';
+  const getFeedback = searchParams.get('getFeedback') === 'true';
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -58,6 +58,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
+  const regenerationAttemptsRef = useRef(0);
+  const MAX_REGENERATION_ATTEMPTS = 2;
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [themeColors, setThemeColors] = useState<{
     background: string;
@@ -193,7 +195,12 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     }
   };
 
-  const handleRegenerateVisualization = useCallback(async () => {
+  const handleRegenerateVisualization = useCallback(async (isManualTrigger = true) => {
+    // Reset retry counter when manually triggered
+    if (isManualTrigger) {
+      regenerationAttemptsRef.current = 0;
+    }
+
     if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
     const current = visualizations[currentVizIndex];
     const panelElement = vizRef.current;
@@ -204,6 +211,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     }
     try {
       setGeneratingVisualization(true);
+      setError(''); // Clear previous error when regenerating
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...apiKey ? { Authorization: `Bearer ${apiKey}` } : {} },
@@ -238,16 +246,28 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     } finally {
       setGeneratingVisualization(false);
     }
-  }, [currentVizIndex, visualizations])
+  }, [currentVizIndex, visualizations, apiKey, theme, themeColors])
 
   const handleRendererError = useCallback(async (errMsg: string) => {
+    // Increment retry counter
+    regenerationAttemptsRef.current += 1;
+
+    // Check if we've exceeded the retry limit
+    if (regenerationAttemptsRef.current > MAX_REGENERATION_ATTEMPTS) {
+      setError(`Visualization failed to render after ${MAX_REGENERATION_ATTEMPTS} attempts. ${errMsg}`);
+      console.error('Max regeneration attempts reached:', errMsg);
+      return;
+    }
+
+    console.log(`Regeneration attempt ${regenerationAttemptsRef.current}/${MAX_REGENERATION_ATTEMPTS} due to error:`, errMsg);
+
     try {
-      setError(errMsg);
-      await handleRegenerateVisualization();
+      // Don't show the intermediate error during auto-regeneration
+      await handleRegenerateVisualization(false); // false = not manual trigger
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
     }
-  }, [currentVizIndex, visualizations]);
+  }, [handleRegenerateVisualization]);
 
   const renderVisualization = useMemo(() => {
     if (!code || !library) return null;
@@ -299,6 +319,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         }
 
         const vizData = await response.json();
+        regenerationAttemptsRef.current = 0; // Reset retry counter for new visualization
+        setError(''); // Clear any previous error
         setCode(vizData.code);
         setLibrary(vizData.library);
         setVisualizations(prev => {
@@ -350,6 +372,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const canNext = currentVizIndex >= 0 && currentVizIndex < visualizations.length - 1;
   const goPrev = () => {
     if (!canPrev) return;
+    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
+    setError(''); // Clear any previous error
     const idx = currentVizIndex - 1;
     setCurrentVizIndex(idx);
     const v = visualizations[idx];
@@ -358,6 +382,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   };
   const goNext = () => {
     if (!canNext) return;
+    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
+    setError(''); // Clear any previous error
     const idx = currentVizIndex + 1;
     setCurrentVizIndex(idx);
     const v = visualizations[idx];
@@ -625,7 +651,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                     size="icon"
                     variant="ghost"
                     title="Regenerate visualization"
-                    onClick={handleRegenerateVisualization}
+                    onClick={() => handleRegenerateVisualization()}
                   >
                     <RefreshCw className="w-4 h-4" />
                   </Button>
