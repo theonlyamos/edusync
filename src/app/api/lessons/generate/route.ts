@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-    baseURL: process.env.OPENAI_BASE_URL,
-    apiKey: process.env.OPENAI_API_KEY,
-});
+import { generateAICompletion } from '@/lib/ai';
 
 export async function POST(req: Request) {
     try {
@@ -33,23 +28,10 @@ Please structure the lesson plan with the following sections:
 
 Make it engaging and appropriate for the specified grade level.`;
 
-        const completion = await openai.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an experienced teacher and curriculum designer. Create detailed, engaging lesson plans that follow educational best practices."
-                },
-                {
-                    role: "user",
-                    content: prompt
-                }
-            ],
-            model: process.env.OPENAI_MODEL as string,
-            temperature: 0.7,
-            max_tokens: 8192,
-        });
-
-        const generatedContent = completion.choices[0].message.content;
+        const generatedContent = await generateAICompletion(
+            "You are an experienced teacher and curriculum designer. Create detailed, engaging lesson plans that follow educational best practices.",
+            prompt
+        );
 
         return NextResponse.json({ content: generatedContent });
     } catch (error) {

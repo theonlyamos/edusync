@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import OpenAI from 'openai';
+import { generateAICompletion } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
 import type {
     QuizContentType,
@@ -9,20 +9,11 @@ import type {
     SummaryContentType
 } from '@/components/content/types';
 
-const openai = new OpenAI({
-    baseURL: process.env.OPENAI_BASE_URL,
-    apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(req: Request) {
     try {
         const session = await getServerSession();
         if (!session || session.user?.role !== 'teacher') {
             return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        if (!process.env.OPENAI_API_KEY) {
-            return new NextResponse('OpenAI API key not configured', { status: 500 });
         }
 
         const { title, subject, gradeLevel, contentType, topic } = await req.json();
@@ -36,7 +27,7 @@ export async function POST(req: Request) {
 
         switch (contentType) {
             case 'quiz':
-                systemPrompt += "Create engaging quiz questions that test understanding and critical thinking.";
+                systemPrompt += "Create engaging quiz questions that test understanding and critical thinking. Format the response as a JSON object.";
                 userPrompt = `Create a quiz about ${topic} for ${gradeLevel} grade ${subject} students.
 The quiz should include a mix of multiple choice, true/false, and short answer questions.
 Format the response as a JSON object with the following structure:
@@ -56,7 +47,7 @@ Format the response as a JSON object with the following structure:
                 break;
 
             case 'worksheet':
-                systemPrompt += "Create practice problems that reinforce learning and build skills.";
+                systemPrompt += "Create practice problems that reinforce learning and build skills. Format the response as a JSON object.";
                 userPrompt = `Create a worksheet about ${topic} for ${gradeLevel} grade ${subject} students.
 Format the response as a JSON object with the following structure:
 {
@@ -76,7 +67,7 @@ Format the response as a JSON object with the following structure:
                 break;
 
             case 'explanation':
-                systemPrompt += "Create clear, detailed explanations that break down complex topics.";
+                systemPrompt += "Create clear, detailed explanations that break down complex topics. Format the response as a JSON object.";
                 userPrompt = `Create an explanation about ${topic} for ${gradeLevel} grade ${subject} students.
 Format the response as a JSON object with the following structure:
 {
@@ -99,7 +90,7 @@ Format the response as a JSON object with the following structure:
                 break;
 
             case 'summary':
-                systemPrompt += "Create concise summaries that highlight key concepts and connections.";
+                systemPrompt += "Create concise summaries that highlight key concepts and connections. Format the response as a JSON object.";
                 userPrompt = `Create a summary about ${topic} for ${gradeLevel} grade ${subject} students.
 Format the response as a JSON object with the following structure:
 {
@@ -122,24 +113,12 @@ Format the response as a JSON object with the following structure:
         }
 
         try {
-            const completion = await openai.chat.completions.create({
-                messages: [
-                    {
-                        role: "system",
-                        content: systemPrompt
-                    },
-                    {
-                        role: "user",
-                        content: userPrompt
-                    }
-                ],
-                model: process.env.OPENAI_MODEL as string,
-                temperature: 0.7,
-                max_tokens: 2000,
-                response_format: { type: "json_object" }
-            });
-
-            const generatedContent = completion.choices[0].message.content;
+            const generatedContent = await generateAICompletion(
+                systemPrompt,
+                userPrompt,
+                undefined,
+                true
+            );
 
             if (!generatedContent) {
                 return new NextResponse('No content generated from AI', { status: 500 });

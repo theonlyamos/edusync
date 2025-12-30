@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import OpenAI from 'openai';
+import { generateAICompletion } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
@@ -13,11 +13,6 @@ interface Question {
     explanation: string;
     points: number;
 }
-
-const openai = new OpenAI({
-    baseURL: process.env.OPENAI_BASE_URL,
-    apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Zod schema for individual questions using discriminated union
 const questionSchema = z.discriminatedUnion('type', [
@@ -72,56 +67,48 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }
 
-        const body = await req.json();
-        const validation = generatePracticeSchema.safeParse(body);
+        const { difficulty, subject, topic, type } = await req.json();
+        // const body = await req.json();
+        // const validation = generatePracticeSchema.safeParse(body);
 
-        if (!validation.success) {
-            return NextResponse.json({ message: 'Invalid input', errors: validation.error.errors }, { status: 400 });
-        }
+        // if (!validation.success) {
+        //     return NextResponse.json({ message: 'Invalid input', errors: validation.error.errors }, { status: 400 });
+        // }
 
-        const { lessonId } = validation.data;
+        // const { lessonId } = validation.data;
 
-        const { data: lesson, error } = await supabase
-            .from('lessons')
-            .select('*')
-            .eq('id', lessonId)
-            .maybeSingle();
-        if (error) throw error;
+        // const { data: lesson, error } = await supabase
+        //     .from('lessons')
+        //     .select('*')
+        //     .eq('id', lessonId)
+        //     .maybeSingle();
+        // if (error) throw error;
 
-        if (!lesson) {
-            return NextResponse.json({ message: 'Lesson not found' }, { status: 404 });
-        }
+        // if (!lesson) {
+        //     return NextResponse.json({ message: 'Lesson not found' }, { status: 404 });
+        // }
 
         let lessonContent = '';
 
         // Fetch associated content using parentId and parentType
-        const { data: contents } = await supabase
-            .from('lesson_content')
-            .select('type, content')
-            .eq('lesson_id', lesson.id);
+        // const { data: contents } = await supabase
+        //     .from('lesson_content')
+        //     .select('type, content')
+        //     .eq('lesson_id', lesson.id);
 
         // Combine all content into context
         lessonContent = `
-Title: ${lesson.title}
-Subject: ${lesson.subject}
-Grade Level: ${lesson.gradeLevel || lesson.grade}
-Objectives: ${(lesson.objectives || []).join(', ')}
+Topic: ${topic}
+Subject: ${subject}
+Difficulty: ${difficulty}
+Preferences: ${type}
+`;
 
-Content:
-${(contents || []).map((content: any) => `
-Type: ${content.type}
-${JSON.stringify(content.content, null, 2)}
-`).join('\n')}`;
+        const prompt = `Create a set of ${type === 'quick' ? '3' : '5'} multiple choice practice exercises for:
+Based on the following context:
+${lessonContent}
 
-        const prompt = `Create a set of multiple choice practice exercises for:
-${lessonId ? 'Based on the following lesson content:\n' + lessonContent + '\n\n' : ''}
-Subject: ${lesson.subject}
-Topic: ${lesson.title}
-// TODO: Add difficulty and type to Lesson model or pass from request
-// Difficulty: ${lesson.difficulty}
-// Type: ${lesson.type}
-
-Please generate exactly 5 questions. Questions can be of type 'multiple_choice', 'multiple_select', 'true_false', or 'short_answer'.
+Please generate exactly ${type === 'quick' ? '3' : '5'} questions. Questions can be of type 'multiple_choice', 'multiple_select', 'true_false', or 'short_answer'.
 
 The output MUST be a valid JSON object adhering strictly to the following structure:
 {
@@ -162,7 +149,7 @@ The output MUST be a valid JSON object adhering strictly to the following struct
       "explanation": "string",
       "points": number // Integer 1-5
     }
-    // ... ensure exactly 5 question objects total, mixing types is allowed
+    // ... ensure exactly ${type === 'quick' ? '3' : '5'} question objects total, mixing types is allowed
   ]
 }
 
@@ -174,26 +161,15 @@ Requirements:
 5. For 'true_false', options MUST be ["True", "False"].
 6. For 'short_answer', there MUST be no 'options' field.
 7. Include detailed explanations for each answer.
-8. Make questions challenging but appropriate for the subject and topic.
-${lessonId ? '9. Questions should be based on the provided lesson content.' : '8. Questions should be relevant to the subject and topic.'}`;
+8. Make questions challenging but appropriate for the subject, topic and difficulty level logic.
+9. Questions should be relevant to the subject and topic.`;
 
-        const completion = await openai.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an AI assistant that generates educational practice exercises. You MUST output valid JSON conforming strictly to the user's requested schema. Do not add any extra text or explanations outside the JSON object."
-                },
-                {
-                    role: "user",
-                    content: prompt
-                }
-            ],
-            model: process.env.OPENAI_MODEL as string,
-            temperature: 0.7,
-            response_format: { type: "json_object" },
-        });
-
-        const generatedContent = completion.choices[0].message.content;
+        const generatedContent = await generateAICompletion(
+            "You are an AI assistant that generates educational practice exercises. You MUST output valid JSON conforming strictly to the user's requested schema. Do not add any extra text or explanations outside the JSON object.",
+            prompt,
+            undefined,
+            true
+        );
 
         // Try parsing the JSON content
         let rawExercises;
