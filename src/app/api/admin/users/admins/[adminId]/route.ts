@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(
     req: NextRequest,
@@ -13,6 +13,7 @@ export async function GET(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = createServerSupabase();
         const { data: admin, error } = await supabase
             .from('users')
             .select('id, email, name, image, isActive, lastLogin, createdAt, updatedAt')
@@ -44,12 +45,16 @@ export async function PATCH(
         }
 
         const updates = await req.json();
-        const allowedUpdates = ['name', 'email', 'status'];
+        const allowedUpdates = ['name', 'email', 'status', 'isActive'];
         const updateData: { [key: string]: any } = {};
 
         Object.keys(updates).forEach(key => {
             if (allowedUpdates.includes(key)) {
-                updateData[key] = updates[key];
+                if (key === 'status') {
+                    updateData['isActive'] = updates[key] === 'active';
+                } else {
+                    updateData[key] = updates[key];
+                }
             }
         });
 
@@ -58,6 +63,8 @@ export async function PATCH(
         }
 
         updateData.updatedAt = new Date().toISOString();
+
+        const supabase = createServerSupabase();
 
         // Check if email is already taken by another user
         if (updateData.email) {
@@ -106,21 +113,32 @@ export async function DELETE(
             return new NextResponse('Cannot delete your own admin account', { status: 400 });
         }
 
-        const { error } = await supabase
+        const supabase = createServerSupabase();
+
+        // Delete from Auth users first (requires service role, which createServerSupabase provides)
+        const { error: authError } = await supabase.auth.admin.deleteUser(adminId);
+
+        if (authError) {
+            console.error('Error deleting auth user:', authError);
+            // If user not found in auth (already deleted?), proceed to check public.users
+            // But if other error, throw it.
+            if (!authError.message.includes('User not found')) {
+                throw authError;
+            }
+        }
+
+        // Also ensure deleted from public users if cascade didn't catch it or for safety
+        const { error: publicError } = await supabase
             .from('users')
             .delete()
             .eq('id', adminId)
             .eq('role', 'admin');
-        if (error) throw error;
 
-        const { data: check } = await supabase.from('users').select('id').eq('id', adminId).maybeSingle();
-        if (check) {
-            return new NextResponse('Admin not found', { status: 404 });
-        }
+        if (publicError) throw publicError;
 
-        return new NextResponse(null, { status: 204 });
+        return NextResponse.json(null, { status: 200 });
     } catch (error) {
         console.error('Error deleting admin:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

@@ -50,10 +50,6 @@ export default function LessonsPage() {
     }
   };
 
-  if (!session || loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
-
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -68,30 +64,39 @@ export default function LessonsPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {lessons.map((lesson) => (
-            <Link href={`/teachers/lessons/${lesson._id}`} key={lesson._id}>
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle>{lesson.title}</CardTitle>
-                  <CardDescription>
-                    {lesson.subject} • Grade {lesson.gradeLevel}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {lesson.objectives}
-                  </p>
-                </CardContent>
-                <CardFooter>
-                  <p className="text-sm text-muted-foreground">
-                    Created: {new Date(lesson.createdAt).toLocaleDateString()}
-                  </p>
-                </CardFooter>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
+              <p className="text-muted-foreground">Please wait while we load your timetable</p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {lessons.map((lesson) => (
+              <Link href={`/teachers/lessons/${lesson._id}`} key={lesson._id}>
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow">
+                  <CardHeader>
+                    <CardTitle>{lesson.title}</CardTitle>
+                    <CardDescription>
+                      {lesson.subject} • Grade {lesson.gradeLevel}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {lesson.objectives}
+                    </p>
+                  </CardContent>
+                  <CardFooter>
+                    <p className="text-sm text-muted-foreground">
+                      Created: {new Date(lesson.createdAt).toLocaleDateString()}
+                    </p>
+                  </CardFooter>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {isCreating && (
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">

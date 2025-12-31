@@ -23,7 +23,12 @@ export type Teacher = {
     createdAt: string;
 };
 
-export const columns: ColumnDef<Teacher>[] = [
+interface ColumnsProps {
+    onEdit: (teacher: Teacher) => void;
+    onDelete: (teacher: Teacher) => void;
+}
+
+export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Teacher>[] => [
     {
         accessorKey: "name",
         header: ({ column }) => (
@@ -86,18 +91,13 @@ export const columns: ColumnDef<Teacher>[] = [
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                            <Link href={`/admin/users/teachers/${teacher.id}`}>
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Edit
-                            </Link>
+                        <DropdownMenuItem onClick={() => onEdit(teacher)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             className="text-red-600"
-                            onClick={() => {
-                                // Handle delete
-                                console.log("Delete teacher:", teacher.id);
-                            }}
+                            onClick={() => onDelete(teacher)}
                         >
                             <Trash className="mr-2 h-4 w-4" />
                             Delete

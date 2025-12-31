@@ -137,20 +137,20 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
   const avatarUrl = session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture
   const displayName = session?.user?.user_metadata?.name || session?.user?.email || 'User'
-  
+
   const getInitials = (name: string) => {
     const names = name.split(' ').filter(n => n.length > 0)
     if (names.length === 0) return 'U'
     if (names.length === 1) return names[0].charAt(0).toUpperCase()
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase()
   }
-  
+
   const userInitials = getInitials(displayName)
 
   return (
     <div className="flex h-screen bg-background">
       {/* Desktop Sidebar */}
-      <aside 
+      <aside
         className={`hidden lg:flex border-r bg-card transition-all duration-300 relative ${collapsed ? 'hover:cursor-pointer' : ''} flex-col shadow-none z-20`}
         onClick={handleSidebarClick}
       >
@@ -171,11 +171,11 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
             </Button>
           ) : (
             <div className="flex items-center justify-between">
-               <Button
+              <Button
                 variant="ghost"
                 className="justify-start flex-grow hover:bg-transparent group"
                 onClick={handleNewSession}
-               >
+              >
                 <SquarePen className="w-5 h-5 mr-2 transition-transform text-muted-foreground group-hover:text-primary" />
                 New Session
               </Button>
@@ -193,7 +193,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               </Button>
             </div>
           )}
-          
+
         </div>
 
         <div className={`flex flex-col gap-2 py-4 border-b border-border ${collapsed ? 'items-center' : ''}`}>
@@ -253,8 +253,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               className={`text-red-500 hover:bg-red-500 hover:text-white ${collapsed ? 'w-full' : ''}`}
               onClick={async () => {
                 await supabase?.auth.signOut()
-                const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
-                router.replace(`/login${back}`)
+                router.replace(`/login`)
               }}
               title="Logout"
             >
@@ -267,13 +266,13 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           <div className={`flex items-center gap-3 ${collapsed ? 'flex-col' : 'justify-between'}`}>
             <div className="flex items-center gap-3">
               {avatarUrl ? (
-                <img 
-                  src={avatarUrl} 
-                  alt="avatar" 
-                  referrerPolicy="no-referrer" 
-                  crossOrigin="anonymous" 
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }} 
-                  className="w-8 h-8 rounded-full object-cover" 
+                <img
+                  src={avatarUrl}
+                  alt="avatar"
+                  referrerPolicy="no-referrer"
+                  crossOrigin="anonymous"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
+                  className="w-8 h-8 rounded-full object-cover"
                 />
               ) : null}
               <div className={`${avatarUrl ? 'hidden' : ''} w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm`}>
@@ -283,7 +282,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 <span className="text-sm font-medium truncate max-w-[8rem]">{displayName}</span>
               )}
             </div>
-            
+
           </div>
         </div>
       </aside>
@@ -299,13 +298,13 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           >
             <Menu className="w-5 h-5" />
           </Button>
-          
+
           <div className="flex items-center gap-3 flex-1">
             <Link href="/learn/credits" className="flex items-center gap-2 text-sm">
               <Coins className="w-4 h-4 text-yellow-500" />
               <span className="font-medium">{loadingCredits ? '...' : credits}</span>
             </Link>
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -320,29 +319,27 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div 
-          className={`lg:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ease-in-out ${
-            mobileMenuAnimating ? 'opacity-100' : 'opacity-0'
-          }`}
+        <div
+          className={`lg:hidden fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ease-in-out ${mobileMenuAnimating ? 'opacity-100' : 'opacity-0'
+            }`}
           onClick={closeMobileMenu}
         >
-          <div 
-            className={`fixed left-0 top-0 h-full w-80 bg-card border-r shadow-xl transform transition-transform duration-300 ease-in-out ${
-              mobileMenuAnimating ? 'translate-x-0' : '-translate-x-full'
-            }`}
+          <div
+            className={`fixed left-0 top-0 h-full w-80 bg-card border-r shadow-xl transform transition-transform duration-300 ease-in-out ${mobileMenuAnimating ? 'translate-x-0' : '-translate-x-full'
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-border">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {avatarUrl ? (
-                    <img 
-                      src={avatarUrl} 
-                      alt="avatar" 
-                      referrerPolicy="no-referrer" 
-                      crossOrigin="anonymous" 
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }} 
-                      className="w-8 h-8 rounded-full object-cover" 
+                    <img
+                      src={avatarUrl}
+                      alt="avatar"
+                      referrerPolicy="no-referrer"
+                      crossOrigin="anonymous"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove('hidden') }}
+                      className="w-8 h-8 rounded-full object-cover"
                     />
                   ) : null}
                   <div className={`${avatarUrl ? 'hidden' : ''} w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm`}>
@@ -359,8 +356,8 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 </Button>
               </div>
             </div>
-            
-             <div className="p-4 flex-grow overflow-y-auto">
+
+            <div className="p-4 flex-grow overflow-y-auto">
               {/* New Session Button */}
               <div className="mb-4">
                 <Button
@@ -376,7 +373,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 </Button>
               </div>
 
-              
+
 
               {/* Credits Section */}
               <div className="mb-6">
@@ -415,7 +412,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
               <div className="mb-6">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-2">Sessions</h3>
                 <div className="space-y-1">
-                   {loadingHistory ? (
+                  {loadingHistory ? (
                     [...Array(5)].map((_, i) => (
                       <div key={i} className="h-8 rounded-md bg-muted animate-pulse" />
                     ))
@@ -424,9 +421,9 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                       <div className="text-xs text-muted-foreground px-1 py-1">No sessions</div>
                     ) : (
                       sessionHistory.map(s => (
-                        <Link 
-                          key={s.id} 
-                          href={`/learn/${s.id}`} 
+                        <Link
+                          key={s.id}
+                          href={`/learn/${s.id}`}
                           title={s.topic || 'Chat'}
                           className={`block text-sm truncate rounded-md py-2 px-3 transition-colors ${pathname === `/learn/${s.id}` ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                           onClick={closeMobileMenu}

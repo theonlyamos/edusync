@@ -37,16 +37,16 @@ export function SupabaseAuthProvider({ children }: Props) {
           return;
         }
         window.location.replace('/learn');
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [supabase]);
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (mounted) setSession(data.session);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, sess) => {
       setSession(sess);
     });
     return () => {

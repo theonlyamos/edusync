@@ -48,10 +48,6 @@ export default function StudentLessonsPage() {
     }
   };
 
-  if (!session || loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
-
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -60,35 +56,43 @@ export default function StudentLessonsPage() {
           <p className="text-muted-foreground">Access your assigned lessons and learning materials</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {lessons.map((lesson) => (
-            <Link href={`/students/lessons/${lesson._id}`} key={lesson._id}>
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow h-full">
-                <CardHeader>
-                  <CardTitle>{lesson.title}</CardTitle>
-                  <CardDescription>
-                    {lesson.subject} • Grade {lesson.gradeLevel}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {lesson.objectives}
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-between items-center">
-                  <p className="text-sm text-muted-foreground">
-                    Added: {new Date(lesson.createdAt).toLocaleDateString()}
-                  </p>
-                  <Button variant="ghost" size="sm">
-                    <BookOpen className="h-4 w-4 mr-2" />
-                    View Lesson
-                  </Button>
-                </CardFooter>
-              </Card>
-            </Link>
-          ))}
-        </div>
-
+        {loading ? (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
+              <p className="text-muted-foreground">Please wait while we load your timetable</p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {lessons.map((lesson) => (
+              <Link href={`/students/lessons/${lesson._id}`} key={lesson._id}>
+                <Card className="cursor-pointer hover:shadow-lg transition-shadow h-full">
+                  <CardHeader>
+                    <CardTitle>{lesson.title}</CardTitle>
+                    <CardDescription>
+                      {lesson.subject} • Grade {lesson.gradeLevel}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {lesson.objectives}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Added: {new Date(lesson.createdAt).toLocaleDateString()}
+                    </p>
+                    <Button variant="ghost" size="sm">
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      View Lesson
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
         {lessons.length === 0 && !loading && (
           <div className="text-center py-12">
             <h3 className="text-lg font-semibold mb-2">No Lessons Found</h3>
@@ -97,6 +101,8 @@ export default function StudentLessonsPage() {
             </p>
           </div>
         )}
+
+
       </div>
     </DashboardLayout>
   );

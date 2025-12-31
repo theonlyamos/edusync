@@ -10,46 +10,56 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import {
   ArrowLeft,
   Plus,
   Pencil,
   Trash2,
+  Loader2,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Admin {
-  _id: string;
+  id: string;
   name: string;
   email: string;
-  status: string;
-  createdAt: string;
+  isactive: boolean;
+  created_at: string;
 }
 
 export default function AdminsPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
   const { toast } = useToast();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
-      router.push('/');
-    }
-  }, [status, session, router]);
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '' });
 
-  useEffect(() => {
-    fetchAdmins();
-  }, []);
+  // Delete State
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const fetchAdmins = async () => {
+    setLoading(true);
     try {
       const response = await fetch('/api/admin/users/admins');
       if (!response.ok) throw new Error('Failed to fetch admins');
@@ -67,11 +77,45 @@ export default function AdminsPage() {
     }
   };
 
-  const handleDelete = async (adminId: string) => {
-    if (!confirm('Are you sure you want to delete this admin?')) return;
+  useEffect(() => {
+    fetchAdmins();
+  }, []);
 
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/admin/users/admins/${adminId}`, {
+      const response = await fetch('/api/admin/users/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAdmin)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create admin');
+      }
+
+      toast({ title: 'Success', description: 'Admin created successfully' });
+      setIsModalOpen(false);
+      setNewAdmin({ name: '', email: '', password: '' });
+      fetchAdmins();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/admin/users/admins/${deleteId}`, {
         method: 'DELETE',
       });
 
@@ -90,21 +134,11 @@ export default function AdminsPage() {
         description: 'Failed to delete admin',
         variant: 'destructive',
       });
+    } finally {
+      setDeleteId(null);
+      setIsDeleting(false);
     }
   };
-
-  if (status === 'loading' || loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
-            <p className="text-muted-foreground">Please wait while we load the admin users</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout>
@@ -122,10 +156,63 @@ export default function AdminsPage() {
             <h1 className="text-3xl font-bold">Admin Users</h1>
             <p className="text-muted-foreground">Manage admin users and their permissions</p>
           </div>
-          <Button onClick={() => router.push('/admin/users/admins/create')}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Admin
-          </Button>
+
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Admin
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Admin</DialogTitle>
+                <DialogDescription>
+                  Create a new administrator account with full access.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleCreateAdmin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    value={newAdmin.name}
+                    onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
+                    required
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={newAdmin.email}
+                    onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                    required
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={newAdmin.password}
+                    onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
+                    required
+                    placeholder="••••••••"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Create Admin
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="border rounded-lg">
@@ -140,27 +227,37 @@ export default function AdminsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {admins.map((admin) => (
-                <TableRow key={admin._id}>
+              {loading ? (
+                // Skeleton loading state
+                Array.from({ length: 5 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : admins.map((admin) => (
+                <TableRow key={admin.id}>
                   <TableCell className="font-medium">{admin.name}</TableCell>
                   <TableCell>{admin.email}</TableCell>
                   <TableCell>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      admin.status === 'active' 
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {admin.status}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${admin.isactive
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                      {admin.isactive ? 'Active' : 'Inactive'}
                     </span>
                   </TableCell>
                   <TableCell>
-                    {new Date(admin.createdAt).toLocaleDateString()}
+                    {new Date(admin.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => router.push(`/admin/users/admins/${admin._id}`)}
+                      onClick={() => router.push(`/admin/users/admins/${admin.id}`)}
                     >
                       <Pencil className="h-4 w-4 mr-2" />
                       Edit
@@ -168,7 +265,7 @@ export default function AdminsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(admin._id)}
+                      onClick={() => setDeleteId(admin.id)}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
@@ -177,7 +274,7 @@ export default function AdminsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {admins.length === 0 && (
+              {!loading && admins.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">
                     <p className="text-muted-foreground">No admin users found</p>
@@ -188,6 +285,15 @@ export default function AdminsPage() {
           </Table>
         </div>
       </div>
+
+      <DeleteConfirmationDialog
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete Administrator"
+        description="This action cannot be undone. This will permanently delete the administrator account."
+        isDeleting={isDeleting}
+      />
     </DashboardLayout>
   );
-} 
+}

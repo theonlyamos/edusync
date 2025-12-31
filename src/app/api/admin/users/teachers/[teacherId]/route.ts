@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(
     req: NextRequest,
@@ -14,6 +14,8 @@ export async function GET(
                 { status: 401 }
             );
         }
+
+        const supabase = createServerSupabase();
 
         const { teacherId } = await params;
         const { data: userRow } = await supabase
@@ -78,6 +80,8 @@ export async function PUT(
             );
         }
 
+        const supabase = createServerSupabase();
+
         const body = await req.json();
 
         // Update user basic info
@@ -86,7 +90,7 @@ export async function PUT(
         const { teacherId } = await params;
         const { error: userErr } = await supabase
             .from('users')
-            .update({ name, email, isActive: status === 'active', updatedAt: new Date().toISOString() })
+            .update({ name, email, isactive: status === 'active', updated_at: new Date().toISOString() })
             .eq('id', teacherId)
             .eq('role', 'teacher');
         if (userErr) throw userErr;
@@ -116,9 +120,9 @@ export async function PUT(
             email: userRow.email,
             name: userRow.name,
             role: userRow.role,
-            status: userRow.isActive ? 'active' : 'inactive',
-            createdAt: userRow.createdAt,
-            updatedAt: userRow.updatedAt,
+            status: userRow.isactive ? 'active' : 'inactive',
+            createdAt: userRow.created_at,
+            updatedAt: userRow.updated_at,
             userId: teacherRow.user_id,
             subjects: teacherRow.subjects || [],
             grades: teacherRow.grades || [],
@@ -148,23 +152,36 @@ export async function DELETE(
             );
         }
 
+        const supabase = createServerSupabase();
+
         const { teacherId } = await params;
-        const { data: userRow, error } = await supabase
-            .from('users')
-            .update({ isActive: false, updatedAt: new Date().toISOString() })
-            .eq('id', teacherId)
-            .eq('role', 'teacher')
-            .select('id')
-            .maybeSingle();
-        if (error) throw error;
-        if (!userRow) {
-            return NextResponse.json(
-                { error: "Teacher not found" },
-                { status: 404 }
-            );
+        // Delete from Auth users first (requires service role, which createServerSupabase provides)
+        const { error: authError } = await supabase.auth.admin.deleteUser(teacherId);
+
+        if (authError) {
+            console.error('Error deleting auth user:', authError);
+            // If user not found in auth (already deleted?), proceed to check public.users
+            const { error: publicError } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', teacherId)
+                .eq('role', 'teacher');
+
+            if (publicError) throw publicError;
+
+            return NextResponse.json(null, { status: 200 });
         }
 
-        return NextResponse.json({ message: "Teacher deactivated successfully", id: userRow.id });
+        // Delete from users table (should cascade to teachers)
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', teacherId)
+            .eq('role', 'teacher');
+
+        if (error) throw error;
+
+        return NextResponse.json({ message: "Teacher deactivated successfully", id: teacherId });
     } catch (error) {
         console.error('Error deactivating teacher:', error);
         return NextResponse.json(

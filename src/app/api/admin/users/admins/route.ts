@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import bcrypt from 'bcryptjs';
-
+import { createServerSupabase } from '@/lib/supabase.server'
 export async function GET() {
+    const supabase = createServerSupabase();
     try {
         const { data, error } = await supabase
             .from('users')
-            .select('id, email, name, image, isActive, lastLogin, createdAt, updatedAt')
+            .select('id, email, name, image, isactive, lastlogin, created_at, updated_at')
             .eq('role', 'admin')
-            .order('createdAt', { ascending: false });
+            .order('created_at', { ascending: false });
         if (error) throw error;
         return NextResponse.json(data ?? []);
     } catch (error) {
@@ -21,6 +20,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+    const supabase = createServerSupabase();
     try {
         const body = await request.json();
         const { email, password, name } = body;
@@ -33,15 +33,38 @@ export async function POST(request: Request) {
         if (checkErr) throw checkErr;
         if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+                name: name,
+                role: 'admin' // Default role
+            }
+        });
 
         const { data, error } = await supabase
             .from('users')
-            .insert({ email, password: hashedPassword, name, role: 'admin' })
-            .select('id, email, name, role, image, isActive, lastLogin, createdAt, updatedAt')
+            .insert({ id: authUser.user?.id, email, name, role: 'admin' })
+            .select('id, email, name, role, image, isactive, lastlogin, created_at, updated_at')
             .single();
         if (error) throw error;
-        return NextResponse.json(data);
+
+        const { data: adminRow, error: adminErr } = await supabase
+            .from('admins')
+            .insert({ user_id: authUser.user?.id, issuperadmin: true, permissions: [] })
+            .select('*')
+            .maybeSingle();
+        if (adminErr) throw adminErr;
+        if (!adminRow) {
+            return NextResponse.json(
+                { error: "Admin details not found" },
+                { status: 404 }
+            );
+        }
+
+        const { password: _pw, ...userWithoutPassword } = data as any;
+        return NextResponse.json({ ...userWithoutPassword, ...adminRow });
     } catch (error) {
         console.error('Error creating admin:', error);
         return NextResponse.json(

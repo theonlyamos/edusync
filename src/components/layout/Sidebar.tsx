@@ -197,7 +197,7 @@ export function Sidebar({ role }: SidebarProps) {
   let links: SidebarLink[];
 
   // Theme toggle state (default to dark)
-  const [theme, setTheme] = useState<'light'|'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   useEffect(() => {
     // On mount, read saved theme or default to dark
     const saved = typeof window !== 'undefined' && localStorage.getItem('theme');
@@ -317,11 +317,10 @@ export function Sidebar({ role }: SidebarProps) {
         <Button
           variant="ghost"
           size={collapsed ? 'icon' : 'default'}
-          className={cn("w-full text-red-500 hover:bg-red-500 hover:text-white", { "justify-center": collapsed, "justify-start": !collapsed })}
+          className={cn("w-full text-red-500 hover:text-red-500", { "justify-center": collapsed, "justify-start": !collapsed })}
           onClick={async () => {
             await supabase?.auth.signOut();
-            const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : '';
-            router.replace(`/login${back}`);
+            router.replace(`/login`);
           }}
         >
           {collapsed

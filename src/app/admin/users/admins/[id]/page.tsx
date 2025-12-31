@@ -26,10 +26,10 @@ import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { use } from 'react';
 
 interface Admin {
-  _id: string;
+  id: string;
   name: string;
   email: string;
-  status: 'active' | 'inactive';
+  isActive: boolean;
   createdAt: string;
   lastLogin?: string;
   lastActivity?: string;
@@ -60,7 +60,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
       router.replace('/login');
       return;
     }
-    
+
     if (status === 'authenticated') {
       if (session?.user?.role !== 'admin') {
         switch (session?.user?.role) {
@@ -85,7 +85,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
           setFormData({
             name: data.name,
             email: data.email,
-            status: data.status,
+            status: data.isActive ? 'active' : 'inactive',
             permissions: data.permissions || [],
           });
         } catch (error) {
@@ -186,8 +186,8 @@ export default function AdminDetailsPage({ params }: PageProps) {
       <DashboardLayout>
         <div className="p-6">
           <div className="flex items-center gap-4 mb-6">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => router.back()}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -209,8 +209,8 @@ export default function AdminDetailsPage({ params }: PageProps) {
     <DashboardLayout>
       <div className="p-6">
         <div className="flex items-center gap-4 mb-6">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => router.back()}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -235,12 +235,11 @@ export default function AdminDetailsPage({ params }: PageProps) {
             <CardContent className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm font-medium">Account Status</span>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  admin.status === 'active' 
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {admin.status}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${admin.isActive
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-red-100 text-red-800'
+                  }`}>
+                  {admin.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>
               <div className="flex justify-between">

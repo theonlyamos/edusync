@@ -29,7 +29,7 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
     );
   }
 
-  const userRole = (session.user as any)?.role;
+  const userRole = (session.user.user_metadata as any)?.role;
   const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
     ? userRole
     : 'student';

@@ -32,16 +32,12 @@ export default function TeacherDashboard() {
     );
   }
 
-  if (session?.user?.role !== 'teacher') {
-    return null;
-  }
-
   return (
     <DashboardLayout>
       <div>
         <h2 className="text-3xl font-bold text-foreground mb-2">Teacher Dashboard</h2>
         <p className="text-muted-foreground mb-6">Manage your lessons and resources</p>
-        
+
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {/* Lesson Planning Card */}
           <Card className="dashboard-card border-t-4 border-t-primary">
@@ -55,7 +51,7 @@ export default function TeacherDashboard() {
               </CardDescription>
             </CardHeader>
             <CardFooter>
-              <Button 
+              <Button
                 className="w-full"
                 onClick={() => router.push('/teachers/lessons')}
               >
