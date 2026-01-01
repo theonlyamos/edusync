@@ -99,6 +99,10 @@ Choose the correct technology based on the task requirements:
   * **Checkbox:** Standard checkbox input.
   * **Select, SelectContent, SelectItem, SelectTrigger, SelectValue:** Simplified select component (uses native HTML select - limited styling).
   * **Slider:** Range input slider.
+  * **Quiz:** Built-in quiz component.
+    * Props:
+      * \`data\`: Object with \`questions\` array. Each question: \`{ id: string, type: 'multiple' | 'short', question: string, options ?: string[], answer: string } \`.
+      * \`onSubmit\`: (Optional) Callback function \`(result) => void \`. Result is \`{ score: number } \`.
   * **NOTE:** These are simplified versions running in a sandboxed iframe. They use Tailwind CSS classes directly (not CSS variables). Complex interactions like portals, animations, or advanced Radix UI features are not available.
   * **Component Limitations:**
     * Select components use native HTML select (limited styling, no custom dropdown)

@@ -314,12 +314,71 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
       });
       Slider.displayName = 'Slider';
       
+      const Quiz = React.forwardRef(({ className = '', data, onSubmit, ...props }, ref) => {
+        const [answers, setAnswers] = React.useState({});
+
+        const handleSubmit = () => {
+          if (!data || !data.questions) return;
+          const score = data.questions.reduce((acc, q) => {
+            const userAnswer = answers[q.id];
+            const correct = userAnswer?.toLowerCase().trim() === q.answer.toLowerCase().trim();
+            return acc + (correct ? 1 : 0);
+          }, 0) / data.questions.length;
+
+          if (onSubmit) {
+            onSubmit({ score });
+          } else {
+            alert(\`Quiz finished! Score: \${Math.round(score * 100)}%\`);
+          }
+        };
+
+        return React.createElement('div', {
+          ref,
+          className: cn('space-y-4', className),
+          ...props
+        },
+          data?.questions?.map(q =>
+            React.createElement('div', { key: q.id, className: 'p-4 border rounded-lg bg-white shadow-sm' },
+              React.createElement('p', { className: 'font-medium mb-3 text-gray-900' }, q.question),
+              q.type === 'multiple' ?
+                React.createElement('div', { className: 'space-y-2' },
+                  q.options?.map(option =>
+                    React.createElement('label', { key: option, className: 'flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded' },
+                      React.createElement('input', {
+                        type: 'radio',
+                        name: q.id,
+                        value: option,
+                        checked: answers[q.id] === option,
+                        onChange: e => setAnswers({ ...answers, [q.id]: e.target.value }),
+                        className: 'h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500'
+                      }),
+                      React.createElement('span', { className: 'text-gray-700' }, option)
+                    )
+                  )
+                ) :
+                React.createElement('input', {
+                  type: 'text',
+                  className: 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none',
+                  placeholder: 'Type your answer...',
+                  value: answers[q.id] || '',
+                  onChange: e => setAnswers({ ...answers, [q.id]: e.target.value })
+                })
+            )
+          ),
+          React.createElement('button', {
+            onClick: handleSubmit,
+            className: 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors shadow-sm'
+          }, 'Submit Quiz')
+        );
+      });
+      Quiz.displayName = 'Quiz';
+      
       // Store components on window for later use
       window.UIComponents = {
         Button, Input, Card, CardContent, CardHeader, CardTitle,
         Badge, Textarea, Label, RadioGroup, RadioGroupItem,
         Checkbox, Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-        Slider
+        Slider, Quiz
       };
       
       // Wait for Recharts and React-Leaflet to load
@@ -368,7 +427,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
             'Button', 'Input', 'Card', 'CardContent', 'CardHeader', 'CardTitle',
             'Badge', 'Textarea', 'Label', 'RadioGroup', 'RadioGroupItem',
             'Checkbox', 'Select', 'SelectContent', 'SelectItem', 'SelectTrigger', 'SelectValue',
-            'Slider',
+            'Slider', 'Quiz',
             'LineChart', 'BarChart', 'PieChart', 'AreaChart', 'ScatterChart', 'RadarChart',
             'XAxis', 'YAxis', 'CartesianGrid', 'Tooltip', 'Legend', 'ResponsiveContainer',
             'Line', 'Bar', 'Area', 'Pie', 'Cell', 'Scatter', 'RadialBar', 'RadialBarChart',
@@ -392,7 +451,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
             UIComponents.Button, UIComponents.Input, UIComponents.Card, UIComponents.CardContent, UIComponents.CardHeader, UIComponents.CardTitle,
             UIComponents.Badge, UIComponents.Textarea, UIComponents.Label, UIComponents.RadioGroup, UIComponents.RadioGroupItem,
             UIComponents.Checkbox, UIComponents.Select, UIComponents.SelectContent, UIComponents.SelectItem, UIComponents.SelectTrigger, UIComponents.SelectValue,
-            UIComponents.Slider,
+            UIComponents.Slider, UIComponents.Quiz,
             LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart,
             XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
             Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart,
