@@ -647,16 +647,16 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                       <ToggleGroupItem value="code">Code</ToggleGroupItem>
                     </ToggleGroup>
                   )}
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    title="Regenerate visualization"
-                    onClick={() => handleRegenerateVisualization()}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
                   {visualizations.length > 0 && (
                     <div className="flex items-center gap-2 bg-background/95">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Regenerate visualization"
+                        onClick={() => handleRegenerateVisualization()}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>

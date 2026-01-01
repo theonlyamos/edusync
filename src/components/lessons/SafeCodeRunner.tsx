@@ -15,7 +15,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
 
   useEffect(() => {
     if (!iframeRef.current || !code) return;
-    
+
     setIsLoading(true);
     setError(null);
 
@@ -132,7 +132,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
   }, [code, library, onError]);
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded">
           <div className="text-sm text-gray-600">Loading visualization...</div>
