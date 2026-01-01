@@ -1,86 +1,80 @@
 'use client';
 
-import { useState, useEffect, useContext } from 'react';
+import { useEffect, useState } from "react";
 import { useRouter } from 'next/navigation';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { useToast } from '@/components/ui/use-toast';
-import {
-  ArrowLeft,
-  Search,
-  UserPlus,
-  MoreVertical,
-  Loader2,
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import { type GradeLevel } from '@/lib/constants';
-
-interface Student {
-  _id: string;
-  name: string;
-  email: string;
-  isActive: boolean;
-  grade: GradeLevel;
-  createdAt: string;
-}
+import { DataTable } from "@/components/ui/data-table";
+import { getColumns, Student } from "./columns";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { UserPlus } from "lucide-react";
+import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function StudentsPage() {
-  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
   const { toast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const getStudents = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/users/students');
+      if (!response.ok) throw new Error('Failed to fetch students');
+      const data = await response.json();
+
+      // Map Supabase response to our Student type
+      const mappedStudents: Student[] = (data ?? []).map((row: any) => ({
+        id: row.id,
+        name: row.name ?? '',
+        email: row.email ?? '',
+        grade: row.grade ?? '',
+        status: (row.isactive ?? row.isActive) ? 'Active' : 'Inactive',
+        createdAt: row.createdat ?? row.createdAt ?? new Date().toISOString(),
+      }));
+
+      setStudents(mappedStudents);
+      setFilteredStudents(mappedStudents);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load students',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const response = await fetch('/api/admin/users/students');
-        if (!response.ok) throw new Error('Failed to fetch students');
-        const data = await response.json();
-        setStudents(data);
-      } catch (error) {
-        console.error('Error fetching students:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load students',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    getStudents();
+  }, []);
 
-    if (session?.user) {
-      fetchStudents();
-    }
-  }, [session?.user, toast]);
+  useEffect(() => {
+    const lowerQuery = searchQuery.toLowerCase();
+    const filtered = students.filter(student =>
+      student.name.toLowerCase().includes(lowerQuery) ||
+      student.email.toLowerCase().includes(lowerQuery) ||
+      student.grade.toLowerCase().includes(lowerQuery)
+    );
+    setFilteredStudents(filtered);
+  }, [searchQuery, students]);
 
-  const handleStatusChange = async (studentId: string, newStatus: 'active' | 'inactive') => {
+  const handleView = (student: Student) => {
+    router.push(`/admin/users/students/${student.id}`);
+  };
+
+  const handleStatusChange = async (student: Student) => {
+    const newStatus = student.status === 'Active' ? 'inactive' : 'active';
     try {
-      const response = await fetch(`/api/admin/users/students/${studentId}`, {
+      const response = await fetch(`/api/admin/users/students/${student.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -90,16 +84,12 @@ export default function StudentsPage() {
 
       if (!response.ok) throw new Error('Failed to update student status');
 
-      setStudents(students.map(student => 
-        student._id === studentId 
-          ? { ...student, status: newStatus }
-          : student
-      ));
-
       toast({
         title: 'Success',
         description: 'Student status updated successfully',
       });
+
+      getStudents(); // Refresh the list
     } catch (error) {
       console.error('Error updating student status:', error);
       toast({
@@ -110,167 +100,97 @@ export default function StudentsPage() {
     }
   };
 
-  const handleDeleteStudent = async (studentId: string) => {
-    if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteClick = (student: Student) => {
+    setStudentToDelete(student);
+  };
+
+  const confirmDelete = async () => {
+    if (!studentToDelete) return;
+    setIsDeleting(true);
 
     try {
-      const response = await fetch(`/api/admin/users/students/${studentId}`, {
+      const response = await fetch(`/api/admin/users/students/${studentToDelete.id}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete student');
-
-      setStudents(students.filter(student => student._id !== studentId));
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete student');
+      }
 
       toast({
-        title: 'Success',
-        description: 'Student deleted successfully',
+        title: "Success",
+        description: "Student deleted successfully",
       });
-    } catch (error) {
-      console.error('Error deleting student:', error);
+
+      getStudents(); // Refresh the list
+    } catch (error: any) {
       toast({
-        title: 'Error',
-        description: 'Failed to delete student',
-        variant: 'destructive',
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
+    } finally {
+      setStudentToDelete(null);
+      setIsDeleting(false);
     }
   };
 
-  const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.grade.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (isLoading || !session) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (session?.user?.role !== 'admin') {
-    router.push('/');
-    return null;
-  }
+  const columns = getColumns({
+    onView: handleView,
+    onStatusChange: handleStatusChange,
+    onDelete: handleDeleteClick
+  });
 
   return (
     <DashboardLayout>
-      <div className="p-6">
-        <div className="flex flex-wrap justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              onClick={() => router.back()}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold">Student Management</h1>
-              <p className="text-muted-foreground">
-                Manage student accounts and enrollments
-              </p>
-            </div>
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Student Management</h1>
+            <p className="text-muted-foreground">
+              Manage and monitor all students in the system
+            </p>
           </div>
-          <Button className='whitespace-nowrap flex ' onClick={() => router.push('/admin/users/students/create')}>
-            <UserPlus className="h-4 w-4 mr-2" />
+          <Button onClick={() => router.push('/admin/users/students/create')} className="whitespace-nowrap">
+            <UserPlus className="mr-2 h-4 w-4" />
             Add Student
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Students</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search students..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-            </div>
+        <div className="flex items-center justify-end py-4">
+          <Input
+            placeholder="Search students..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="max-w-sm"
+          />
+        </div>
 
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Level</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStudents.map((student) => (
-                    <TableRow key={student._id}>
-                      <TableCell>{student.name}</TableCell>
-                      <TableCell>{student.email}</TableCell>
-                      <TableCell>
-                        <EducationLevelBadge level={student.grade} />
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          student.isActive
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {student.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(student.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/admin/users/students/${student._id}`)}
-                            >
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(
-                                student._id,
-                                student.isActive ? 'inactive' : 'active'
-                              )}
-                            >
-                              {student.isActive ? 'Deactivate' : 'Activate'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => handleDeleteStudent(student._id)}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        {loading ? (
+          <div className="space-y-4">
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-12 w-full" />
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <DataTable columns={columns} data={filteredStudents} />
+        )}
+
+        <DeleteConfirmationDialog
+          open={!!studentToDelete}
+          onOpenChange={(open) => !open && setStudentToDelete(null)}
+          onConfirm={confirmDelete}
+          title="Delete Student"
+          description="This action cannot be undone. This will permanently delete the student account and remove their data from our servers."
+          isDeleting={isDeleting}
+        />
       </div>
     </DashboardLayout>
   );
-} 
+}

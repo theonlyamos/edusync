@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getServerSession } from "@/lib/auth";
-import bcrypt from "bcryptjs";
 import { createStudentSchema } from "@/lib/validation/admin";
+import { createServerSupabase } from '@/lib/supabase.server'
 
 export async function GET() {
     try {
@@ -26,7 +26,7 @@ export async function GET() {
         const { data, error } = await supabase
             .from('students_view')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('createdat', { ascending: false });
 
         if (error) throw error;
         return NextResponse.json(data ?? []);
@@ -55,6 +55,8 @@ export async function POST(request: Request) {
             );
         }
 
+        const supabase = createServerSupabase();
+
         const body = await request.json();
 
         // Validate input
@@ -68,6 +70,16 @@ export async function POST(request: Request) {
 
         const { email, password, name, level: grade } = validation.data;
 
+        const { data: authUser, error } = await supabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+                name: name,
+                role: 'student' // Default role
+            }
+        });
+
         const { data: existing, error: checkErr } = await supabase
             .from('users')
             .select('id')
@@ -76,12 +88,9 @@ export async function POST(request: Request) {
         if (checkErr) throw checkErr;
         if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
 
-        // Hash password with stronger settings
-        const hashedPassword = await bcrypt.hash(password, 12);
-
         const { data: userRow, error: userErr } = await supabase
             .from('users')
-            .insert({ email, password: hashedPassword, name, role: 'student' })
+            .insert({ id: authUser.user?.id, email, name, role: 'student' })
             .select('*')
             .single();
         if (userErr) throw userErr;

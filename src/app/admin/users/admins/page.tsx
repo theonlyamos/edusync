@@ -1,15 +1,13 @@
 'use client';
 
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { useEffect, useState } from "react";
+import { useRouter } from 'next/navigation';
+import { DataTable } from "@/components/ui/data-table";
+import { getColumns, Admin } from "./columns";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -20,43 +18,26 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import {
-  ArrowLeft,
-  Plus,
-  Pencil,
-  Trash2,
-  Loader2,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-
-interface Admin {
-  id: string;
-  name: string;
-  email: string;
-  isactive: boolean;
-  created_at: string;
-}
+import { Plus, Loader2 } from "lucide-react";
 
 export default function AdminsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredAdmins, setFilteredAdmins] = useState<Admin[]>([]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '' });
 
   // Delete State
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [adminToDelete, setAdminToDelete] = useState<Admin | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchAdmins = async () => {
     setLoading(true);
@@ -64,7 +45,18 @@ export default function AdminsPage() {
       const response = await fetch('/api/admin/users/admins');
       if (!response.ok) throw new Error('Failed to fetch admins');
       const data = await response.json();
-      setAdmins(data);
+
+      // Map Supabase response to our Admin type
+      const mappedAdmins: Admin[] = (data ?? []).map((row: any) => ({
+        id: row.id,
+        name: row.name ?? '',
+        email: row.email ?? '',
+        status: (row.isactive ?? row.isActive) ? 'Active' : 'Inactive',
+        createdAt: row.created_at ?? row.createdAt ?? new Date().toISOString(),
+      }));
+
+      setAdmins(mappedAdmins);
+      setFilteredAdmins(mappedAdmins);
     } catch (error) {
       console.error('Error:', error);
       toast({
@@ -80,6 +72,23 @@ export default function AdminsPage() {
   useEffect(() => {
     fetchAdmins();
   }, []);
+
+  useEffect(() => {
+    const lowerQuery = searchQuery.toLowerCase();
+    const filtered = admins.filter(admin =>
+      admin.name.toLowerCase().includes(lowerQuery) ||
+      admin.email.toLowerCase().includes(lowerQuery)
+    );
+    setFilteredAdmins(filtered);
+  }, [searchQuery, admins]);
+
+  const handleView = (admin: Admin) => {
+    router.push(`/admin/users/admins/${admin.id}`);
+  };
+
+  const handleDeleteClick = (admin: Admin) => {
+    setAdminToDelete(admin);
+  };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,56 +120,58 @@ export default function AdminsPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
+  const confirmDelete = async () => {
+    if (!adminToDelete) return;
+    setIsDeleting(true);
+
     try {
-      setIsDeleting(true);
-      const response = await fetch(`/api/admin/users/admins/${deleteId}`, {
+      const response = await fetch(`/api/admin/users/admins/${adminToDelete.id}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete admin');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete admin');
+      }
 
       toast({
-        title: 'Success',
-        description: 'Admin deleted successfully',
+        title: "Success",
+        description: "Admin deleted successfully",
       });
 
       fetchAdmins();
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (error: any) {
       toast({
-        title: 'Error',
-        description: 'Failed to delete admin',
-        variant: 'destructive',
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
     } finally {
-      setDeleteId(null);
+      setAdminToDelete(null);
       setIsDeleting(false);
     }
   };
 
+  const columns = getColumns({
+    onView: handleView,
+    onDelete: handleDeleteClick
+  });
+
   return (
     <DashboardLayout>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
+      <div className="container mx-auto py-10">
+        <div className="flex justify-between items-center mb-8">
           <div>
-            <Button
-              variant="ghost"
-              className="mb-4"
-              onClick={() => router.push('/admin/dashboard')}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
-            </Button>
-            <h1 className="text-3xl font-bold">Admin Users</h1>
-            <p className="text-muted-foreground">Manage admin users and their permissions</p>
+            <h1 className="text-2xl font-bold tracking-tight">Admin Users</h1>
+            <p className="text-muted-foreground">
+              Manage admin users and their permissions
+            </p>
           </div>
 
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
+              <Button className="whitespace-nowrap">
+                <Plus className="mr-2 h-4 w-4" />
                 Add Admin
               </Button>
             </DialogTrigger>
@@ -215,85 +226,39 @@ export default function AdminsPage() {
           </Dialog>
         </div>
 
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                // Skeleton loading state
-                Array.from({ length: 5 }).map((_, index) => (
-                  <TableRow key={index}>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
-                  </TableRow>
-                ))
-              ) : admins.map((admin) => (
-                <TableRow key={admin.id}>
-                  <TableCell className="font-medium">{admin.name}</TableCell>
-                  <TableCell>{admin.email}</TableCell>
-                  <TableCell>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${admin.isactive
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                      {admin.isactive ? 'Active' : 'Inactive'}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(admin.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push(`/admin/users/admins/${admin.id}`)}
-                    >
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteId(admin.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loading && admins.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
-                    <p className="text-muted-foreground">No admin users found</p>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <div className="flex items-center justify-end py-4">
+          <Input
+            placeholder="Search admins..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="max-w-sm"
+          />
         </div>
-      </div>
 
-      <DeleteConfirmationDialog
-        open={!!deleteId}
-        onOpenChange={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-        title="Delete Administrator"
-        description="This action cannot be undone. This will permanently delete the administrator account."
-        isDeleting={isDeleting}
-      />
+        {loading ? (
+          <div className="space-y-4">
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-12 w-full" />
+            </div>
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <DataTable columns={columns} data={filteredAdmins} />
+        )}
+
+        <DeleteConfirmationDialog
+          open={!!adminToDelete}
+          onOpenChange={(open) => !open && setAdminToDelete(null)}
+          onConfirm={confirmDelete}
+          title="Delete Administrator"
+          description="This action cannot be undone. This will permanently delete the administrator account."
+          isDeleting={isDeleting}
+        />
+      </div>
     </DashboardLayout>
   );
 }
