@@ -26,7 +26,8 @@ import {
   Sun,
   Moon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Building2
 } from "lucide-react";
 
 interface SidebarLink {
@@ -56,6 +57,11 @@ const adminLinks: SidebarLink[] = [
     label: 'Admins',
     icon: <UsersRound className="h-5 w-5" />,
     href: '/admin/users/admins'
+  },
+  {
+    label: 'Organizations',
+    icon: <Building2 className="h-5 w-5" />,
+    href: '/admin/organizations'
   },
   {
     label: 'Grades',
