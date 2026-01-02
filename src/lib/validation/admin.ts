@@ -14,6 +14,8 @@ export const createStudentSchema = z.object({
     password: passwordSchema,
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
     level: z.string().min(1, 'Grade level is required'),
+    guardianName: z.string().max(100).optional().nullable(),
+    guardianContact: z.string().max(100).optional().nullable(),
 });
 
 // Teacher creation schema

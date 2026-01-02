@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 import { getServerSession } from "@/lib/auth";
 import { createStudentSchema } from "@/lib/validation/admin";
 import { createServerSupabase } from '@/lib/supabase.server'
 
 export async function GET() {
     try {
-        // Check authentication and admin role
         const session = await getServerSession();
         if (!session?.user) {
             return NextResponse.json(
@@ -15,13 +13,14 @@ export async function GET() {
             );
         }
 
-        // Check if user is admin
         if (session.user.role !== 'admin') {
             return NextResponse.json(
                 { error: 'Admin access required' },
                 { status: 403 }
             );
         }
+
+        const supabase = createServerSupabase();
 
         const { data, error } = await supabase
             .from('students_view')
@@ -38,7 +37,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        // Check authentication and admin role
         const session = await getServerSession();
         if (!session?.user) {
             return NextResponse.json(
@@ -68,7 +66,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const { email, password, name, level: grade } = validation.data;
+        const { email, password, name, level: grade, guardianName, guardianContact } = validation.data;
 
         const { data: authUser, error } = await supabase.auth.admin.createUser({
             email,
@@ -97,7 +95,13 @@ export async function POST(request: Request) {
 
         const { error: studentErr } = await supabase
             .from('students')
-            .insert({ user_id: userRow.id, grade, enrollment_date: new Date().toISOString() });
+            .insert({
+                user_id: userRow.id,
+                grade,
+                enrollment_date: new Date().toISOString(),
+                guardian_name: guardianName || null,
+                guardian_contact: guardianContact || null,
+            });
         if (studentErr) throw studentErr;
 
         const { password: _pw, ...userWithoutPassword } = userRow as any;

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserPlus } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
+import { StudentModal, type StudentData } from "@/components/users/StudentModal";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,6 +20,12 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<StudentData | null>(null);
+
+  // Delete State
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -71,33 +78,22 @@ export default function StudentsPage() {
     router.push(`/admin/users/students/${student.id}`);
   };
 
-  const handleStatusChange = async (student: Student) => {
-    const newStatus = student.status === 'Active' ? 'inactive' : 'active';
-    try {
-      const response = await fetch(`/api/admin/users/students/${student.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+  const handleEdit = (student: Student) => {
+    setSelectedStudent({
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      grade: student.grade,
+      status: student.status,
+      guardianName: student.guardianName,
+      guardianContact: student.guardianContact,
+    });
+    setIsModalOpen(true);
+  };
 
-      if (!response.ok) throw new Error('Failed to update student status');
-
-      toast({
-        title: 'Success',
-        description: 'Student status updated successfully',
-      });
-
-      getStudents(); // Refresh the list
-    } catch (error) {
-      console.error('Error updating student status:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update student status',
-        variant: 'destructive',
-      });
-    }
+  const handleCreate = () => {
+    setSelectedStudent(null);
+    setIsModalOpen(true);
   };
 
   const handleDeleteClick = (student: Student) => {
@@ -138,7 +134,7 @@ export default function StudentsPage() {
 
   const columns = getColumns({
     onView: handleView,
-    onStatusChange: handleStatusChange,
+    onEdit: handleEdit,
     onDelete: handleDeleteClick
   });
 
@@ -152,7 +148,7 @@ export default function StudentsPage() {
               Manage and monitor all students in the system
             </p>
           </div>
-          <Button onClick={() => router.push('/admin/users/students/create')} className="whitespace-nowrap">
+          <Button onClick={handleCreate} className="whitespace-nowrap">
             <UserPlus className="mr-2 h-4 w-4" />
             Add Student
           </Button>
@@ -181,6 +177,13 @@ export default function StudentsPage() {
         ) : (
           <DataTable columns={columns} data={filteredStudents} />
         )}
+
+        <StudentModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          student={selectedStudent}
+          onSuccess={getStudents}
+        />
 
         <DeleteConfirmationDialog
           open={!!studentToDelete}

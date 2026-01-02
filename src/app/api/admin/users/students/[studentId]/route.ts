@@ -1,29 +1,57 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { supabase } from '@/lib/supabase';
 import { getServerSession } from '@/lib/auth';
-// Removed legacy Mongo models; using Supabase tables/views
-
-// Supabase payloads returned directly
+import { createServerSupabase } from '@/lib/supabase.server'
 
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ studentId: string }> }
 ) {
     try {
-        const { studentId } = await params; // This is the User ID
+        const { studentId } = await params;
         const session = await getServerSession();
         if (!session || session.user?.role !== 'admin') {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = createServerSupabase();
+
+        // Join users and students tables
         const { data, error } = await supabase
-            .from('students_view')
-            .select('*')
+            .from('users')
+            .select(`
+                *,
+                students (
+                    grade,
+                    guardianname,
+                    guardiancontact,
+                    enrollment_date
+                )
+            `)
             .eq('id', studentId)
+            .eq('role', 'student')
             .maybeSingle();
+
         if (error) throw error;
         if (!data) return new NextResponse('Student not found', { status: 404 });
-        return NextResponse.json(data);
+
+        // Flatten the response
+        const student = Array.isArray(data.students) ? data.students[0] : data.students;
+        const flattenedData = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            isActive: data.isactive ?? data.isActive, // Handle lowercase from DB
+            createdAt: data.createdat ?? data.createdAt,
+            lastLogin: data.lastlogin ?? data.lastLogin,
+            lastActivity: data.lastactivity ?? data.lastActivity,
+            // Student specific fields
+            grade: student?.grade,
+            guardianName: student?.guardianname ?? student?.guardianName,
+            guardianContact: student?.guardiancontact ?? student?.guardianContact,
+            enrollmentDate: student?.enrollment_date,
+        };
+
+        return NextResponse.json(flattenedData);
     } catch (error) {
         console.error('Error fetching student data:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -41,23 +69,40 @@ export async function PATCH(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const supabase = createServerSupabase();
+
         const updates = await req.json();
 
         // Separate updates for User and Student models
         const userUpdates: { [key: string]: any } = {};
         const studentUpdates: { [key: string]: any } = {};
-        const allowedUserUpdates = ['name', 'email', 'isActive']; // Assuming 'status' maps to 'isActive'
-        const allowedStudentUpdates = ['grade', 'guardianName', 'guardianContact']; // Assuming 'gradeLevel' maps to 'grade'
+
+        // Define allowed fields and mappings
+        const allowedUserFields = ['name', 'email', 'isActive', 'isactive'];
+        const allowedStudentFields = ['grade', 'level', 'guardianName', 'guardianContact'];
 
         Object.keys(updates).forEach(key => {
-            if (allowedUserUpdates.includes(key)) {
+            // User table updates
+            if (key === 'name' || key === 'email') {
                 userUpdates[key] = updates[key];
-            } else if (key === 'status' && typeof updates.status === 'boolean') { // Map status to isActive
-                userUpdates['isActive'] = updates.status;
-            } else if (allowedStudentUpdates.includes(key)) {
-                studentUpdates[key] = updates[key];
-            } else if (key === 'gradeLevel') { // Map gradeLevel to grade
-                studentUpdates['grade'] = updates.gradeLevel;
+            } else if (key === 'isActive' || key === 'isactive') {
+                userUpdates['isActive'] = updates[key]; // Map to column name (unquoted creation -> lowercase isactive? no, quoted string in SQL 'isActive' -> isActive. Created unquoted -> isactive)
+                // In 0001_init.sql: isActive boolean. Unquoted -> isactive.
+                // So column is likely `isactive`.
+                userUpdates['isactive'] = updates[key];
+            } else if (key === 'status' && typeof updates.status === 'boolean') {
+                userUpdates['isactive'] = updates.status;
+            }
+
+            // Student table updates
+            else if (key === 'grade') {
+                studentUpdates['grade'] = updates[key];
+            } else if (key === 'level' || key === 'gradeLevel') {
+                studentUpdates['grade'] = updates[key]; // Map to grade
+            } else if (key === 'guardianName' || key === 'guardianname') {
+                studentUpdates['guardianname'] = updates[key]; // Map to lowercase column
+            } else if (key === 'guardianContact' || key === 'guardiancontact') {
+                studentUpdates['guardiancontact'] = updates[key]; // Map to lowercase column
             }
         });
 
@@ -66,36 +111,78 @@ export async function PATCH(
         }
 
         if (Object.keys(userUpdates).length > 0) {
+            // Remove camelCase keys if they mistakenly got in and we want only verified ones, but our logic above constructs new obj
             userUpdates.updatedAt = new Date().toISOString();
+            // Note: DB column might be updatedAt (camelCase) or updatedat? 
+            // 0001_init.sql: updatedAt. Unquoted -> updatedat.
+            // Using "updatedAt" (quoted keys) in JS object for Supabase client:
+            // "The Supabase client ... converts ... to match your database columns."
+            // If I send `updatedAt`, and column is `updatedat`, does it work? 
+            // Usually safest to use lowercase if unquoted.
+            const dbUserUpdates: any = { ...userUpdates };
+            if (dbUserUpdates.isActive !== undefined) delete dbUserUpdates.isActive; // Ensure we only send 'isactive'
+
+            // Actually, let's try sending what we constructed. The JS keys 'isactive', 'updatedAt' (this one is questionable).
+            // Let's check init sql: `updatedAt timestamptz`. Unquoted -> `updatedat`.
+            // So I should send `updatedat`.
+            delete dbUserUpdates.updatedAt;
+            dbUserUpdates.updatedat = new Date().toISOString();
+
             const { error } = await supabase
                 .from('users')
-                .update(userUpdates)
+                .update(dbUserUpdates)
                 .eq('id', studentId)
                 .eq('role', 'student');
             if (error) throw error;
         }
 
         if (Object.keys(studentUpdates).length > 0) {
-            studentUpdates.updatedAt = new Date().toISOString();
+            // studentUpdates already has lowercase keys for guardians
+            const dbStudentUpdates: any = { ...studentUpdates };
+            dbStudentUpdates.updatedat = new Date().toISOString();
+
             const { error } = await supabase
                 .from('students')
-                .update(studentUpdates)
+                .update(dbStudentUpdates)
                 .eq('user_id', studentId);
             if (error) throw error;
         }
 
+        // Fetch updated data using the GET logic (join)
         const { data, error } = await supabase
-            .from('students_view')
-            .select('*')
+            .from('users')
+            .select(`
+                *,
+                students (
+                    grade,
+                    guardianname,
+                    guardiancontact,
+                    enrollment_date
+                )
+            `)
             .eq('id', studentId)
             .maybeSingle();
+
         if (error) throw error;
         if (!data) return new NextResponse('Student user not found', { status: 404 });
-        return NextResponse.json(data);
+
+        const student = Array.isArray(data.students) ? data.students[0] : data.students;
+        const flattenedData = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            isActive: data.isactive ?? data.isActive,
+            createdAt: data.createdat ?? data.createdAt,
+            grade: student?.grade,
+            guardianName: student?.guardianname ?? student?.guardianName,
+            guardianContact: student?.guardiancontact ?? student?.guardianContact,
+            enrollmentDate: student?.enrollment_date,
+        };
+
+        return NextResponse.json(flattenedData);
 
     } catch (error) {
         console.error('Error updating student:', error);
-        // Add specific error handling for duplicate email if necessary
         return new NextResponse('Internal Server Error', { status: 500 });
     }
 }
@@ -111,14 +198,14 @@ export async function DELETE(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        // If you maintain related data in Supabase, add checks here
-        const hasData = false;
-        if (hasData) {
-            return new NextResponse(
-                'Cannot delete student with associated data. Please archive the student instead.',
-                { status: 400 }
-            );
-        }
+        const supabase = createServerSupabase();
+
+        // Delete from Auth users first
+        const { error: authError } = await supabase.auth.admin.deleteUser(studentId);
+        // We log but continue if auth user is missing (consistency)
+        if (authError) console.error("Error deleting auth user:", authError);
+
+        // Delete from public tables
         const { error: delStudentErr } = await supabase
             .from('students')
             .delete()
@@ -137,4 +224,4 @@ export async function DELETE(
         console.error('Error deleting student:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

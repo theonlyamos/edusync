@@ -21,15 +21,17 @@ export type Student = {
     grade: GradeLevel;
     status: string;
     createdAt: string;
+    guardianName?: string;
+    guardianContact?: string;
 };
 
 interface ColumnsProps {
     onView: (student: Student) => void;
-    onStatusChange: (student: Student) => void;
+    onEdit: (student: Student) => void;
     onDelete: (student: Student) => void;
 }
 
-export const getColumns = ({ onView, onStatusChange, onDelete }: ColumnsProps): ColumnDef<Student>[] => [
+export const getColumns = ({ onView, onEdit, onDelete }: ColumnsProps): ColumnDef<Student>[] => [
     {
         accessorKey: "name",
         header: ({ column }) => (
@@ -94,9 +96,9 @@ export const getColumns = ({ onView, onStatusChange, onDelete }: ColumnsProps): 
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onStatusChange(student)}>
+                        <DropdownMenuItem onClick={() => onEdit(student)}>
                             <Pencil className="mr-2 h-4 w-4" />
-                            {student.status === "Active" ? "Deactivate" : "Activate"}
+                            Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             className="text-red-600"
