@@ -18,45 +18,48 @@ export async function GET(
         const supabase = createServerSupabase();
 
         const { teacherId } = await params;
-        const { data: userRow } = await supabase
-            .from('users')
-            .select('id, email, name, role, isActive, createdAt, updatedAt')
-            .eq('id', teacherId)
-            .eq('role', 'teacher')
+
+        // Fetch teacher with user details in one query
+        const { data, error } = await supabase
+            .from('teachers')
+            .select(`
+                user_id,
+                subjects,
+                grades,
+                qualifications,
+                specializations,
+                joindate,
+                users!inner (
+                    id, email, name, role, isactive, created_at, updated_at
+                )
+            `)
+            .eq('user_id', teacherId)
             .maybeSingle();
-        if (!userRow) {
+
+        if (error) throw error;
+        if (!data) {
             return NextResponse.json(
                 { error: "Teacher not found" },
                 { status: 404 }
             );
         }
 
-        const { data: teacherRow } = await supabase
-            .from('teachers')
-            .select('*')
-            .eq('user_id', teacherId)
-            .maybeSingle();
-        if (!teacherRow) {
-            return NextResponse.json(
-                { error: "Teacher details not found" },
-                { status: 404 }
-            );
-        }
+        const user = Array.isArray(data.users) ? data.users[0] : data.users;
 
         return NextResponse.json({
-            _id: userRow.id,
-            email: userRow.email,
-            name: userRow.name,
-            role: userRow.role,
-            status: userRow.isActive ? 'active' : 'inactive',
-            createdAt: userRow.createdAt,
-            updatedAt: userRow.updatedAt,
-            userId: teacherRow.user_id,
-            subjects: teacherRow.subjects || [],
-            grades: teacherRow.grades || [],
-            qualifications: teacherRow.qualifications || [],
-            specializations: teacherRow.specializations || [],
-            joinDate: teacherRow.joinDate || userRow.createdAt
+            _id: user?.id,
+            email: user?.email,
+            name: user?.name,
+            role: user?.role,
+            status: user?.isactive ? 'active' : 'inactive',
+            createdAt: user?.created_at,
+            updatedAt: user?.updated_at,
+            userId: data.user_id,
+            subjects: data.subjects || [],
+            grades: data.grades || [],
+            qualifications: data.qualifications || [],
+            specializations: data.specializations || [],
+            joinDate: data.joindate || user?.created_at
         });
     } catch (error) {
         console.error('Error fetching teacher:', error);

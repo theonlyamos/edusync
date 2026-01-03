@@ -24,7 +24,8 @@ export async function GET(
                     grade,
                     guardianname,
                     guardiancontact,
-                    enrollment_date
+                    enrollment_date,
+                    date_of_birth
                 )
             `)
             .eq('id', studentId)
@@ -49,6 +50,7 @@ export async function GET(
             guardianName: student?.guardianname ?? student?.guardianName,
             guardianContact: student?.guardiancontact ?? student?.guardianContact,
             enrollmentDate: student?.enrollment_date,
+            dateOfBirth: student?.date_of_birth,
         };
 
         return NextResponse.json(flattenedData);
@@ -103,6 +105,8 @@ export async function PATCH(
                 studentUpdates['guardianname'] = updates[key]; // Map to lowercase column
             } else if (key === 'guardianContact' || key === 'guardiancontact') {
                 studentUpdates['guardiancontact'] = updates[key]; // Map to lowercase column
+            } else if (key === 'dateOfBirth' || key === 'date_of_birth') {
+                studentUpdates['date_of_birth'] = updates[key]; // Map to snake_case column
             }
         });
 
@@ -157,7 +161,8 @@ export async function PATCH(
                     grade,
                     guardianname,
                     guardiancontact,
-                    enrollment_date
+                    enrollment_date,
+                    date_of_birth
                 )
             `)
             .eq('id', studentId)
@@ -177,6 +182,7 @@ export async function PATCH(
             guardianName: student?.guardianname ?? student?.guardianName,
             guardianContact: student?.guardiancontact ?? student?.guardianContact,
             enrollmentDate: student?.enrollment_date,
+            dateOfBirth: student?.date_of_birth,
         };
 
         return NextResponse.json(flattenedData);

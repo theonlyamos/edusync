@@ -16,6 +16,7 @@ export const createStudentSchema = z.object({
     level: z.string().min(1, 'Grade level is required'),
     guardianName: z.string().max(100).optional().nullable(),
     guardianContact: z.string().max(100).optional().nullable(),
+    dateOfBirth: z.string().optional().nullable(),
 });
 
 // Teacher creation schema
@@ -45,6 +46,7 @@ export const updateStudentSchema = z.object({
     level: z.string().optional(),
     guardianName: z.string().optional(),
     guardianContact: z.string().optional(),
+    dateOfBirth: z.string().optional().nullable(),
 });
 
 export const updateTeacherSchema = z.object({

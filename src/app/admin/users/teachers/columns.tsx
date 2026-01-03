@@ -10,7 +10,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, Eye } from "lucide-react";
 import Link from "next/link";
 
 export type Teacher = {
@@ -91,6 +91,12 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Teache
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                            <Link href={`/admin/users/teachers/${teacher.id}`}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                            </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onEdit(teacher)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit

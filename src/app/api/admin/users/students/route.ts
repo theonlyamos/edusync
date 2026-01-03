@@ -66,7 +66,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const { email, password, name, level: grade, guardianName, guardianContact } = validation.data;
+        const { email, password, name, level: grade, guardianName, guardianContact, dateOfBirth } = validation.data;
 
         const { data: authUser, error } = await supabase.auth.admin.createUser({
             email,
@@ -99,8 +99,9 @@ export async function POST(request: Request) {
                 user_id: userRow.id,
                 grade,
                 enrollment_date: new Date().toISOString(),
-                guardian_name: guardianName || null,
-                guardian_contact: guardianContact || null,
+                guardianname: guardianName || null,
+                guardiancontact: guardianContact || null,
+                date_of_birth: dateOfBirth || null,
             });
         if (studentErr) throw studentErr;
 

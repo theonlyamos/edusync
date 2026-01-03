@@ -31,6 +31,7 @@ export interface StudentData {
     status?: string;
     guardianName?: string;
     guardianContact?: string;
+    dateOfBirth?: string;
 }
 
 interface StudentModalProps {
@@ -51,6 +52,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
         level: "" as GradeLevel | string,
         guardianName: "",
         guardianContact: "",
+        dateOfBirth: "",
     });
 
     const isEditMode = !!student?.id;
@@ -64,6 +66,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                 level: student.grade || "",
                 guardianName: student.guardianName || "",
                 guardianContact: student.guardianContact || "",
+                dateOfBirth: student.dateOfBirth || "",
             });
         } else {
             setFormData({
@@ -73,6 +76,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                 level: "",
                 guardianName: "",
                 guardianContact: "",
+                dateOfBirth: "",
             });
         }
     }, [student, open]);
@@ -95,6 +99,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                 level: formData.level,
                 guardianName: formData.guardianName || null,
                 guardianContact: formData.guardianContact || null,
+                dateOfBirth: formData.dateOfBirth || null,
             };
 
             // Only include password for create or if provided during edit
@@ -228,6 +233,17 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                                <Input
+                                    id="dateOfBirth"
+                                    name="dateOfBirth"
+                                    type="date"
+                                    value={formData.dateOfBirth}
+                                    onChange={handleInputChange}
+                                />
                             </div>
                         </div>
                     </div>
