@@ -1,11 +1,58 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAssessmentResults } from "@/lib/actions/assessment.actions";
+import { useToast } from "@/components/ui/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
-export default async function AssessmentResultsPage() {
-  const results = (await getAssessmentResults()) as any[];
+interface AssessmentResult {
+  id: string;
+  score: number;
+  percentage?: number;
+  submittedAt?: string;
+  submitted_at?: string;
+  assessment?: {
+    title?: string;
+    subject?: string;
+    totalPoints?: number;
+    total_points?: number;
+  };
+  student?: {
+    name?: string;
+    email?: string;
+  };
+}
 
+export default function AssessmentResultsPage() {
+  const { toast } = useToast();
+  const [results, setResults] = useState<AssessmentResult[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchResults();
+  }, []);
+
+  const fetchResults = async () => {
+    try {
+      const response = await fetch('/api/admin/assessments/results');
+      if (!response.ok) throw new Error('Failed to fetch assessment results');
+      const data = await response.json();
+      setResults(data);
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch assessment results',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate statistics
   const subjectToScores: Record<string, number[]> = {};
   let overallSum = 0;
   let overallCount = 0;
@@ -30,39 +77,49 @@ export default async function AssessmentResultsPage() {
   }).sort((a, b) => b.average - a.average);
 
   return (
-    <DashboardLayout role="admin">
+    <DashboardLayout>
       <div className="container mx-auto py-10">
         <h1 className="text-3xl font-bold mb-8">Assessment Results Overview</h1>
-        
+
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           <Card>
             <CardHeader>
               <CardTitle>Total Assessments</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{results.length}</p>
+              {loading ? (
+                <Skeleton className="h-10 w-16" />
+              ) : (
+                <p className="text-3xl font-bold">{results.length}</p>
+              )}
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle>Average Score</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">
-                {results.length ? Math.round(
-                  results.reduce((acc, result) => acc + 0, 0) / results.length
-                ) : 0}%
-              </p>
+              {loading ? (
+                <Skeleton className="h-10 w-16" />
+              ) : (
+                <p className="text-3xl font-bold">
+                  {overallCount ? Math.round(overallSum / overallCount) : 0}%
+                </p>
+              )}
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle>Subjects Covered</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold">{Object.keys(subjectToScores).length}</p>
+              {loading ? (
+                <Skeleton className="h-10 w-16" />
+              ) : (
+                <p className="text-3xl font-bold">{Object.keys(subjectToScores).length}</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -72,7 +129,13 @@ export default async function AssessmentResultsPage() {
             <CardTitle>Average Scores by Subject</CardTitle>
           </CardHeader>
           <CardContent>
-            {subjectRows.length === 0 ? (
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : subjectRows.length === 0 ? (
               <div className="h-[120px] flex items-center justify-center text-muted-foreground">
                 No data available yet
               </div>
@@ -102,7 +165,13 @@ export default async function AssessmentResultsPage() {
             <CardTitle>Recent Results</CardTitle>
           </CardHeader>
           <CardContent>
-            {results.length === 0 ? (
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : results.length === 0 ? (
               <div className="h-[120px] flex items-center justify-center text-muted-foreground">
                 No results yet
               </div>
@@ -118,20 +187,21 @@ export default async function AssessmentResultsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.slice(0, 10).map((r: any, idx: number) => {
-                    const totalPoints = r.assessment?.totalPoints ?? 0;
+                  {results.slice(0, 10).map((r, idx) => {
+                    const totalPoints = r.assessment?.totalPoints ?? r.assessment?.total_points ?? 0;
                     const pct = typeof r.percentage === 'number'
                       ? r.percentage
                       : (typeof r.score === 'number' && totalPoints > 0)
                         ? Math.round((r.score / totalPoints) * 100)
                         : 0;
+                    const submittedAt = r.submittedAt ?? r.submitted_at;
                     return (
                       <TableRow key={idx}>
                         <TableCell>{r.student?.name ?? 'Student'}</TableCell>
                         <TableCell>{r.assessment?.title ?? 'Assessment'}</TableCell>
                         <TableCell>{r.assessment?.subject ?? '-'}</TableCell>
                         <TableCell className="text-right">{pct}%</TableCell>
-                        <TableCell className="text-right">{r.submittedAt ? new Date(r.submittedAt).toLocaleDateString() : '-'}</TableCell>
+                        <TableCell className="text-right">{submittedAt ? new Date(submittedAt).toLocaleDateString() : '-'}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -143,4 +213,4 @@ export default async function AssessmentResultsPage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

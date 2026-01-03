@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +40,6 @@ interface Lesson {
 }
 
 export default function TimetablesPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
   const [selectedLevel, setSelectedLevel] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -50,14 +48,6 @@ export default function TimetablesPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const { toast } = useToast();
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
-      router.push('/');
-    }
-  }, [status, session, router]);
 
   useEffect(() => {
     if (selectedLevel) {
@@ -99,7 +89,7 @@ export default function TimetablesPage() {
       });
 
       if (!response.ok) throw new Error('Failed to add period');
-      
+
       const newPeriod = await response.json();
       setPeriods([...periods, newPeriod]);
       toast({
@@ -126,7 +116,7 @@ export default function TimetablesPage() {
 
       if (!response.ok) throw new Error('Failed to update period');
 
-      setPeriods(periods.map(p => 
+      setPeriods(periods.map(p =>
         p.id === periodId ? { ...p, startTime, endTime } : p
       ));
       toast({
@@ -198,10 +188,6 @@ export default function TimetablesPage() {
       });
     }
   };
-
-  if (status === 'loading') {
-    return <div>Loading...</div>;
-  }
 
   return (
     <DashboardLayout>

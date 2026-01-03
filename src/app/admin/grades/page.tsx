@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Users, GraduationCap, BookOpen } from 'lucide-react';
 import { GRADE_LEVELS } from '@/lib/constants';
 import { useToast } from '@/components/ui/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface GradeStats {
   level: string;
@@ -18,19 +18,10 @@ interface GradeStats {
 }
 
 export default function GradesPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [gradeStats, setGradeStats] = useState<GradeStats[]>([]);
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
-      router.push('/');
-    }
-  }, [status, session, router]);
 
   useEffect(() => {
     fetchGradeStats();
@@ -64,19 +55,6 @@ export default function GradesPage() {
     }
   };
 
-  if (status === 'loading' || loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
-            <p className="text-muted-foreground">Please wait while we load the grade information</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="p-6">
@@ -104,7 +82,7 @@ export default function GradesPage() {
             };
 
             return (
-              <Card 
+              <Card
                 key={level}
                 className={`cursor-pointer hover:shadow-lg transition-all border-t-4 ${getGradeColor(level)}`}
                 onClick={() => router.push(`/admin/grades/${level}`)}
@@ -117,20 +95,28 @@ export default function GradesPage() {
                   <CardDescription>Grade level statistics and management</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{stats.studentCount} Students</span>
+                  {loading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-20" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                      <span>{stats.teacherCount} Teachers</span>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>{stats.studentCount} Students</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                        <span>{stats.teacherCount} Teachers</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-muted-foreground" />
+                        <span>{stats.lessonCount} Lessons</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <BookOpen className="h-4 w-4 text-muted-foreground" />
-                      <span>{stats.lessonCount} Lessons</span>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             );
