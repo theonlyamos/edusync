@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Sidebar } from './Sidebar';
 
@@ -14,10 +14,12 @@ export interface DashboardLayoutProps {
 export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const router = useRouter();
   const session = useContext(SupabaseSessionContext);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!session?.user) {
-      router.push('/login');
+      const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
+      router.push(`/login${back}`);
     }
   }, [session, router]);
 

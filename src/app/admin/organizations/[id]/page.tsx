@@ -244,7 +244,7 @@ export default function OrganizationDetailsPage({ params }: PageProps) {
                                                 </div>
                                             </div>
 
-                                            {organization?.total_credits_purchased && organization.total_credits_purchased > 0 && (
+                                            {organization?.total_credits_purchased && organization.total_credits_purchased > 0 ? (
                                                 <div className="space-y-2">
                                                     <div className="text-sm font-medium text-muted-foreground">
                                                         Usage
@@ -261,7 +261,7 @@ export default function OrganizationDetailsPage({ params }: PageProps) {
                                                         </span>
                                                     </div>
                                                 </div>
-                                            )}
+                                            ) : null}
                                         </div>
                                     )}
                                 </CardContent>

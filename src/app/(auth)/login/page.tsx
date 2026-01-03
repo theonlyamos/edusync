@@ -30,7 +30,6 @@ function LoginContent() {
         return;
       }
 
-      console.log(session)
       switch (session.user.user_metadata.role) {
         case 'admin':
           router.push('/admin/dashboard');
