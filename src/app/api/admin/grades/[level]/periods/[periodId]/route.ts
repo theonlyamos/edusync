@@ -1,18 +1,31 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getServerSession } from '@/lib/auth';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ level: string; periodId: string }> }
 ) {
-    const { level, periodId } = await params;
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
+        }
+
+        const supabase = createServerSupabase();
+        const { level, periodId } = await params;
+        const decodedLevel = decodeURIComponent(level);
         const body = await request.json();
+
         const { data: existing, error } = await supabase
             .from('timetables')
             .select('periods')
-            .eq('grade', level)
+            .eq('grade', decodedLevel)
             .maybeSingle();
+
         if (error) throw error;
         if (!existing) {
             return NextResponse.json(
@@ -25,10 +38,11 @@ export async function PUT(
         const periods = rawPeriods.map((p: any) => (
             p.id === periodId || p._id === periodId ? { ...p, ...body, id: p.id || p._id } : p
         ));
+
         const { error: updErr } = await supabase
             .from('timetables')
             .update({ periods })
-            .eq('grade', level);
+            .eq('grade', decodedLevel);
         if (updErr) throw updErr;
 
         const updatedPeriod = periods.find((p: any) => p.id === periodId || p._id === periodId);
@@ -46,13 +60,25 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ level: string; periodId: string }> }
 ) {
-    const { level, periodId } = await params;
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 }
+            );
+        }
+
+        const supabase = createServerSupabase();
+        const { level, periodId } = await params;
+        const decodedLevel = decodeURIComponent(level);
+
         const { data: existing, error } = await supabase
             .from('timetables')
             .select('periods')
-            .eq('grade', level)
+            .eq('grade', decodedLevel)
             .maybeSingle();
+
         if (error) throw error;
         if (!existing) {
             return NextResponse.json(
@@ -63,10 +89,11 @@ export async function DELETE(
 
         const rawPeriods: any[] = Array.isArray((existing as any).periods) ? (existing as any).periods : [];
         const periods = rawPeriods.filter((p: any) => (p.id ?? p._id) !== periodId);
+
         const { error: updErr } = await supabase
             .from('timetables')
             .update({ periods })
-            .eq('grade', level);
+            .eq('grade', decodedLevel);
         if (updErr) throw updErr;
 
         return NextResponse.json({ message: "Period deleted successfully" });
@@ -77,4 +104,4 @@ export async function DELETE(
             { status: 500 }
         );
     }
-} 
+}

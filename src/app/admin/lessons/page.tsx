@@ -16,8 +16,9 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Eye, Trash, BookOpen } from "lucide-react";
+import { MoreHorizontal, Eye, Trash, BookOpen, Plus } from "lucide-react";
 import Link from "next/link";
+import { AdminLessonModal } from "@/components/lessons/AdminLessonModal";
 
 interface Lesson {
     id: string;
@@ -37,6 +38,7 @@ export default function AdminLessonsPage() {
     const { toast } = useToast();
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
         fetchLessons();
@@ -175,6 +177,10 @@ export default function AdminLessonsPage() {
                         <h1 className="text-3xl font-bold">Lessons Management</h1>
                         <p className="text-muted-foreground">View and manage all lessons</p>
                     </div>
+                    <Button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Create Lesson
+                    </Button>
                 </div>
                 {loading ? (
                     <div className="space-y-4">
@@ -190,6 +196,12 @@ export default function AdminLessonsPage() {
                 ) : (
                     <DataTable columns={columns} data={lessons} />
                 )}
+
+                <AdminLessonModal
+                    open={isModalOpen}
+                    onOpenChange={setIsModalOpen}
+                    onSuccess={fetchLessons}
+                />
             </div>
         </DashboardLayout>
     );

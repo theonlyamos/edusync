@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Wand2, X } from "lucide-react";
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
+
+interface Teacher {
+  subjects?: string[];
+  grades?: string[];
+}
 
 interface Lesson {
   _id: string;
@@ -29,14 +43,57 @@ interface CreateLessonFormProps {
 }
 
 export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
+  const session = useContext(SupabaseSessionContext);
   const [title, setTitle] = useState(lesson?.title || '');
   const [subject, setSubject] = useState(lesson?.subject || '');
   const [gradeLevel, setGradeLevel] = useState(lesson?.gradeLevel || '');
   const [objectives, setObjectives] = useState(lesson?.objectives || '');
   const [loading, setLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState(lesson?.content || '');
+  const [teacherData, setTeacherData] = useState<Teacher | null>(null);
+  const [loadingTeacher, setLoadingTeacher] = useState(false);
 
   const isEditing = !!lesson;
+
+  // Get available subjects and grades from teacher's profile
+  const availableSubjects = useMemo(() => {
+    if (teacherData?.subjects?.length) {
+      return teacherData.subjects;
+    }
+    return SUBJECTS;
+  }, [teacherData]);
+
+  const availableGrades = useMemo(() => {
+    if (teacherData?.grades?.length) {
+      return teacherData.grades;
+    }
+    return GRADE_LEVELS;
+  }, [teacherData]);
+
+  useEffect(() => {
+    // Fetch teacher's subjects and grades
+    const fetchTeacherData = async () => {
+      if (!session?.user?.id) return;
+
+      setLoadingTeacher(true);
+      try {
+        const response = await fetch('/api/teachers/profile');
+        if (response.ok) {
+          const data = await response.json();
+          setTeacherData({
+            subjects: data.subjects || [],
+            grades: data.grades || [],
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching teacher data:', error);
+      } finally {
+        setLoadingTeacher(false);
+      }
+    };
+
+    fetchTeacherData();
+  }, [session?.user?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,27 +189,45 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
               required
             />
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="subject">Subject</Label>
-            <Input
-              id="subject"
-              placeholder="e.g., Mathematics, Science, English"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              required
-            />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="gradeLevel">Grade Level</Label>
-            <Input
-              id="gradeLevel"
-              placeholder="e.g., 6th Grade, High School"
-              value={gradeLevel}
-              onChange={(e) => setGradeLevel(e.target.value)}
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="subject">Subject</Label>
+              <Select
+                value={subject}
+                onValueChange={setSubject}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select subject"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSubjects.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="gradeLevel">Grade Level</Label>
+              <Select
+                value={gradeLevel}
+                onValueChange={setGradeLevel}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select grade level"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGrades.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g.toUpperCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -214,4 +289,4 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       </form>
     </Card>
   );
-} 
+}

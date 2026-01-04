@@ -1,11 +1,12 @@
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextResponse, NextRequest } from 'next/server';
+import { getServerSession } from '@/lib/auth';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(
-    request: Request,
-    context: any
+    request: NextRequest,
+    { params }: { params: Promise<{ level: string }> }
 ) {
-    const { params } = context as { params: { level: string } };
+    const supabase = createServerSupabase();
     try {
         const { level } = await params;
         const { data: timetable, error } = await supabase
@@ -32,10 +33,10 @@ export async function GET(
 }
 
 export async function PUT(
-    request: Request,
-    context: any
+    request: NextRequest,
+    { params }: { params: Promise<{ level: string }> }
 ) {
-    const { params } = context as { params: { level: string } };
+    const supabase = createServerSupabase();
     try {
         const body = await request.json();
         const { level } = await params;
@@ -88,10 +89,10 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: Request,
-    context: any
+    request: NextRequest,
+    { params }: { params: Promise<{ level: string }> }
 ) {
-    const { params } = context as { params: { level: string } };
+    const supabase = createServerSupabase();
     try {
         const { level } = await params;
         const { data: deletedTimetable, error } = await supabase

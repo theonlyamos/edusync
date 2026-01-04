@@ -1,27 +1,33 @@
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextResponse, NextRequest } from 'next/server';
+import { getServerSession } from '@/lib/auth';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(
-    request: Request,
-    context: any
+    request: NextRequest,
+    { params }: { params: Promise<{ level: string }> }
 ) {
-    const { params } = context as { params: { level: string } };
     try {
-        const { data: timetable, error } = await supabase
-            .from('timetables')
-            .select('periods')
-            .eq('grade', params.level)
-            .maybeSingle();
-        if (error) throw error;
-
-        if (!timetable) {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
             return NextResponse.json(
-                { error: "Grade not found" },
-                { status: 404 }
+                { error: "Unauthorized" },
+                { status: 401 }
             );
         }
 
-        return NextResponse.json((timetable as any).periods || []);
+        const supabase = createServerSupabase();
+        const { level } = await params;
+        const decodedLevel = decodeURIComponent(level);
+
+        const { data: timetable, error } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', decodedLevel)
+            .maybeSingle();
+
+        if (error) throw error;
+
+        return NextResponse.json((timetable as any)?.periods || []);
     } catch (error) {
         console.error("Error fetching periods:", error);
         return NextResponse.json(
@@ -32,33 +38,57 @@ export async function GET(
 }
 
 export async function POST(
-    request: Request,
-    context: any
+    request: NextRequest,
+    { params }: { params: Promise<{ level: string }> }
 ) {
-    const { params } = context as { params: { level: string } };
     try {
-        const body = await request.json();
-        const { data: existing, error: err } = await supabase
-            .from('timetables')
-            .select('periods')
-            .eq('grade', params.level)
-            .maybeSingle();
-        if (err) throw err;
-        if (!existing) {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
             return NextResponse.json(
-                { error: "Grade not found" },
-                { status: 404 }
+                { error: "Unauthorized" },
+                { status: 401 }
             );
         }
 
-        const periods = [...(existing as any).periods || [], body];
-        const { error: updErr } = await supabase
-            .from('timetables')
-            .update({ periods })
-            .eq('grade', params.level);
-        if (updErr) throw updErr;
+        const supabase = createServerSupabase();
+        const { level } = await params;
+        const decodedLevel = decodeURIComponent(level);
+        const body = await request.json();
 
-        return NextResponse.json(periods);
+        // Generate a unique id for the new period
+        const newPeriod = {
+            id: crypto.randomUUID(),
+            startTime: body.startTime || '08:00',
+            endTime: body.endTime || '09:00'
+        };
+
+        const { data: existing, error: err } = await supabase
+            .from('timetables')
+            .select('periods')
+            .eq('grade', decodedLevel)
+            .maybeSingle();
+
+        if (err) throw err;
+
+        let periods: any[];
+        if (!existing) {
+            // Create new timetable entry
+            const { error: insertErr } = await supabase
+                .from('timetables')
+                .insert({ grade: decodedLevel, periods: [newPeriod], schedule: {} });
+            if (insertErr) throw insertErr;
+            periods = [newPeriod];
+        } else {
+            // Update existing timetable
+            periods = [...((existing as any).periods || []), newPeriod];
+            const { error: updErr } = await supabase
+                .from('timetables')
+                .update({ periods })
+                .eq('grade', decodedLevel);
+            if (updErr) throw updErr;
+        }
+
+        return NextResponse.json(newPeriod, { status: 201 });
     } catch (error) {
         console.error("Error creating period:", error);
         return NextResponse.json(
@@ -66,4 +96,4 @@ export async function POST(
             { status: 500 }
         );
     }
-} 
+}

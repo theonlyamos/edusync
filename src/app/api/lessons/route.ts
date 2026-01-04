@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { createSSRUserSupabase } from "@/lib/supabase.server";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(request: Request) {
     try {
@@ -16,12 +17,11 @@ export async function GET(request: Request) {
         const grade = searchParams.get('grade');
         const subject = searchParams.get('subject');
 
-        const supabase = await createSSRUserSupabase();
         let query = supabase.from('lessons').select('*, teacher:users(name)');
         if (grade) query = query.eq('grade', grade);
         if (subject) query = query.eq('subject', subject);
         if (session.user.role === 'teacher') query = query.eq('teacher', session.user.id);
-        const { data, error } = await query.order('createdAt', { ascending: false });
+        const { data, error } = await query.order('created_at', { ascending: false });
         if (error) throw error;
         return NextResponse.json(data ?? []);
     } catch (error) {
@@ -43,7 +43,6 @@ export async function POST(request: Request) {
             );
         }
 
-        const supabase = await createSSRUserSupabase();
         const body = await request.json();
         const insert = { ...body, teacher: session.user.id, status: 'draft' } as any;
         const { data, error } = await supabase

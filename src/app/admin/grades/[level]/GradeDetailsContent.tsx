@@ -1,21 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Users, GraduationCap, BookOpen, Calendar, Book, BookA, Plus, X, Trash2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { ArrowLeft, Users, GraduationCap, BookOpen } from 'lucide-react';
+import { toast, useToast } from '@/components/ui/use-toast';
 import { EducationLevelBadge } from '@/components/ui/education-level-badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { GradeLevel } from '@/lib/constants';
-import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
-import { Input } from '@/components/ui/input';
-import { v4 as uuidv4 } from 'uuid';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TimeTableView } from '@/components/timetable/TimeTableView';
 
 interface User {
@@ -78,7 +73,6 @@ const SUBJECTS = [
 ];
 
 export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
-  const { data: session, status } = useSession();
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -89,22 +83,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     periods: []
   });
   const [timeTable, setTimeTable] = useState<TimeTable>({});
-  const [editMode, setEditMode] = useState(false);
-  const [newPeriodId, setNewPeriodId] = useState<string | null>(null);
-  const [editingPeriod, setEditingPeriod] = useState<string | null>(null);
-  const [availableTeachers, setAvailableTeachers] = useState<User[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
-  const [editingCell, setEditingCell] = useState<{ day: string; periodId: string } | null>(null);
-
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
-      router.push('/');
-    }
-  }, [status, session, router]);
 
   useEffect(() => {
     fetchGradeDetails();
@@ -114,19 +93,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     if (gradeDetails.timeTable) {
       setTimeTable(gradeDetails.timeTable);
     }
-  }, [gradeDetails.timeTable]);
-
-  useEffect(() => {
-    if (gradeDetails.teachers) {
-      setAvailableTeachers(gradeDetails.teachers);
-    }
-  }, [gradeDetails.teachers]);
-
-  useEffect(() => {
     if (gradeDetails.periods) {
       setPeriods(gradeDetails.periods);
     }
-  }, [gradeDetails.periods]);
+  }, [gradeDetails]);
 
   const fetchGradeDetails = async () => {
     try {
@@ -155,7 +125,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           day,
           periodId,
           subject,
@@ -194,7 +164,7 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
       });
 
       if (!response.ok) throw new Error('Failed to add period');
-      
+
       const newPeriod = await response.json();
       setPeriods([...periods, newPeriod]);
       toast({
@@ -222,10 +192,9 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
 
       if (!response.ok) throw new Error('Failed to update period');
 
-      setPeriods(periods.map(p => 
+      setPeriods(periods.map(p =>
         p.id === periodId ? { ...p, startTime, endTime } : p
       ));
-      setEditingPeriod(null);
       toast({
         title: 'Success',
         description: 'Period updated successfully',
@@ -261,17 +230,6 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
     }
   };
 
-  if (status === 'loading' || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
-          <p className="text-muted-foreground">Please wait while we load the grade details</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -299,8 +257,14 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{gradeDetails.students.length}</div>
-            <p className="text-muted-foreground">Enrolled students</p>
+            {loading ? (
+              <Skeleton className="h-10 w-16" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold">{gradeDetails.students.length}</div>
+                <p className="text-muted-foreground">Enrolled students</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -312,8 +276,14 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{gradeDetails.teachers.length}</div>
-            <p className="text-muted-foreground">Assigned teachers</p>
+            {loading ? (
+              <Skeleton className="h-10 w-16" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold">{gradeDetails.teachers.length}</div>
+                <p className="text-muted-foreground">Assigned teachers</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -325,8 +295,14 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{gradeDetails.lessons.length}</div>
-            <p className="text-muted-foreground">Created lessons</p>
+            {loading ? (
+              <Skeleton className="h-10 w-16" />
+            ) : (
+              <>
+                <div className="text-3xl font-bold">{gradeDetails.lessons.length}</div>
+                <p className="text-muted-foreground">Created lessons</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -357,11 +333,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                     <TableCell className="font-medium">{student.name}</TableCell>
                     <TableCell>{student.email}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        student.status === 'active' 
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.status === 'active'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                        }`}>
                         {student.status}
                       </span>
                     </TableCell>
@@ -400,11 +375,10 @@ export function GradeDetailsContent({ level }: GradeDetailsContentProps) {
                     <TableCell className="font-medium">{teacher.name}</TableCell>
                     <TableCell>{teacher.email}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        teacher.status === 'active' 
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${teacher.status === 'active'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                        }`}>
                         {teacher.status}
                       </span>
                     </TableCell>

@@ -5,7 +5,8 @@ import { generateAICompletion } from '@/lib/ai';
 export async function POST(req: Request) {
     try {
         const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+
+        if (!session || !['admin', 'teacher'].includes(session.user?.role as string)) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
