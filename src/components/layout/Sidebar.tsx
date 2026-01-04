@@ -21,13 +21,13 @@ import {
   ListChecks,
   FilePlus,
   BarChart2,
-  UsersRound,
   LogOut,
   Sun,
   Moon,
   ChevronLeft,
   ChevronRight,
-  Building2
+  Building2,
+  Users2
 } from "lucide-react";
 
 interface SidebarLink {
@@ -55,7 +55,7 @@ const adminLinks: SidebarLink[] = [
   },
   {
     label: 'Admins',
-    icon: <UsersRound className="h-5 w-5" />,
+    icon: <Users2 className="h-5 w-5" />,
     href: '/admin/users/admins'
   },
   {

@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { AdminLessonModal } from "@/components/lessons/AdminLessonModal";
+import { ResourceModal } from "@/components/resources/ResourceModal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus } from "lucide-react";
 import {
     ArrowLeft,
     User,
@@ -72,6 +74,7 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
     const [resources, setResources] = useState<Content[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
 
@@ -383,7 +386,13 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
 
                     {/* Resources Tab */}
                     <TabsContent value="resources" className="mt-6">
-                        <h2 className="text-xl font-bold mb-4">Lesson Resources</h2>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">Lesson Resources</h2>
+                            <Button onClick={() => setIsResourceModalOpen(true)}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Resource
+                            </Button>
+                        </div>
                         {resources.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {resources.map((resource) => (
@@ -430,6 +439,14 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
                         onSuccess={fetchLesson}
                     />
                 )}
+
+                {/* Resource Modal */}
+                <ResourceModal
+                    open={isResourceModalOpen}
+                    onOpenChange={setIsResourceModalOpen}
+                    lessonId={resolvedParams.id}
+                    onSuccess={fetchResources}
+                />
             </div>
         </DashboardLayout>
     );
