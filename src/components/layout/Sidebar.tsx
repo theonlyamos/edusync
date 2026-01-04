@@ -74,6 +74,11 @@ const adminLinks: SidebarLink[] = [
     href: '/admin/timetables'
   },
   {
+    label: 'Lessons',
+    icon: <Book className="h-5 w-5" />,
+    href: '/admin/lessons'
+  },
+  {
     label: 'Assessments',
     icon: <FileCheck className="h-5 w-5" />,
     href: '/admin/assessments',
