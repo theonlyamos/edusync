@@ -11,16 +11,19 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { AdminLessonModal } from "@/components/lessons/AdminLessonModal";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     ArrowLeft,
-    BookOpen,
-    GraduationCap,
     User,
     Calendar,
     Pencil,
     Trash2,
     Target,
-    FileText
+    FileText,
+    BookOpen,
+    FolderOpen,
+    Brain,
+    FileQuestion
 } from "lucide-react";
 import {
     AlertDialog,
@@ -48,6 +51,14 @@ interface Lesson {
     updated_at: string;
 }
 
+interface Content {
+    id: string;
+    type: string;
+    content: any;
+    lesson_id: string;
+    created_at: string;
+}
+
 interface PageProps {
     params: Promise<{ id: string }>;
 }
@@ -57,12 +68,17 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
     const router = useRouter();
     const { toast } = useToast();
     const [lesson, setLesson] = useState<Lesson | null>(null);
+    const [contents, setContents] = useState<Content[]>([]);
+    const [resources, setResources] = useState<Content[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
         fetchLesson();
+        fetchContents();
+        fetchResources();
     }, [resolvedParams.id]);
 
     const fetchLesson = async () => {
@@ -80,6 +96,28 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchContents = async () => {
+        try {
+            const response = await fetch(`/api/content?lessonId=${resolvedParams.id}`);
+            if (!response.ok) throw new Error('Failed to fetch contents');
+            const data = await response.json();
+            setContents(data.filter((c: any) => c.type !== 'resource') || []);
+        } catch (error) {
+            console.error('Error fetching contents:', error);
+        }
+    };
+
+    const fetchResources = async () => {
+        try {
+            const response = await fetch(`/api/resources?lessonId=${resolvedParams.id}`);
+            if (!response.ok) throw new Error('Failed to fetch resources');
+            const data = await response.json();
+            setResources(data || []);
+        } catch (error) {
+            console.error('Error fetching resources:', error);
         }
     };
 
@@ -105,6 +143,21 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
             });
         } finally {
             setDeleting(false);
+        }
+    };
+
+    const getContentIcon = (type: string) => {
+        switch (type) {
+            case 'quiz':
+                return <FileQuestion className="h-5 w-5" />;
+            case 'worksheet':
+                return <FileText className="h-5 w-5" />;
+            case 'explanation':
+                return <Brain className="h-5 w-5" />;
+            case 'summary':
+                return <BookOpen className="h-5 w-5" />;
+            default:
+                return <FileText className="h-5 w-5" />;
         }
     };
 
@@ -176,121 +229,189 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
                     </div>
                 </div>
 
-                {/* Meta Info Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                Assigned Teacher
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {loading ? (
-                                <Skeleton className="h-5 w-32" />
-                            ) : lesson?.teacherName ? (
-                                <div>
-                                    <p className="font-medium">{lesson.teacherName}</p>
-                                    <p className="text-sm text-muted-foreground">{lesson.teacherEmail}</p>
-                                </div>
-                            ) : (
-                                <p className="text-muted-foreground">Not assigned</p>
-                            )}
-                        </CardContent>
-                    </Card>
+                {/* Tabs */}
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsList>
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="content">Content</TabsTrigger>
+                        <TabsTrigger value="resources">Resources</TabsTrigger>
+                    </TabsList>
 
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground" />
-                                Created
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {loading ? (
-                                <Skeleton className="h-5 w-24" />
-                            ) : (
-                                <p className="font-medium">
-                                    {new Date(lesson?.created_at || '').toLocaleDateString()}
-                                </p>
-                            )}
-                        </CardContent>
-                    </Card>
+                    {/* Overview Tab */}
+                    <TabsContent value="overview" className="mt-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Lesson Details Card */}
+                            <Card className="lg:col-span-2">
+                                <CardHeader>
+                                    <CardTitle>Lesson Details</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Subject</p>
+                                            <p className="font-medium">{lesson?.subject}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Grade Level</p>
+                                            <p className="font-medium">{lesson?.gradelevel?.toUpperCase()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Assigned Teacher</p>
+                                            {lesson?.teacherName ? (
+                                                <div>
+                                                    <p className="font-medium">{lesson.teacherName}</p>
+                                                    <p className="text-sm text-muted-foreground">{lesson.teacherEmail}</p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-muted-foreground">Not assigned</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Created</p>
+                                            <p className="font-medium">
+                                                {new Date(lesson?.created_at || '').toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
 
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-muted-foreground" />
-                                Last Updated
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {loading ? (
-                                <Skeleton className="h-5 w-24" />
-                            ) : (
-                                <p className="font-medium">
-                                    {new Date(lesson?.updated_at || '').toLocaleDateString()}
-                                </p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
+                            {/* Quick Stats Card */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Quick Stats</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Generated Content</span>
+                                            <span className="font-medium">{contents.length}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Resources</span>
+                                            <span className="font-medium">{resources.length}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Objectives</span>
+                                            <span className="font-medium">
+                                                {lesson?.objectives?.length || 0}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
 
-                {/* Objectives */}
-                <Card className="mb-6">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Target className="h-5 w-5 text-primary" />
-                            Learning Objectives
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <div className="space-y-2">
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-3/4" />
-                                <Skeleton className="h-4 w-1/2" />
-                            </div>
-                        ) : lesson?.objectives?.length ? (
-                            <ul className="list-disc list-inside space-y-1">
-                                {lesson.objectives.map((objective, index) => (
-                                    <li key={index} className="text-muted-foreground">
-                                        {objective}
-                                    </li>
+                            {/* Objectives Card */}
+                            <Card className="lg:col-span-3">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Target className="h-5 w-5 text-primary" />
+                                        Learning Objectives
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {loading ? (
+                                        <div className="space-y-2">
+                                            <Skeleton className="h-4 w-full" />
+                                            <Skeleton className="h-4 w-3/4" />
+                                        </div>
+                                    ) : lesson?.objectives?.length ? (
+                                        <ul className="list-disc list-inside space-y-2">
+                                            {lesson.objectives.map((objective, index) => (
+                                                <li key={index} className="text-muted-foreground">
+                                                    {objective}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-muted-foreground">No objectives defined</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </TabsContent>
+
+                    {/* Content Tab */}
+                    <TabsContent value="content" className="mt-6">
+                        {/* Lesson Content */}
+                        {lesson?.content && (
+                            <Card className="mb-6">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FileText className="h-5 w-5 text-primary" />
+                                        Lesson Content
+                                    </CardTitle>
+                                    <CardDescription>The main lesson material</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                                        <ReactMarkdown>{lesson.content}</ReactMarkdown>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {/* Generated Content */}
+                        <h2 className="text-xl font-bold mb-4">Generated Content</h2>
+                        {contents.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {contents.map((content) => (
+                                    <Card key={content.id}>
+                                        <CardHeader>
+                                            <div className="flex items-center gap-2">
+                                                {getContentIcon(content.type)}
+                                                <CardTitle className="capitalize text-lg">
+                                                    {content.type}
+                                                </CardTitle>
+                                            </div>
+                                            <CardDescription>
+                                                Created {new Date(content.created_at).toLocaleDateString()}
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-sm text-muted-foreground">
+                                                {content.content?.description || 'No description'}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
                                 ))}
-                            </ul>
+                            </div>
                         ) : (
-                            <p className="text-muted-foreground">No objectives defined</p>
+                            <p className="text-muted-foreground">No generated content yet</p>
                         )}
-                    </CardContent>
-                </Card>
+                    </TabsContent>
 
-                {/* Content */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <FileText className="h-5 w-5 text-primary" />
-                            Lesson Content
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <div className="space-y-2">
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-3/4" />
-                                <Skeleton className="h-4 w-full" />
-                                <Skeleton className="h-4 w-1/2" />
-                            </div>
-                        ) : lesson?.content ? (
-                            <div className="prose prose-sm dark:prose-invert max-w-none">
-                                <ReactMarkdown>{lesson.content}</ReactMarkdown>
+                    {/* Resources Tab */}
+                    <TabsContent value="resources" className="mt-6">
+                        <h2 className="text-xl font-bold mb-4">Lesson Resources</h2>
+                        {resources.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {resources.map((resource) => (
+                                    <Card key={resource.id}>
+                                        <CardHeader>
+                                            <div className="flex items-center gap-2">
+                                                <FolderOpen className="h-5 w-5" />
+                                                <CardTitle className="text-lg">
+                                                    {resource.content?.title || 'Resource'}
+                                                </CardTitle>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <p className="text-sm text-muted-foreground">
+                                                {resource.content?.description || 'No description'}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-2">
+                                                Added {new Date(resource.created_at).toLocaleDateString()}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+                                ))}
                             </div>
                         ) : (
-                            <p className="text-muted-foreground">No content available</p>
+                            <p className="text-muted-foreground">No resources attached</p>
                         )}
-                    </CardContent>
-                </Card>
+                    </TabsContent>
+                </Tabs>
 
                 {/* Edit Modal */}
                 {lesson && (

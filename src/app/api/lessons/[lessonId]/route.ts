@@ -19,7 +19,7 @@ export async function GET(
         const { lessonId } = await params;
         const { data: lesson, error } = await supabase
             .from('lessons')
-            .select('*, teacher:users(name)')
+            .select('*, teacher:teachers!inner(user:users(name))')
             .eq('id', lessonId)
             .maybeSingle();
         if (error) throw error;

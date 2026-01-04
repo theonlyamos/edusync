@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
-import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(req: Request) {
     try {
@@ -13,12 +13,11 @@ export async function GET(req: Request) {
         const lessonId = searchParams.get('lessonId');
         const type = searchParams.get('type');
 
-        const supabase = await createSSRUserSupabase();
+        const supabase = createServerSupabase();
         let query = supabase.from('lesson_content').select('*');
         if (lessonId) query = query.eq('lesson_id', lessonId);
         if (type) query = query.eq('type', type);
-        if (session.user.role === 'teacher') query = query.eq('created_by', session.user.id);
-        const { data, error } = await query.order('createdAt', { ascending: false });
+        const { data, error } = await query.order('created_at', { ascending: false });
         if (error) throw error;
         return NextResponse.json(data ?? []);
     } catch (error) {
@@ -30,14 +29,21 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+        if (!session || !['admin', 'teacher'].includes(session.user?.role as string)) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
-        const supabase = await createSSRUserSupabase();
+        const supabase = createServerSupabase();
         const payload = await req.json();
         const { lessonId, type, content } = payload as { lessonId: string; type: string; content: any };
-        const insert = { lesson_id: lessonId, type, content, createdAt: new Date().toISOString(), created_by: session.user.id } as any;
+
+        const insert = {
+            lesson_id: lessonId,
+            type,
+            content,
+            created_at: new Date().toISOString()
+        };
+
         const { data, error } = await supabase
             .from('lesson_content')
             .insert(insert)
@@ -49,4 +55,4 @@ export async function POST(req: Request) {
         console.error('Error creating content:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

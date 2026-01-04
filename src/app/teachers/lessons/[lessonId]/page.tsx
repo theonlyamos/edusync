@@ -14,11 +14,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContentGenerationForm } from '@/components/content/ContentGenerationForm';
 import { QuizContent, WorksheetContent, ExplanationContent, SummaryContent } from '@/components/content/types';
-import type { 
-    QuizContentType, 
-    WorksheetContentType, 
-    ExplanationContentType, 
-    SummaryContentType 
+import type {
+    QuizContentType,
+    WorksheetContentType,
+    ExplanationContentType,
+    SummaryContentType
 } from '@/components/content/types';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -45,7 +45,7 @@ interface Lesson {
     title: string;
     subject: string;
     gradeLevel: string;
-    objectives: string;
+    objectives: string | string[];
     content: string;
     teacherId: string;
     createdAt: string;
@@ -245,36 +245,106 @@ export default function LessonPage() {
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Lesson Overview</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-6">
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">Objectives</h3>
-                                        <div className="prose prose-sm max-w-none">
-                                            <ReactMarkdown>
-                                                {lesson.objectives}
-                                            </ReactMarkdown>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Lesson Details Card */}
+                            <Card className="lg:col-span-2">
+                                <CardHeader>
+                                    <CardTitle>Lesson Details</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Subject</p>
+                                            <p className="font-medium">{lesson.subject}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Grade Level</p>
+                                            <p className="font-medium">{lesson.gradeLevel?.toUpperCase()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Created</p>
+                                            <p className="font-medium">
+                                                {new Date(lesson.createdAt).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Last Updated</p>
+                                            <p className="font-medium">
+                                                {new Date(lesson.updatedAt).toLocaleDateString()}
+                                            </p>
                                         </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">Content</h3>
-                                        <div className="prose prose-sm max-w-none">
-                                            <ReactMarkdown>
-                                                {lesson.content}
-                                            </ReactMarkdown>
+                                </CardContent>
+                            </Card>
+
+                            {/* Quick Stats Card */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Quick Stats</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Generated Content</span>
+                                            <span className="font-medium">{contents.length}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Resources</span>
+                                            <span className="font-medium">{resources.length}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted-foreground">Objectives</span>
+                                            <span className="font-medium">
+                                                {Array.isArray(lesson.objectives) ? lesson.objectives.length : 1}
+                                            </span>
                                         </div>
                                     </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+
+                            {/* Objectives Card */}
+                            <Card className="lg:col-span-3">
+                                <CardHeader>
+                                    <CardTitle>Learning Objectives</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {Array.isArray(lesson.objectives) ? (
+                                        <ul className="list-disc list-inside space-y-2">
+                                            {lesson.objectives.map((objective, index) => (
+                                                <li key={index} className="text-muted-foreground">
+                                                    {objective}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-muted-foreground">{lesson.objectives || 'No objectives defined'}</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">
+                        {/* Lesson Content Section */}
+                        {lesson.content && (
+                            <Card className="mb-6">
+                                <CardHeader>
+                                    <CardTitle>Lesson Content</CardTitle>
+                                    <CardDescription>The main lesson material for students</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                                        <ReactMarkdown>
+                                            {lesson.content}
+                                        </ReactMarkdown>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {/* Generated Content Section */}
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold">Lesson Content</h2>
+                            <h2 className="text-2xl font-bold">Generated Content</h2>
                             <Button onClick={() => setIsGenerating(true)}>
                                 Generate Content
                             </Button>
