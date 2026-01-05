@@ -8,6 +8,11 @@ export async function GET(
 ) {
     const supabase = createServerSupabase();
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const { level } = await params;
         const { data: timetable, error } = await supabase
             .from('timetables')
@@ -38,6 +43,11 @@ export async function PUT(
 ) {
     const supabase = createServerSupabase();
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const body = await request.json();
         const { level } = await params;
 
@@ -94,6 +104,11 @@ export async function DELETE(
 ) {
     const supabase = createServerSupabase();
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const { level } = await params;
         const { data: deletedTimetable, error } = await supabase
             .from('timetables')
