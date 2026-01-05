@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context'
 import OpenAI from 'openai';
+import { rateLimit } from '@/lib/rate-limiter';
 
 interface OpenAIConfig {
     baseURL: string;
@@ -169,7 +170,17 @@ const displayVisualAidFunctionDeclaration = {
 
 export async function POST(request: NextRequest) {
     try {
-        const { task_description, panel_dimensions, theme, theme_colors } = await request.json();
+        const authContext = getAuthContext(request);
+        if (!authContext) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+
+        const rateLimitResponse = await rateLimit(request, 'api');
+        if (rateLimitResponse) return rateLimitResponse;
+
+        const body = await request.json();
+
+        const { task_description, panel_dimensions, theme, theme_colors } = body;
 
         if (!task_description) {
             return NextResponse.json(
