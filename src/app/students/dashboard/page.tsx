@@ -32,7 +32,7 @@ export default function StudentDashboard() {
           <h2 className="text-3xl font-bold text-foreground">Welcome back, {session?.user?.name}!</h2>
           <p className="text-muted-foreground">Here's an overview of your learning journey</p>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {/* Current Lessons Card */}
           <Card className="dashboard-card border-t-4 border-t-primary">
@@ -58,7 +58,7 @@ export default function StudentDashboard() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button 
+              <Button
                 className="w-full"
                 onClick={() => router.push('/students/lessons')}
               >
@@ -91,8 +91,8 @@ export default function StudentDashboard() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button 
-                variant="secondary" 
+              <Button
+                variant="secondary"
                 className="w-full"
                 onClick={() => router.push('/students/practice')}
               >
@@ -125,8 +125,8 @@ export default function StudentDashboard() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full"
                 onClick={() => router.push('/students/tutor')}
               >

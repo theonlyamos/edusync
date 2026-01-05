@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BookOpen, FileText, Library } from "lucide-react";
+import { BookOpen, FileText, Library, Sparkles } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 export default function TeacherDashboard() {
