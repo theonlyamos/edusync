@@ -23,7 +23,7 @@ export function SupabaseAuthProvider({ children }: Props) {
     );
   }, []);
 
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<any>(undefined);
 
   useEffect(() => {
     const url = new URL(window.location.href);

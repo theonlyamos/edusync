@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useContext } from 'react';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,8 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { GRADE_LEVELS } from '@/lib/constants';
 
 export default function CreateStudentPage() {
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
+  const userRole = (session?.user?.user_metadata as any)?.role;
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +89,7 @@ export default function CreateStudentPage() {
     }));
   };
 
-  if (status === 'loading') {
+  if (session === undefined) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -98,7 +99,7 @@ export default function CreateStudentPage() {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
+  if (!session || userRole !== 'admin') {
     router.replace('/');
     return null;
   }

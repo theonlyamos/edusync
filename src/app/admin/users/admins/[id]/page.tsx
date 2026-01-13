@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useContext } from 'react';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -42,8 +42,9 @@ interface PageProps {
 
 export default function AdminDetailsPage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const { data: session, status } = useSession();
+  const session = useContext(SupabaseSessionContext);
   const router = useRouter();
+  const userRole = (session?.user?.user_metadata as any)?.role;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,54 +57,54 @@ export default function AdminDetailsPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (session === undefined) return; // Still loading
+    
+    if (!session) {
       router.replace('/login');
       return;
     }
 
-    if (status === 'authenticated') {
-      if (session?.user?.role !== 'admin') {
-        switch (session?.user?.role) {
-          case 'teacher':
-            router.replace('/teachers/dashboard');
-            break;
-          case 'student':
-            router.replace('/students/dashboard');
-            break;
-          default:
-            router.replace('/login');
-        }
-        return;
+    if (userRole !== 'admin') {
+      switch (userRole) {
+        case 'teacher':
+          router.replace('/teachers/dashboard');
+          break;
+        case 'student':
+          router.replace('/students/dashboard');
+          break;
+        default:
+          router.replace('/login');
       }
-
-      const fetchAdmin = async () => {
-        try {
-          const response = await fetch(`/api/admin/users/admins/${resolvedParams.id}`);
-          if (!response.ok) throw new Error('Failed to fetch admin details');
-          const data = await response.json();
-          setAdmin(data);
-          setFormData({
-            name: data.name,
-            email: data.email,
-            status: data.isActive ? 'active' : 'inactive',
-            permissions: data.permissions || [],
-          });
-        } catch (error) {
-          console.error('Error fetching admin:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to load admin details',
-            variant: 'destructive',
-          });
-          router.push('/admin/users/admins');
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
-      fetchAdmin();
+      return;
     }
-  }, [session, status, router, resolvedParams.id, toast]);
+
+    const fetchAdmin = async () => {
+      try {
+        const response = await fetch(`/api/admin/users/admins/${resolvedParams.id}`);
+        if (!response.ok) throw new Error('Failed to fetch admin details');
+        const data = await response.json();
+        setAdmin(data);
+        setFormData({
+          name: data.name,
+          email: data.email,
+          status: data.isActive ? 'active' : 'inactive',
+          permissions: data.permissions || [],
+        });
+      } catch (error) {
+        console.error('Error fetching admin:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load admin details',
+          variant: 'destructive',
+        });
+        router.push('/admin/users/admins');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAdmin();
+  }, [session, userRole, router, resolvedParams.id, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,7 +168,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
     }));
   };
 
-  if (status === 'loading' || isLoading) {
+  if (session === undefined || isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
@@ -177,7 +178,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
     );
   }
 
-  if (status === 'unauthenticated' || session?.user?.role !== 'admin') {
+  if (!session || userRole !== 'admin') {
     return null;
   }
 

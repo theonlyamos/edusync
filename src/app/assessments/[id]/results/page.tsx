@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useContext, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AssessmentResults } from '@/components/assessment/AssessmentResults';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 interface Assessment {
   _id: string;
@@ -57,7 +57,8 @@ export default function AssessmentResultsPage({
   const resolvedParams = use(params);
   const router = useRouter();
   const { toast } = useToast();
-  const { data: session } = useSession();
+  const session = useContext(SupabaseSessionContext);
+  const userRole = (session?.user?.user_metadata as any)?.role;
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [results, setResults] = useState<AssessmentResult[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
@@ -65,8 +66,10 @@ export default function AssessmentResultsPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (session === undefined) return; // Wait for auth to load
+    if (!session) return; // Not authenticated
     fetchData();
-  }, []);
+  }, [session, userRole]);
 
   const fetchData = async () => {
     try {
@@ -83,7 +86,7 @@ export default function AssessmentResultsPage({
       if (!resultsResponse.ok) throw new Error('Failed to fetch results');
       const resultsData = await resultsResponse.json();
 
-      if (session?.user?.role === 'student') {
+      if (userRole === 'student') {
         setResults([resultsData]); // Single result for student
         setStatistics({
           totalSubmissions: 1,
@@ -154,7 +157,7 @@ export default function AssessmentResultsPage({
           results={results}
           statistics={statistics}
           questions={assessment.questions}
-          userRole={session?.user?.role as 'teacher' | 'admin' | 'student'}
+          userRole={userRole as 'teacher' | 'admin' | 'student'}
         />
       </div>
     </DashboardLayout>
