@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 // Get a single assessment
 export async function GET(
@@ -8,8 +7,10 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || !session.user) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -44,10 +45,21 @@ export async function PUT(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || !session.user) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+
+        // Get user role
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        const userRole = userData?.role;
 
         const {
             title,
@@ -80,8 +92,8 @@ export async function PUT(
 
         // Only allow creator or admin to update
         if (
-            String(assessment.createdBy) !== session.user.id &&
-            session.user.role !== 'admin'
+            String(assessment.createdBy) !== user.id &&
+            userRole !== 'admin'
         ) {
             return NextResponse.json(
                 { error: 'Not authorized to update this assessment' },
@@ -126,10 +138,21 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || !session.user) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+
+        // Get user role
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        const userRole = userData?.role;
 
         const { id } = await params;
         const { data: assessment, error: findErr2 } = await supabase
@@ -148,8 +171,8 @@ export async function DELETE(
 
         // Only allow creator or admin to delete
         if (
-            String(assessment.createdBy) !== session.user.id &&
-            session.user.role !== 'admin'
+            String(assessment.createdBy) !== user.id &&
+            userRole !== 'admin'
         ) {
             return NextResponse.json(
                 { error: 'Not authorized to delete this assessment' },
@@ -171,4 +194,4 @@ export async function DELETE(
             { status: 500 }
         );
     }
-} 
+}

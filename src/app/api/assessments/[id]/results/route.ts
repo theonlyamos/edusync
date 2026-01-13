@@ -1,16 +1,26 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || !session.user) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+
+        // Get user role
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        const userRole = userData?.role;
 
         const { id } = await params;
         const { data: assessment, error: assessErr } = await supabase
@@ -27,19 +37,19 @@ export async function GET(
         }
 
         // Check user role and permissions
-        if (session.user.role === 'student') {
+        if (userRole === 'student') {
             // Students can only see their own results
             const { data: result, error } = await supabase
                 .from('assessment_results')
                 .select('*, student:users(name, email)')
                 .eq('assessmentId', id)
-                .eq('studentId', session.user.id)
+                .eq('studentId', user.id)
                 .maybeSingle();
             if (error) throw error;
             return NextResponse.json(result ?? null);
         } else if (
-            session.user.role === 'teacher' &&
-            String(assessment.createdBy) === session.user.id
+            userRole === 'teacher' &&
+            String(assessment.createdBy) === user.id
         ) {
             // Teachers can see all results for their assessments
             const { data: results, error } = await supabase
@@ -64,7 +74,7 @@ export async function GET(
                     averageTimeSpent
                 }
             });
-        } else if (session.user.role === 'admin') {
+        } else if (userRole === 'admin') {
             // Admins can see all results
             const { data: results, error } = await supabase
                 .from('assessment_results')
@@ -101,4 +111,4 @@ export async function GET(
             { status: 500 }
         );
     }
-} 
+}

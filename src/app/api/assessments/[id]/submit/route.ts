@@ -1,14 +1,15 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function POST(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || !session.user) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -34,7 +35,7 @@ export async function POST(
             .from('assessment_results')
             .select('id')
             .eq('assessmentId', id)
-            .eq('studentId', session.user.id)
+            .eq('studentId', user.id)
             .maybeSingle();
         if (existErr) throw existErr;
 
@@ -76,7 +77,7 @@ export async function POST(
             .from('assessment_results')
             .insert({
                 assessmentId: id,
-                studentId: session.user.id,
+                studentId: user.id,
                 answers: gradedAnswers,
                 totalScore,
                 percentage,
@@ -100,4 +101,4 @@ export async function POST(
             { status: 500 }
         );
     }
-} 
+}

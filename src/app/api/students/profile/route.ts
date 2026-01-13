@@ -1,21 +1,30 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
-// Removed legacy Mongo models; using Supabase view instead
-
-// Using Supabase 'students_view' shape directly
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'student') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a student
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'student') {
+            return new NextResponse('Unauthorized - Student access required', { status: 403 });
         }
 
         const { data: student } = await supabase
             .from('students_view')
             .select('name, email, grade')
-            .eq('id', session.user.id)
+            .eq('id', user.id)
             .maybeSingle();
 
         if (!student) {
@@ -31,4 +40,4 @@ export async function GET(req: Request) {
         console.error('Error fetching student profile:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

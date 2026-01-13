@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(
     req: NextRequest,
@@ -9,9 +8,22 @@ export async function GET(
     const { resourceId } = await params;
 
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a teacher
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'teacher') {
+            return new NextResponse('Unauthorized - Teacher access required', { status: 403 });
         }
 
         const { data: resource, error } = await supabase
@@ -39,9 +51,22 @@ export async function DELETE(
     const { resourceId } = await params;
 
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a teacher
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'teacher') {
+            return new NextResponse('Unauthorized - Teacher access required', { status: 403 });
         }
 
         const { error } = await supabase
@@ -64,4 +89,4 @@ export async function DELETE(
         console.error('Error deleting resource:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

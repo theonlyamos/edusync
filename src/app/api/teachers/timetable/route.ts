@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET(request: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a teacher
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'teacher') {
+            return new NextResponse('Unauthorized - Teacher access required', { status: 403 });
         }
 
         const { data: timetables, error: tErr } = await supabase
@@ -24,7 +36,7 @@ export async function GET(request: Request) {
             if (schedule) {
                 Object.entries(schedule).forEach(([day, periods]) => {
                     Object.entries(periods as Record<string, any>).forEach(([periodId, data]) => {
-                        if (data.teacherId === session.user.id) {
+                        if (data.teacherId === user.id) {
                             if (!filteredTimeTable[day]) {
                                 filteredTimeTable[day] = {};
                             }
@@ -54,7 +66,7 @@ export async function GET(request: Request) {
         const { data: lessons } = await supabase
             .from('lessons')
             .select('id, title, teacher')
-            .eq('teacher', session.user.id);
+            .eq('teacher', user.id);
 
         return NextResponse.json({
             timeTable: filteredTimeTable,
@@ -72,9 +84,22 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'teacher') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a teacher
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'teacher') {
+            return new NextResponse('Unauthorized - Teacher access required', { status: 403 });
         }
 
         const { timeTable, level } = await request.json();
@@ -97,7 +122,7 @@ export async function PUT(request: Request) {
                 const objData = (data ?? {}) as Record<string, any>;
                 updatedSchedule[day][period] = {
                     ...objData,
-                    teacherId: session.user.id // Ensure teacherId is set correctly
+                    teacherId: user.id // Ensure teacherId is set correctly
                 };
             });
         });
@@ -121,4 +146,4 @@ export async function PUT(request: Request) {
         console.error('Error updating timetable:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

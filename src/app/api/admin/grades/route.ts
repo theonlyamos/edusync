@@ -1,13 +1,25 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { GRADE_LEVELS } from '@/lib/constants';
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'admin') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is an admin
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'admin') {
+            return new NextResponse('Unauthorized - Admin access required', { status: 403 });
         }
 
         const gradeStats = await Promise.all(GRADE_LEVELS.map(async (level) => {
@@ -34,4 +46,4 @@ export async function GET(req: Request) {
         console.error('Error fetching grade statistics:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

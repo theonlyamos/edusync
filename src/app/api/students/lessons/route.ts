@@ -1,18 +1,30 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 export async function GET() {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'student') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Verify user is a student
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'student') {
+            return NextResponse.json({ message: 'Unauthorized - Student access required' }, { status: 403 });
         }
 
         const { data: student } = await supabase
             .from('students')
             .select('grade')
-            .eq('user_id', session.user.id)
+            .eq('user_id', user.id)
             .maybeSingle();
 
         if (!student || !student.grade) {
@@ -34,4 +46,4 @@ export async function GET() {
             { status: 500 }
         );
     }
-} 
+}

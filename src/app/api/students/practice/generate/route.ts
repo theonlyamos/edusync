@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { generateAICompletion } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 
 interface Question {
@@ -62,41 +61,28 @@ const generatePracticeSchema = z.object({
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'student') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }
 
+        // Verify user is a student
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'student') {
+            return NextResponse.json({ message: 'Unauthorized - Student access required' }, { status: 403 });
+        }
+
         const { difficulty, subject, topic, type } = await req.json();
-        // const body = await req.json();
-        // const validation = generatePracticeSchema.safeParse(body);
-
-        // if (!validation.success) {
-        //     return NextResponse.json({ message: 'Invalid input', errors: validation.error.errors }, { status: 400 });
-        // }
-
-        // const { lessonId } = validation.data;
-
-        // const { data: lesson, error } = await supabase
-        //     .from('lessons')
-        //     .select('*')
-        //     .eq('id', lessonId)
-        //     .maybeSingle();
-        // if (error) throw error;
-
-        // if (!lesson) {
-        //     return NextResponse.json({ message: 'Lesson not found' }, { status: 404 });
-        // }
 
         let lessonContent = '';
 
-        // Fetch associated content using parentId and parentType
-        // const { data: contents } = await supabase
-        //     .from('lesson_content')
-        //     .select('type, content')
-        //     .eq('lesson_id', lesson.id);
-
-        // Combine all content into context
         lessonContent = `
 Topic: ${topic}
 Subject: ${subject}
@@ -205,4 +191,4 @@ Requirements:
         console.error('Error generating practice exercises:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

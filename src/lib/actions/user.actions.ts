@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { createServerSupabase } from "@/lib/supabase.server";
 import bcrypt from "bcryptjs";
 
 interface CreateUserParams {
@@ -28,6 +28,7 @@ interface CreateAdminParams extends CreateUserParams {
 
 export async function createStudent(params: CreateStudentParams) {
     try {
+        const supabase = createServerSupabase();
         const hashedPassword = await bcrypt.hash(params.password, 10);
         const { data: user, error: userErr } = await supabase
             .from('users')
@@ -50,6 +51,7 @@ export async function createStudent(params: CreateStudentParams) {
 
 export async function createTeacher(params: CreateTeacherParams) {
     try {
+        const supabase = createServerSupabase();
         const hashedPassword = await bcrypt.hash(params.password, 10);
         const { data: user, error: userErr } = await supabase
             .from('users')
@@ -70,6 +72,7 @@ export async function createTeacher(params: CreateTeacherParams) {
         try {
             const maybeUserId = (error?.user?._id) ?? undefined;
             if (maybeUserId) {
+                const supabase = createServerSupabase();
                 await supabase.from('users').delete().eq('id', maybeUserId);
             }
         } catch { }
@@ -79,6 +82,7 @@ export async function createTeacher(params: CreateTeacherParams) {
 
 export async function createAdmin(params: CreateAdminParams) {
     try {
+        const supabase = createServerSupabase();
         const hashedPassword = await bcrypt.hash(params.password, 10);
         const { data: user, error: userErr } = await supabase
             .from('users')
@@ -100,6 +104,7 @@ export async function createAdmin(params: CreateAdminParams) {
 }
 
 export async function getUserDetails(userId: string, role: string) {
+    const supabase = createServerSupabase();
     const { data: user } = await supabase
         .from('users')
         .select('*')
@@ -123,6 +128,7 @@ export async function getUserDetails(userId: string, role: string) {
 }
 
 export async function updateUserPassword(userId: string, newPassword: string) {
+    const supabase = createServerSupabase();
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     const { data, error } = await supabase
         .from('users')
@@ -135,6 +141,7 @@ export async function updateUserPassword(userId: string, newPassword: string) {
 }
 
 export async function deactivateUser(userId: string) {
+    const supabase = createServerSupabase();
     const { data, error } = await supabase
         .from('users')
         .update({ isActive: false, updatedAt: new Date().toISOString() })
@@ -146,6 +153,7 @@ export async function deactivateUser(userId: string) {
 }
 
 export async function activateUser(userId: string) {
+    const supabase = createServerSupabase();
     const { data, error } = await supabase
         .from('users')
         .update({ isActive: true, updatedAt: new Date().toISOString() })
@@ -154,4 +162,4 @@ export async function activateUser(userId: string) {
         .maybeSingle();
     if (error) throw error;
     return data;
-} 
+}

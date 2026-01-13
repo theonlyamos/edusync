@@ -1,7 +1,8 @@
-import { supabase } from "@/lib/supabase";
+import { createServerSupabase } from "@/lib/supabase.server";
 
 export async function getAssessments() {
     try {
+        const supabase = createServerSupabase();
         const { data, error } = await supabase
             .from('assessments')
             .select('*')
@@ -20,6 +21,7 @@ export async function getAssessments() {
 
 export async function getAssessmentById(id: string) {
     try {
+        const supabase = createServerSupabase();
         const { data, error } = await supabase
             .from('assessments')
             .select('*')
@@ -35,6 +37,7 @@ export async function getAssessmentById(id: string) {
 
 export async function createAssessment(assessmentData: any) {
     try {
+        const supabase = createServerSupabase();
         const payload = {
             ...assessmentData,
             createdAt: new Date().toISOString(),
@@ -55,6 +58,7 @@ export async function createAssessment(assessmentData: any) {
 
 export async function updateAssessment(id: string, assessmentData: any) {
     try {
+        const supabase = createServerSupabase();
         const { data, error } = await supabase
             .from('assessments')
             .update({ ...assessmentData, updatedAt: new Date().toISOString() })
@@ -71,6 +75,7 @@ export async function updateAssessment(id: string, assessmentData: any) {
 
 export async function deleteAssessment(id: string) {
     try {
+        const supabase = createServerSupabase();
         const { error } = await supabase
             .from('assessments')
             .delete()
@@ -85,6 +90,7 @@ export async function deleteAssessment(id: string) {
 
 export async function getAssessmentResults() {
     try {
+        const supabase = createServerSupabase();
         const { data, error } = await supabase
             .from('assessment_results')
             .select('*, assessment:assessments(*), student:users(name, email)');
@@ -103,6 +109,7 @@ export async function submitAssessment(
     score: number
 ) {
     try {
+        const supabase = createServerSupabase();
         const payload = {
             assessmentId,
             studentId,
@@ -121,4 +128,4 @@ export async function submitAssessment(
         console.error("Error submitting assessment:", error);
         throw error;
     }
-} 
+}

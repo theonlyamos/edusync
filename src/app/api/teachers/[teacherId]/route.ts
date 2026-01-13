@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 // Get teacher details by ID
 export async function GET(
@@ -8,8 +7,10 @@ export async function GET(
     { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -68,8 +69,10 @@ export async function PUT(
     { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
@@ -135,11 +138,28 @@ export async function DELETE(
     { params }: { params: Promise<{ teacherId: string }> }
 ) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'admin') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        // Check if user is authenticated and get their role from the database
+        if (!user) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
+            );
+        }
+
+        // Verify user is an admin
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'admin') {
+            return NextResponse.json(
+                { error: "Unauthorized - Admin access required" },
+                { status: 403 }
             );
         }
 

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
 import OpenAI from 'openai';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 const openai = new OpenAI({
     baseURL: process.env.OPENAI_BASE_URL,
@@ -49,16 +48,29 @@ Remember to:
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'student') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a student
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'student') {
+            return new NextResponse('Unauthorized - Student access required', { status: 403 });
         }
 
         // Get student's grade level
         const { data: student } = await supabase
             .from('students')
             .select('grade')
-            .eq('user_id', session.user.id)
+            .eq('user_id', user.id)
             .maybeSingle();
 
         if (!student?.grade) {
@@ -122,7 +134,7 @@ export async function POST(req: Request) {
             const { data } = await supabase
                 .from('chats')
                 .insert({
-                    userId: session.user.id,
+                    userId: user.id,
                     lessonId: lessonId ?? null,
                     messages: [...messages, tutorMessage],
                     title: messages[0]?.content?.slice(0, 50) + '...',
@@ -150,4 +162,4 @@ export async function POST(req: Request) {
         console.error('Error in AI tutor:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

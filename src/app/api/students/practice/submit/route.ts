@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { getServerSession } from '@/lib/auth';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 interface Answer {
     questionId: string;
@@ -16,9 +15,22 @@ interface Question {
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'student') {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        // Verify user is a student
+        const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!userData || userData.role !== 'student') {
+            return new NextResponse('Unauthorized - Student access required', { status: 403 });
         }
 
         const { answers, questions, subject, topic } = await req.json();
@@ -52,7 +64,7 @@ export async function POST(req: Request) {
         const { error: insErr } = await supabase
             .from('practice_results')
             .insert({
-                studentId: session.user.id,
+                studentId: user.id,
                 subject,
                 topic,
                 score,
@@ -65,10 +77,10 @@ export async function POST(req: Request) {
         const { data: currentStatsRaw } = await supabase
             .from('student_stats')
             .select('*')
-            .eq('studentId', session.user.id)
+            .eq('studentId', user.id)
             .maybeSingle();
         const currentStats = currentStatsRaw || {
-            studentId: session.user.id,
+            studentId: user.id,
             totalExercisesCompleted: 0,
             totalPointsEarned: 0,
             recentScores: [] as number[]
@@ -79,7 +91,7 @@ export async function POST(req: Request) {
 
         // Update student's practice statistics
         const upsertPayload = {
-            studentId: session.user.id,
+            studentId: user.id,
             totalExercisesCompleted: (currentStats.totalExercisesCompleted ?? 0) + 1,
             totalPointsEarned: (currentStats.totalPointsEarned ?? 0) + earnedPoints,
             recentScores,
@@ -89,7 +101,7 @@ export async function POST(req: Request) {
             const { error } = await supabase
                 .from('student_stats')
                 .update(upsertPayload)
-                .eq('studentId', session.user.id);
+                .eq('studentId', user.id);
             if (error) throw error;
         } else {
             const { error } = await supabase
@@ -103,4 +115,4 @@ export async function POST(req: Request) {
         console.error('Error submitting practice answers:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }
-} 
+}

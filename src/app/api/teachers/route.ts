@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { createSSRUserSupabase } from '@/lib/supabase.server';
 
 // Get all teachers (for authenticated users)
 export async function GET(request: Request) {
     try {
-        const session = await getServerSession();
-        if (!session) {
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
