@@ -435,45 +435,6 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
             streamRef.current = stream;
             sessionStartedAtRef.current = Date.now();
 
-            const pickType = () => {
-                const candidates = [
-                    'audio/webm;codecs=opus',
-                    'audio/webm',
-                    'audio/ogg;codecs=opus',
-                    'audio/ogg',
-                ];
-                for (const t of candidates) {
-                    // @ts-ignore
-                    if (typeof MediaRecorder !== 'undefined' && (MediaRecorder as any).isTypeSupported?.(t)) return t;
-                }
-                return 'audio/webm';
-            };
-            try {
-                // @ts-ignore
-                if (typeof MediaRecorder !== 'undefined') {
-                    const mimeType = pickType();
-                    userChunksRef.current = [];
-                    userRecorderRef.current = new MediaRecorder(stream, { mimeType });
-                    userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
-                        if (e.data && e.data.size > 0) {
-                            // Gate saving by VAD if enabled
-                            if (saveOnlySpeechRef.current) {
-                                const include = vadSpeechSinceLastChunkRef.current || vadSpeechActiveRef.current;
-                                vadSpeechSinceLastChunkRef.current = false;
-                                if (!include) {
-                                    return; // drop silent chunk
-                                }
-                            }
-                            userChunksRef.current.push(e.data);
-                            pendingUserChunkQueueRef.current.push(e.data);
-                            maybeUploadSegment('user');
-                        }
-                    };
-                    userRecorderRef.current.start(1000);
-                    lastUserSegmentStartRef.current = Date.now();
-                }
-            } catch { }
-
             // Gemini native-audio models currently require 16 kHz PCM input.
             const desiredSampleRate = 16000;
             const tempContext = new AudioContext({ sampleRate: desiredSampleRate });
@@ -737,6 +698,47 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
                 workletNode.connect(audioContext.destination);
             } catch { }
             processorRef.current = workletNode;
+
+            // Initialize MediaRecorder AFTER AudioWorklet is connected
+            // This ensures VAD state is being updated before recording starts
+            const pickType = () => {
+                const candidates = [
+                    'audio/webm;codecs=opus',
+                    'audio/webm',
+                    'audio/ogg;codecs=opus',
+                    'audio/ogg',
+                ];
+                for (const t of candidates) {
+                    // @ts-ignore
+                    if (typeof MediaRecorder !== 'undefined' && (MediaRecorder as any).isTypeSupported?.(t)) return t;
+                }
+                return 'audio/webm';
+            };
+            try {
+                // @ts-ignore
+                if (typeof MediaRecorder !== 'undefined') {
+                    const mimeType = pickType();
+                    userChunksRef.current = [];
+                    userRecorderRef.current = new MediaRecorder(stream, { mimeType });
+                    userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                        if (e.data && e.data.size > 0) {
+                            // Gate saving by VAD if enabled
+                            if (saveOnlySpeechRef.current) {
+                                const include = vadSpeechSinceLastChunkRef.current || vadSpeechActiveRef.current;
+                                vadSpeechSinceLastChunkRef.current = false;
+                                if (!include) {
+                                    return; // drop silent chunk
+                                }
+                            }
+                            userChunksRef.current.push(e.data);
+                            pendingUserChunkQueueRef.current.push(e.data);
+                            maybeUploadSegment('user');
+                        }
+                    };
+                    userRecorderRef.current.start(1000);
+                    lastUserSegmentStartRef.current = Date.now();
+                }
+            } catch { }
 
             // Session resumption initial message
             const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
