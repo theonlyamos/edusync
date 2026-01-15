@@ -18,12 +18,12 @@ import { BookOpen, FileText, Library } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 interface Lesson {
-  _id: string;
+  id: string;
   title: string;
   subject: string;
-  gradeLevel: string;
+  gradelevel: string;
   objectives: string;
-  createdAt: string;
+  created_at: string;
 }
 
 export default function StudentLessonsPage() {
@@ -66,12 +66,12 @@ export default function StudentLessonsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {lessons.map((lesson) => (
-              <Link href={`/students/lessons/${lesson._id}`} key={lesson._id}>
+              <Link href={`/students/lessons/${lesson.id}`} key={lesson.id}>
                 <Card className="cursor-pointer hover:shadow-lg transition-shadow h-full">
                   <CardHeader>
                     <CardTitle>{lesson.title}</CardTitle>
                     <CardDescription>
-                      {lesson.subject} • Grade {lesson.gradeLevel}
+                      {lesson.subject} • Grade {lesson.gradelevel}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -81,7 +81,7 @@ export default function StudentLessonsPage() {
                   </CardContent>
                   <CardFooter className="flex justify-between items-center">
                     <p className="text-sm text-muted-foreground">
-                      Added: {new Date(lesson.createdAt).toLocaleDateString()}
+                      Added: {new Date(lesson.created_at).toLocaleDateString()}
                     </p>
                     <Button variant="ghost" size="sm">
                       <BookOpen className="h-4 w-4 mr-2" />

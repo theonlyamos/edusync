@@ -48,10 +48,10 @@ interface LessonContent {
 }
 
 interface Lesson {
-  _id: string;
+  id: string;
   title: string;
   subject: string;
-  gradeLevel: string;
+  gradelevel: string;
   objectives: string;
   content: string;
 }
@@ -144,7 +144,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          lessonId: lesson._id,
+          lessonId: lesson.id,
         }),
       });
 
@@ -246,7 +246,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
           <CardHeader>
             <CardTitle>{lesson.title}</CardTitle>
             <CardDescription>
-              {lesson.subject} • Grade {lesson.gradeLevel}
+              {lesson.subject} • Grade {lesson.gradelevel}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -262,14 +262,14 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                 <div>
                   <h3 className="font-semibold mb-2">Learning Objectives</h3>
                   <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown>{lesson.objectives}</ReactMarkdown>
+                    <ReactMarkdown>{typeof lesson.objectives === 'string' ? lesson.objectives : JSON.stringify(lesson.objectives)}</ReactMarkdown>
                   </div>
                 </div>
                 {lesson.content && (
                   <div>
                     <h3 className="font-semibold mb-2">Content</h3>
                     <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown>{lesson.content}</ReactMarkdown>
+                      <ReactMarkdown>{typeof lesson.content === 'string' ? lesson.content : JSON.stringify(lesson.content)}</ReactMarkdown>
                     </div>
                   </div>
                 )}

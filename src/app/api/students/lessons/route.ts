@@ -35,8 +35,8 @@ export async function GET() {
         const { data: lessons, error } = await supabase
             .from('lessons')
             .select('*')
-            .eq('gradeLevel', student.grade)
-            .order('createdAt', { ascending: false });
+            .eq('gradelevel', student.grade)
+            .order('created_at', { ascending: false });
         if (error) throw error;
         return NextResponse.json(lessons ?? []);
     } catch (error) {
