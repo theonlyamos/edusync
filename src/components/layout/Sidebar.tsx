@@ -27,7 +27,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  Users2
+  Users2,
+  Sparkles
 } from "lucide-react";
 
 interface SidebarLink {
@@ -167,6 +168,11 @@ const studentLinks: SidebarLink[] = [
     label: 'AI Tutor',
     icon: <MessagesSquare className="h-5 w-5" />,
     href: '/students/tutor'
+  },
+  {
+    label: 'Learn with AI',
+    icon: <Sparkles className="h-5 w-5" />,
+    href: '/students/learn'
   },
   {
     label: 'Collaborator',

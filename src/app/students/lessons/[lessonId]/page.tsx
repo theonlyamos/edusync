@@ -16,9 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { PracticeExercise } from '@/components/practice/PracticeExercise';
 import { ContentDisplay } from '@/components/content/ContentDisplay';
-import { Loader2, FileText, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { Loader2, FileText, Link as LinkIcon, ExternalLink, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
+import { FloatingActionButton } from '@/components/ui/floating-action-button';
 import type { 
   QuizContentType, 
   WorksheetContentType, 
@@ -180,6 +181,18 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
 
   const handleGenerateNew = () => {
     handleStartPractice();
+  };
+
+  const handleLearnWithAI = () => {
+    if (!lesson) return;
+    const params = new URLSearchParams({
+      lessonId: resolvedParams.lessonId,
+      lessonTitle: lesson.title,
+      lessonSubject: lesson.subject,
+      lessonGrade: lesson.gradelevel,
+      lessonObjectives: lesson.objectives || '',
+    });
+    router.push(`/students/learn?${params.toString()}`);
   };
 
   if (loading || !session) {
@@ -397,6 +410,15 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
           </CardContent>
         </Card>
       </div>
+      
+      {/* Learn with AI FAB */}
+      {lesson && (
+        <FloatingActionButton
+          icon={<Sparkles className="w-5 h-5" />}
+          label="Learn with AI"
+          onClick={handleLearnWithAI}
+        />
+      )}
     </DashboardLayout>
   );
 } 
