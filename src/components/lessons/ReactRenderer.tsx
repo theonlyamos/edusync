@@ -11,7 +11,7 @@ import React, { useState, useEffect, useRef } from 'react';
  *   - Blocks network requests (connect-src 'none')
  *   - Only allows scripts from trusted CDNs with nonces
  *   - Prevents access to parent window/document
- * - Code is escaped to prevent script tag injection
+ * - User code is injected via JSON.stringify (no escaping that would break template literals)
  * - All dependencies (React, Recharts, React-Leaflet) loaded from CDN
  * - Simplified UI components provided inline (no external dependencies)
  * 
@@ -25,16 +25,7 @@ interface ReactRendererProps {
   onError?: (error: string) => void;
 }
 
-// Helper to escape code for safe injection into script tags
-function escapeScriptContent(code: string): string {
-  return code
-    .replace(/\\/g, '\\\\')
-    .replace(/`/g, '\\`')
-    .replace(/\$/g, '\\$')
-    .replace(/<\/script>/gi, '<\\/script>');
-}
-
-export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) => {
+export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +38,21 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
 
     try {
       const iframe = iframeRef.current;
-      const escapedCode = escapeScriptContent(code);
+      // Normalize bare React.createElement(...) to a component so it can render
+      const normalizeUserCode = (input: string) => {
+        const trimmed = input.trim();
+        const hasComponentExport = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/.test(trimmed);
+        const isBareElement = /^React\.createElement\s*\(/.test(trimmed);
+        if (!hasComponentExport && isBareElement) {
+          return `const Component = () => (${trimmed});`;
+        }
+        return input;
+      };
+
+      // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
+      const codeJson = JSON.stringify(normalizeUserCode(code));
+      const returnStatement = '\n\n// Return the component\nreturn typeof Component !== \'undefined\' ? Component : typeof App !== \'undefined\' ? App : typeof Quiz !== \'undefined\' ? Quiz : typeof InteractiveComponent !== \'undefined\' ? InteractiveComponent : typeof Calculator !== \'undefined\' ? Calculator : typeof Game !== \'undefined\' ? Game : (() => React.createElement(\'div\', {}, \'No component found\'));';
+      const returnStatementJson = JSON.stringify(returnStatement);
 
       // Generate a nonce for CSP
       const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -434,8 +439,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
         // Make hooks available
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
         
-        // Create component from user code
+        // Create component from user code (string concatenation preserves template literals in user code)
         try {
+          var __userCode = ${codeJson};
           const createComponent = new Function(
             'React', 'useState', 'useEffect', 'useMemo', 'useCallback', 'useRef',
             'Button', 'Input', 'Card', 'CardContent', 'CardHeader', 'CardTitle',
@@ -447,17 +453,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
             'Line', 'Bar', 'Area', 'Pie', 'Cell', 'Scatter', 'RadialBar', 'RadialBarChart',
             'MapContainer', 'TileLayer', 'Marker', 'Popup', 'Polyline', 'Polygon',
             'Circle', 'Rectangle', 'useMap', 'useMapEvent', 'L',
-            \`${escapedCode}
-            
-            // Return the component
-            return typeof Component !== 'undefined' ? Component : 
-                   typeof App !== 'undefined' ? App :
-                   typeof Quiz !== 'undefined' ? Quiz :
-                   typeof InteractiveComponent !== 'undefined' ? InteractiveComponent :
-                   typeof Calculator !== 'undefined' ? Calculator :
-                   typeof Game !== 'undefined' ? Game :
-                   (() => React.createElement('div', {}, 'No component found'));
-            \`
+            __userCode + ${returnStatementJson}
           );
           
           const ComponentFunction = createComponent(
@@ -555,4 +551,6 @@ export const ReactRenderer: React.FC<ReactRendererProps> = ({ code, onError }) =
       />
     </div>
   );
-}; 
+});
+
+ReactRenderer.displayName = 'ReactRenderer';

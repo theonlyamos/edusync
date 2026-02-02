@@ -8,7 +8,7 @@ interface SafeCodeRunnerProps {
   onError?: (error: string) => void;
 }
 
-export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, onError }) => {
+export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code, library, onError }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,4 +152,6 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = ({ code, library, o
       />
     </div>
   );
-};
+});
+
+SafeCodeRunner.displayName = 'SafeCodeRunner';

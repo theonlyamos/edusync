@@ -62,9 +62,11 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const [lessonContext, setLessonContext] = useState<LessonContext | undefined>(initialLessonContext);
   const [lessonLoading, setLessonLoading] = useState(!!lessonIdFromUrl);
-  
+
   const vizRef = useRef<HTMLDivElement | null>(null);
+  const vizOnlyRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
+  const showRef = useRef<'render' | 'code'>('render');
   const regenerationAttemptsRef = useRef(0);
   const MAX_REGENERATION_ATTEMPTS = 2;
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -223,7 +225,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
 
     if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
     const current = visualizations[currentVizIndex];
-    const panelElement = vizRef.current;
+    const panelElement = vizOnlyRef.current || vizRef.current;
     let panelDimensions = { width: 800, height: 600 };
     if (panelElement) {
       const rect = panelElement.getBoundingClientRect();
@@ -296,11 +298,22 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
     }
   }, [code, library, handleRendererError]);
 
+  const editorData = useMemo(
+    () => ({
+      initialCode: code,
+      language: library === 'react' ? 'javascript' : 'javascript',
+      tests: [],
+    }),
+    [code, library]
+  );
+
+  const handleEditorSubmit = useCallback(() => { }, []);
+
   const handleToolCall = async (name: string, args: any) => {
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
       try {
-        const panelElement = vizRef.current;
+        const panelElement = vizOnlyRef.current || vizRef.current;
         let panelDimensions = { width: 800, height: 600 };
 
         if (panelElement) {
@@ -393,14 +406,52 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
     setLibrary(v.library);
   };
 
+  // Keep a ref of the current view mode for the screenshot effect without re-creating the interval
+  useEffect(() => {
+    showRef.current = show;
+  }, [show]);
+
   // Capture and send visualization screenshots
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
     const id = setInterval(() => {
-      const container = vizRef.current as HTMLElement | null;
+      const container = vizOnlyRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
+      // Skip screenshot when code view is active - Monaco DOM is heavy
+      if (showRef.current === 'code') return;
       isCapturingRef.current = true;
-      toPng(container, { pixelRatio: 1 })
+      toPng(container, {
+        pixelRatio: 1,
+        skipFonts: true,
+        cacheBust: true,
+        filter: (node) => {
+          // Skip style elements (Monaco injects <style> not <link>)
+          if (node && (node as HTMLElement).nodeName === 'STYLE') {
+            return false;
+          }
+
+          // Skip external stylesheets that can cause cross-origin CSSRule access errors
+          if (node instanceof HTMLLinkElement && node.rel === 'stylesheet') {
+            const href = node.href || '';
+            if (href.startsWith('http') && !href.includes(window.location.hostname)) {
+              return false;
+            }
+          }
+
+          // Skip Monaco Editor elements
+          if (node instanceof Element) {
+            if (
+              node.classList?.contains('monaco-editor') ||
+              node.classList?.contains('monaco-aria-container') ||
+              node.closest?.('.monaco-editor')
+            ) {
+              return false;
+            }
+          }
+
+          return true;
+        },
+      })
         .then((dataUrl) => {
           window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
         })
@@ -410,7 +461,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         });
     }, 3000);
     return () => clearInterval(id);
-  }, [connectionStatus, show, code, library]);
+  }, [connectionStatus]);
 
   // Create session when connected
   useEffect(() => {
@@ -614,41 +665,34 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col p-0 relative">
-              <div className="flex-1 p-6">
-                {show === 'render' && (
-                  !generatingVisualization ? (
-                    <div className="h-full w-full flex justify-center items-center">
-                      {renderVisualization}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center">
-                      <Loader2 className="w-10 h-10 animate-spin mr-2" />
-                      <div className="text-center text-muted-foreground">
-                        <div className="text-lg mb-2">Generating visualization...</div>
-                      </div>
-                    </div>
-                  )
+              <div className="flex-1 p-6 space-y-4">
+                {!generatingVisualization && (
+                  <div
+                    ref={vizOnlyRef}
+                    className="h-full w-full flex justify-center items-center"
+                    style={{ display: show === 'render' ? 'flex' : 'none' }}
+                  >
+                    {renderVisualization}
+                  </div>
                 )}
-                {show === 'code' && (
-                  !generatingVisualization ? (
-                    <div className="h-full">
-                      <Editor
-                        data={{
-                          initialCode: code,
-                          language: library === 'react' ? 'javascript' : 'javascript',
-                          tests: [],
-                        }}
-                        onSubmit={() => { }}
-                      />
+                {!generatingVisualization && (
+                  <div
+                    className="h-full"
+                    style={{ display: show === 'code' ? 'block' : 'none' }}
+                  >
+                    <Editor
+                      data={editorData}
+                      onSubmit={handleEditorSubmit}
+                    />
+                  </div>
+                )}
+                {generatingVisualization && (
+                  <div className="h-full flex flex-col items-center justify-center">
+                    <Loader2 className="w-10 h-10 animate-spin mr-2" />
+                    <div className="text-center text-muted-foreground">
+                      <div className="text-lg mb-2">Generating visualization...</div>
                     </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center">
-                      <Loader2 className="w-10 h-10 animate-spin mr-2" />
-                      <div className="text-center text-muted-foreground">
-                        <div className="text-lg mb-2">Generating visualization...</div>
-                      </div>
-                    </div>
-                  )
+                  </div>
                 )}
               </div>
             </CardContent>
