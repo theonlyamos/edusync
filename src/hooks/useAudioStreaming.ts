@@ -31,6 +31,15 @@ interface AudioStreamingActions {
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
 }
 
+export interface LessonContext {
+    lessonId?: string;
+    title?: string;
+    subject?: string;
+    gradeLevel?: string;
+    objectives?: string;
+    content?: string;
+}
+
 const systemPrompt = `### **Persona**
 
 You are "Eureka," a friendly, patient, and creative AI tutor. Your mission is to make learning feel like an adventure. You are a visual-first teacher who uses illustrations, diagrams, and simple interactive exercises to make complex topics "click." You are enthusiastic, encouraging, and celebrate curiosity.
@@ -119,7 +128,7 @@ When explaining a new concept, follow this general cycle to keep the learner eng
 * Overly formal constructions like "one might consider," "it is important to note," "in order to," or "due to the fact that."  
 * Any tone that feels stiff, distant, or performative.`;
 
-export function useAudioStreaming(topic?: string | null): AudioStreamingState & AudioStreamingActions {
+export function useAudioStreaming(topic?: string | null, lessonContext?: LessonContext): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -482,8 +491,32 @@ export function useAudioStreaming(topic?: string | null): AudioStreamingState & 
             const responseQueue: LiveServerMessage[] = [];
             const audioParts: string[] = [];
 
-            const topicContext = topic ? `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.` : '';
-            const finalSystemPrompt = systemPrompt + topicContext;
+            // Build context addition based on lesson context or topic
+            let contextAddition = '';
+            
+            if (lessonContext?.title) {
+                contextAddition = `
+
+### **Lesson Context**
+
+You are helping a student learn material from a specific lesson:
+- **Lesson:** ${lessonContext.title}
+- **Subject:** ${lessonContext.subject || 'Not specified'}
+- **Grade Level:** ${lessonContext.gradeLevel || 'Not specified'}
+
+**Learning Objectives:**
+${lessonContext.objectives || 'No specific objectives provided.'}
+
+**Lesson Content:**
+${lessonContext.content ? lessonContext.content.substring(0, 2000) + (lessonContext.content.length > 2000 ? '...' : '') : 'No content provided.'}
+
+Focus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes. When the student asks questions, relate answers back to the lesson objectives.
+`;
+            } else if (topic) {
+                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
+            }
+            
+            const finalSystemPrompt = systemPrompt + contextAddition;
 
             const connectConfig: any = {
                 model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,

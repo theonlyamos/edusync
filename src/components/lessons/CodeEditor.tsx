@@ -1,5 +1,16 @@
-import React, { useState } from 'react';
-import Editor from '@monaco-editor/react';
+ 'use client';
+
+import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+
+const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      Loading editor...
+    </div>
+  ),
+});
 
 interface CodeEditorProps {
   data: {
@@ -7,11 +18,16 @@ interface CodeEditorProps {
     language: string;
     tests: string[];
   };
-  onSubmit: (result: {compiled: boolean; testsPassed: boolean}) => void;
+  onSubmit: (result: { compiled: boolean; testsPassed: boolean }) => void;
 }
 
-export const CodeEditor: React.FC<CodeEditorProps> = ({ data, onSubmit }) => {
+export const CodeEditor: React.FC<CodeEditorProps> = React.memo(({ data, onSubmit }) => {
   const [code, setCode] = useState(data.initialCode);
+
+  // Keep local code state in sync with parent-provided initialCode
+  useEffect(() => {
+    setCode(data.initialCode);
+  }, [data.initialCode]);
 
   const runTests = async () => {
     try {
@@ -59,7 +75,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ data, onSubmit }) => {
 
   return (
     <div className="w-full h-[400px] border rounded-md">
-      <Editor
+      <MonacoEditor
         height="100%"
         defaultLanguage={data.language}
         value={code}
@@ -78,4 +94,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ data, onSubmit }) => {
       </button>
     </div>
   );
-};
+});
+
+CodeEditor.displayName = 'CodeEditor';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, useCallback, useMemo, useContext } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback, useMemo } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,10 +8,11 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose, RefreshCw } from 'lucide-react';
-import { useSearchParams, useRouter, useParams } from 'next/navigation';
+import { Loader2, X, ChevronLeft, ChevronRight, RefreshCw, BookOpen } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
+import { LessonContext } from '@/hooks/useAudioStreaming';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -26,17 +27,24 @@ type Visualization = {
   panelDimensions?: { width: number; height: number }
 };
 
-type InteractiveAITutorProps = {
+type StudentInteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
   onSessionEnded?: (sessionId: string | null) => void;
+  initialLessonContext?: LessonContext;
 };
 
-export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }: InteractiveAITutorProps) => {
+export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded, initialLessonContext }: StudentInteractiveAITutorProps) => {
   const searchParams = useSearchParams();
-  const apiKey = searchParams.get('apiKey');
-  const topicFromUrl = searchParams.get('topic');
   const debugMode = searchParams.get('debug') === 'true';
   const getFeedback = searchParams.get('getFeedback') === 'true';
+  
+  // Parse lesson context from URL params
+  const lessonIdFromUrl = searchParams.get('lessonId');
+  const lessonTitleFromUrl = searchParams.get('lessonTitle');
+  const lessonSubjectFromUrl = searchParams.get('lessonSubject');
+  const lessonGradeFromUrl = searchParams.get('lessonGrade');
+  const lessonObjectivesFromUrl = searchParams.get('lessonObjectives');
+  
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -49,13 +57,12 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
   const [generatingVisualization, setGeneratingVisualization] = useState(false);
-  const [topic, setTopic] = useState<string | null>(topicFromUrl);
+  const [topic, setTopic] = useState<string | null>(lessonTitleFromUrl || initialLessonContext?.title || null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [credits, setCredits] = useState<number | null>(null);
-  const [creditsLoading, setCreditsLoading] = useState(true);
-  const [showCreditWarning, setShowCreditWarning] = useState(false);
-  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
+  const [lessonContext, setLessonContext] = useState<LessonContext | undefined>(initialLessonContext);
+  const [lessonLoading, setLessonLoading] = useState(!!lessonIdFromUrl);
+
   const vizRef = useRef<HTMLDivElement | null>(null);
   const vizOnlyRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
@@ -78,12 +85,57 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const previousSessionIdRef = useRef<string | null>(null);
   const lastEndedSessionIdRef = useRef<string | null>(null);
 
+  // Fetch lesson content if lessonId is provided
+  useEffect(() => {
+    const fetchLessonContent = async () => {
+      if (!lessonIdFromUrl) {
+        setLessonLoading(false);
+        return;
+      }
+      
+      try {
+        setLessonLoading(true);
+        const response = await fetch(`/api/lessons/${lessonIdFromUrl}`);
+        if (response.ok) {
+          const lesson = await response.json();
+          const context: LessonContext = {
+            lessonId: lessonIdFromUrl,
+            title: lesson.title,
+            subject: lesson.subject,
+            gradeLevel: lesson.gradelevel,
+            objectives: lesson.objectives,
+            content: lesson.content,
+          };
+          setLessonContext(context);
+          if (lesson.title && !topic) {
+            setTopic(lesson.title);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch lesson:', error);
+        // Fall back to URL params if fetch fails
+        if (lessonTitleFromUrl) {
+          setLessonContext({
+            lessonId: lessonIdFromUrl,
+            title: lessonTitleFromUrl,
+            subject: lessonSubjectFromUrl || undefined,
+            gradeLevel: lessonGradeFromUrl || undefined,
+            objectives: lessonObjectivesFromUrl || undefined,
+          });
+        }
+      } finally {
+        setLessonLoading(false);
+      }
+    };
+
+    fetchLessonContent();
+  }, [lessonIdFromUrl]);
+
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
       try {
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
-          { status: 'ended', ended: true },
-          { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+          { status: 'ended', ended: true }
         );
         lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
@@ -99,17 +151,10 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   };
 
   const handleVoiceStop = async () => {
-    // Clear credit deduction interval
-    if (creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-
     if (currentSessionId) {
       try {
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
-          { status: 'ended', ended: true },
-          { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+          { status: 'ended', ended: true }
         );
       } catch { }
       lastEndedSessionIdRef.current = currentSessionId;
@@ -121,12 +166,10 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     setVisualizations([]);
     setCurrentVizIndex(-1);
     setError('');
-    setShowCreditWarning(false);
     setSessionManuallyStopped(true);
   };
 
   const resetSessionState = useCallback(() => {
-    // Stop any active voice session
     if (voiceActive) {
       handleVoiceStop();
     }
@@ -136,21 +179,14 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     setVisualizations([]);
     setCurrentVizIndex(-1);
     setError('');
-    setTopic(null);
+    setTopic(lessonContext?.title || null);
     lastEndedSessionIdRef.current = currentSessionId;
     setCurrentSessionId(null);
     setShowFeedbackForm(getFeedback);
     setFeedbackTrigger(getFeedback ? 'manual_stop' : null);
     setGeneratingVisualization(false);
-    setShowCreditWarning(false);
     setSessionManuallyStopped(false);
-
-    // Clear any intervals
-    if (creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [voiceActive, handleVoiceStop, creditDeductionInterval]);
+  }, [voiceActive, handleVoiceStop, lessonContext]);
 
   const handleFeedbackFormChange = useCallback((show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -159,13 +195,9 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
 
   const handleFeedbackSubmit = async (feedback: FeedbackData) => {
     try {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-      };
       const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...feedback,
           timestamp: new Date().toISOString(),
@@ -176,8 +208,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       if (!response.ok) {
         throw new Error('Failed to submit feedback');
       }
-
-      console.log('Feedback submitted successfully');
     } catch (error) {
       console.error('Failed to submit feedback:', error);
     }
@@ -188,17 +218,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     setFeedbackTrigger(null);
   };
 
-  const getLibraryDisplayName = () => {
-    switch (library) {
-      case 'p5': return 'p5.js';
-      case 'three': return 'Three.js';
-      case 'react': return 'React';
-      default: return 'Visualization';
-    }
-  };
-
   const handleRegenerateVisualization = useCallback(async (isManualTrigger = true) => {
-    // Reset retry counter when manually triggered
     if (isManualTrigger) {
       regenerationAttemptsRef.current = 0;
     }
@@ -213,10 +233,10 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     }
     try {
       setGeneratingVisualization(true);
-      setError(''); // Clear previous error when regenerating
+      setError('');
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...apiKey ? { Authorization: `Bearer ${apiKey}` } : {} },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions, theme, theme_colors: themeColors })
       });
       if (!response.ok) throw new Error('Failed to regenerate visualization');
@@ -238,9 +258,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
             library: vizData.library,
             explanation: vizData.explanation ?? null,
             panel_dimensions: panelDimensions
-          },
-            { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-          );
+          });
         } catch { }
       }
     } catch (e: any) {
@@ -248,24 +266,19 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     } finally {
       setGeneratingVisualization(false);
     }
-  }, [currentVizIndex, visualizations, apiKey, theme, themeColors])
+  }, [currentVizIndex, visualizations, theme, themeColors])
 
   const handleRendererError = useCallback(async (errMsg: string) => {
-    // Increment retry counter
     regenerationAttemptsRef.current += 1;
 
-    // Check if we've exceeded the retry limit
     if (regenerationAttemptsRef.current > MAX_REGENERATION_ATTEMPTS) {
       setError(`Visualization failed to render after ${MAX_REGENERATION_ATTEMPTS} attempts. ${errMsg}`);
       console.error('Max regeneration attempts reached:', errMsg);
       return;
     }
 
-    console.log(`Regeneration attempt ${regenerationAttemptsRef.current}/${MAX_REGENERATION_ATTEMPTS} due to error:`, errMsg);
-
     try {
-      // Don't show the intermediate error during auto-regeneration
-      await handleRegenerateVisualization(false); // false = not manual trigger
+      await handleRegenerateVisualization(false);
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
     }
@@ -297,13 +310,11 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const handleEditorSubmit = useCallback(() => { }, []);
 
   const handleToolCall = async (name: string, args: any) => {
-
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
       try {
-        // Get panel dimensions
         const panelElement = vizOnlyRef.current || vizRef.current;
-        let panelDimensions = { width: 800, height: 600 }; // Default dimensions
+        let panelDimensions = { width: 800, height: 600 };
 
         if (panelElement) {
           const rect = panelElement.getBoundingClientRect();
@@ -315,10 +326,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
 
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             task_description: args.task_description,
             panel_dimensions: panelDimensions,
@@ -332,8 +340,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         }
 
         const vizData = await response.json();
-        regenerationAttemptsRef.current = 0; // Reset retry counter for new visualization
-        setError(''); // Clear any previous error
+        regenerationAttemptsRef.current = 0;
+        setError('');
         setCode(vizData.code);
         setLibrary(vizData.library);
         setVisualizations(prev => {
@@ -351,9 +359,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
               panel_dimensions: panelDimensions,
               description: args.task_description,
               data: null,
-            },
-              { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-            );
+            });
           } catch { }
         }
       } catch (e: any) {
@@ -365,15 +371,11 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     if (name === 'set_topic') {
       try {
         const t = typeof args?.topic === 'string' ? args.topic.trim() : '';
-        console.log('set_topic', t, currentSessionId);
         if (t) {
           setTopic(t);
           if (currentSessionId) {
             try {
-              await axios.patch(`/api/learning/sessions/${currentSessionId}`,
-                { topic: t },
-                { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-              );
+              await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t });
             } catch { }
           }
         }
@@ -385,8 +387,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const canNext = currentVizIndex >= 0 && currentVizIndex < visualizations.length - 1;
   const goPrev = () => {
     if (!canPrev) return;
-    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
-    setError(''); // Clear any previous error
+    regenerationAttemptsRef.current = 0;
+    setError('');
     const idx = currentVizIndex - 1;
     setCurrentVizIndex(idx);
     const v = visualizations[idx];
@@ -395,8 +397,8 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   };
   const goNext = () => {
     if (!canNext) return;
-    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
-    setError(''); // Clear any previous error
+    regenerationAttemptsRef.current = 0;
+    setError('');
     const idx = currentVizIndex + 1;
     setCurrentVizIndex(idx);
     const v = visualizations[idx];
@@ -409,14 +411,14 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     showRef.current = show;
   }, [show]);
 
+  // Capture and send visualization screenshots
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
     const id = setInterval(() => {
-      // Skip screenshot when code view is active - Monaco DOM is heavy
-      if (showRef.current === 'code') return;
-
       const container = vizOnlyRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
+      // Skip screenshot when code view is active - Monaco DOM is heavy
+      if (showRef.current === 'code') return;
       isCapturingRef.current = true;
       toPng(container, {
         pixelRatio: 1,
@@ -461,28 +463,30 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     return () => clearInterval(id);
   }, [connectionStatus]);
 
+  // Create session when connected
   useEffect(() => {
     if (connectionStatus === 'connected' && voiceActive && !currentSessionId) {
       (async () => {
         try {
-          const res = await axios.post('/api/learning/sessions',
-            { session_id: null, session_handle: null, topic },
-            { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-          );
+          const res = await axios.post('/api/learning/sessions', {
+            session_id: null,
+            session_handle: null,
+            topic,
+            lessonId: lessonContext?.lessonId || null
+          });
           setCurrentSessionId(res.data.id as string);
         } catch { }
       })();
     }
-  }, [connectionStatus, voiceActive, currentSessionId, topic]);
+  }, [connectionStatus, voiceActive, currentSessionId, topic, lessonContext]);
 
+  // Load existing visualizations for session
   useEffect(() => {
     const sid = currentSessionId;
     if (!sid) return;
     (async () => {
       try {
-        const { data } = await axios.get(`/api/learning/visualizations?session_id=${sid}`,
-          { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-        );
+        const { data } = await axios.get(`/api/learning/visualizations?session_id=${sid}`);
         const items = (data?.items || []) as any[];
         const mapped = items.map((row) => ({
           id: row.id as string,
@@ -502,13 +506,13 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     })();
   }, [currentSessionId]);
 
+  // Handle disconnection
   useEffect(() => {
     if (connectionStatus === 'disconnected' && currentSessionId) {
       (async () => {
         try {
           await axios.patch(`/api/learning/sessions/${currentSessionId}`,
-            { status: 'disconnected', ended: true },
-            { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
+            { status: 'disconnected', ended: true }
           );
         } catch { }
         lastEndedSessionIdRef.current = currentSessionId;
@@ -517,6 +521,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     }
   }, [connectionStatus, currentSessionId]);
 
+  // Session lifecycle callbacks
   useEffect(() => {
     const previous = previousSessionIdRef.current;
     if (!previous && currentSessionId && onSessionStarted) {
@@ -533,24 +538,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     previousSessionIdRef.current = currentSessionId;
   }, [currentSessionId, onSessionEnded, onSessionStarted, getFeedback]);
 
-  // Fetch initial credits
-  useEffect(() => {
-    const fetchCredits = async () => {
-      try {
-        setCreditsLoading(true);
-        const response = await axios.get('/api/credits/status',
-          { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
-        );
-        setCredits(response.data.credits);
-      } catch (error) {
-        console.error('Failed to fetch credits:', error);
-        setCredits(null);
-      }
-      finally { setCreditsLoading(false); }
-    };
-    fetchCredits();
-  }, []);
-
   // Listen for reset session events
   useEffect(() => {
     const handleResetSession = () => {
@@ -561,7 +548,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     return () => window.removeEventListener('resetSession', handleResetSession);
   }, [resetSessionState]);
 
-  // Detect theme changes and extract actual colors
+  // Detect theme changes
   useEffect(() => {
     const detectThemeAndColors = () => {
       const isDark = document.documentElement.classList.contains('dark');
@@ -598,75 +585,37 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     return () => observer.disconnect();
   }, []);
 
-  // Start credit deduction when voice becomes active and connected
-  useEffect(() => {
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      if (credits === null || creditsLoading) {
-        return;
-      }
-      if (credits !== null && credits < 1) {
-        setShowCreditWarning(true);
-        handleVoiceStop();
-        return;
-      }
-
-      // Start deducting credits every minute
-      const interval = setInterval(async () => {
-        try {
-          const response = await axios.post('/api/credits/deduct-minute', {
-            sessionId: currentSessionId
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {})
-            }
-          });
-
-          if (response.data.success) {
-            const newCredits = response.data.remainingCredits;
-            setCredits(newCredits);
-
-            // Dispatch credit update event for layout
-            window.dispatchEvent(new CustomEvent('creditUpdate', {
-              detail: { credits: newCredits }
-            }));
-
-            // Show warning if credits are low
-            if (newCredits <= 5 && newCredits > 0) {
-              setShowCreditWarning(true);
-              setTimeout(() => setShowCreditWarning(false), 5000);
-            }
-
-            // Stop session if no credits left
-            if (newCredits <= 0) {
-              setError('Session ended: No credits remaining');
-              handleVoiceStop();
-            }
-          } else {
-            setError('Session ended: ' + response.data.error);
-            handleVoiceStop();
-          }
-        } catch (error: any) {
-          console.error('Failed to deduct credits:', error);
-          if (error.response?.status === 402) {
-            setError('Session ended: Insufficient credits');
-            handleVoiceStop();
-          }
-        }
-      }, 60000); // Every minute
-
-      setCreditDeductionInterval(interval);
-    }
-
-    // Cleanup interval when voice stops or disconnects
-    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
+  // Show loading state while fetching lesson
+  if (lessonLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading lesson...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+      {/* Lesson context indicator */}
+      {lessonContext?.title && !voiceActive && (
+        <div className="absolute top-4 left-4 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-md border">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-primary" />
+            <div>
+              <p className="text-sm font-medium">{lessonContext.title}</p>
+              {lessonContext.subject && (
+                <p className="text-xs text-muted-foreground">
+                  {lessonContext.subject} {lessonContext.gradeLevel && `• ${lessonContext.gradeLevel}`}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {(!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm && (
         <div className="absolute inset-0 z-30">
           <StartButtonOverlay
@@ -674,9 +623,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
               setVoiceActive(true);
             }}
             connectionStatus={connectionStatus}
-            creditsLoading={creditsLoading}
-            outOfCredits={credits !== null && credits <= 0}
-            remainingCredits={credits ?? undefined}
+            hideCredits={true}
           />
         </div>
       )}
@@ -685,9 +632,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
               <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end">
-                {/* <div className="flex items-center gap-2">
-                  <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
-                </div> */}
                 <div className="flex items-center gap-2">
                   {debugMode && (
                     <ToggleGroup
@@ -761,8 +705,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                   <div className="flex items-center gap-2">
                     <CardTitle>Visualization</CardTitle>
                   </div>
-                  <div className="flex items-center gap-2">
-                  </div>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col items-center justify-center">
@@ -778,8 +720,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle>Visualization</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-2">
                   </div>
                 </div>
               </CardHeader>
@@ -798,6 +738,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
           active={voiceActive}
           sessionId={currentSessionId}
           topic={topic}
+          lessonContext={lessonContext}
           onError={setError}
           onToolCall={handleToolCall}
           onConnectionStatusChange={setConnectionStatus}
@@ -812,12 +753,9 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       {voiceActive && connectionStatus === 'connected' && (
         <div className={`fixed bottom-0 left-0 right-0 z-50`}>
           <div className="flex flex-col items-center py-3 px-4">
-            {/* Audio Visualizer - visualizer only, no audio initialization */}
             <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">
-              {/* Visualizer will be rendered here by the main VoiceControl */}
             </div>
 
-            {/* Controls */}
             <div className="flex items-center gap-4">
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <Button
@@ -837,61 +775,25 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         </div>
       )}
 
-      {/* Feedback Form - positioned relative to main content only */}
-      {
-        showFeedbackForm && feedbackTrigger && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10 p-4 lg:left-20">
-            <FeedbackForm
-              isOpen={showFeedbackForm}
-              onClose={handleFeedbackClose}
-              onSubmit={handleFeedbackSubmit}
-              trigger={feedbackTrigger}
-              noOverlay={true}
-            />
-          </div>
-        )
-      }
-      {/* Credit Warning */}
-      {
-        showCreditWarning && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 shadow-lg max-w-md">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800">
-                    {typeof credits === 'number'
-                      ? (credits <= 0 ? 'No credits remaining!' : `Only ${credits} credits left!`)
-                      : 'Checking credits...'}
-                  </p>
-                  <p className="text-xs text-yellow-600 mt-1">
-                    {typeof credits === 'number'
-                      ? (credits <= 0
-                        ? 'Purchase credits to continue learning.'
-                        : `≈ ${credits} minutes of AI time remaining`)
-                      : ''}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => window.open('/learn/credits', '_blank')}
-                  className="ml-auto"
-                >
-                  Buy Credits
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
-      }
-    </div >
+      {showFeedbackForm && feedbackTrigger && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10 p-4 lg:left-20">
+          <FeedbackForm
+            isOpen={showFeedbackForm}
+            onClose={handleFeedbackClose}
+            onSubmit={handleFeedbackSubmit}
+            trigger={feedbackTrigger}
+            noOverlay={true}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
-export default function InteractiveAITutor(props: InteractiveAITutorProps) {
+export default function StudentInteractiveAITutor(props: StudentInteractiveAITutorProps) {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <InteractiveAITutorComponent {...props} />
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin" /></div>}>
+      <StudentInteractiveAITutorComponent {...props} />
     </Suspense>
   );
 }

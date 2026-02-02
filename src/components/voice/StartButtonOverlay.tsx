@@ -8,12 +8,14 @@ interface StartButtonOverlayProps {
   outOfCredits?: boolean;
   remainingCredits?: number;
   creditsLoading?: boolean;
+  hideCredits?: boolean;
 }
 
-export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false }: StartButtonOverlayProps) {
   const isConnecting = connectionStatus === 'connecting';
 
-  if (creditsLoading) {
+  // Skip credit loading check if hideCredits is true
+  if (!hideCredits && creditsLoading) {
     return (
       <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10">
         <Loader className="w-12 h-12 animate-spin" />
@@ -22,7 +24,8 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
     );
   }
 
-  if (outOfCredits) {
+  // Skip out of credits check if hideCredits is true
+  if (!hideCredits && outOfCredits) {
     return (
       <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 p-6">
         <div className="flex flex-col items-center text-center">

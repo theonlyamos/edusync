@@ -1,4 +1,4 @@
-import { useAudioStreaming } from '@/hooks/useAudioStreaming';
+import { useAudioStreaming, LessonContext } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
@@ -8,6 +8,7 @@ interface VoiceControlProps {
   active: boolean;
   sessionId?: string | null;
   topic?: string | null;
+  lessonContext?: LessonContext;
   onError?: (error: string) => void;
   onToolCall?: (name: string, args: any) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
@@ -20,7 +21,7 @@ interface VoiceControlProps {
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
 }
 
-export function VoiceControl({ active, sessionId, topic, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, sessionId, topic, lessonContext, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -44,7 +45,7 @@ export function VoiceControl({ active, sessionId, topic, onError, onToolCall, on
     setSaveOnlySpeech,
     closeFeedbackForm,
     submitFeedback,
-  } = useAudioStreaming(topic);
+  } = useAudioStreaming(topic, lessonContext);
   setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
