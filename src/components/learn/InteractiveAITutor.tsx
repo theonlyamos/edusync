@@ -34,12 +34,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const [vizState, vizDispatch] = useReducer(vizReducer, initialVizState);
   const { code, library, visualizations, currentVizIndex, generatingVisualization } = vizState;
 
-  // Helper functions to maintain backward compatibility with existing code
-  const setCode = useCallback((newCode: string) => vizDispatch({ type: 'SET_CODE', payload: newCode }), []);
-  const setLibrary = useCallback((newLib: 'p5' | 'three' | 'react' | null) => vizDispatch({ type: 'SET_LIBRARY', payload: newLib }), []);
-  const setCurrentVizIndex = useCallback((index: number) => vizDispatch({ type: 'SET_CURRENT_VIZ_INDEX', payload: index }), []);
-  const setGeneratingVisualization = useCallback((val: boolean) => vizDispatch({ type: 'SET_GENERATING', payload: val }), []);
-
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
   const [voiceActive, setVoiceActive] = useState(false);
@@ -130,7 +124,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     setCurrentSessionId(null);
     setShowFeedbackForm(getFeedback);
     setFeedbackTrigger(getFeedback ? 'manual_stop' : null);
-    setGeneratingVisualization(false);
+    vizDispatch({ type: 'SET_GENERATING', payload: false });
     setShowCreditWarning(false);
     setSessionManuallyStopped(false);
 
@@ -201,7 +195,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
     }
     try {
-      setGeneratingVisualization(true);
+      vizDispatch({ type: 'SET_GENERATING', payload: true });
       setError(''); // Clear previous error when regenerating
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
@@ -231,7 +225,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
     } finally {
-      setGeneratingVisualization(false);
+      vizDispatch({ type: 'SET_GENERATING', payload: false });
     }
   }, [currentVizIndex, visualizations, apiKey, theme, themeColors])
 
@@ -284,7 +278,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const handleToolCall = async (name: string, args: any) => {
 
     if (name === 'generate_visualization_description') {
-      setGeneratingVisualization(true);
+      vizDispatch({ type: 'SET_GENERATING', payload: true });
       try {
         // Get panel dimensions
         const panelElement = vizOnlyRef.current || vizRef.current;
@@ -342,7 +336,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       } catch (e: any) {
         setError(e.message || 'Unknown error');
       } finally {
-        setGeneratingVisualization(false);
+        vizDispatch({ type: 'SET_GENERATING', payload: false });
       }
     }
     if (name === 'set_topic') {
@@ -370,13 +364,13 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     if (!canPrev) return;
     regenerationAttemptsRef.current = 0;
     setError('');
-    setCurrentVizIndex(currentVizIndex - 1); // Reducer handles code/library update
+    vizDispatch({ type: 'SET_CURRENT_VIZ_INDEX', payload: currentVizIndex - 1 });
   };
   const goNext = () => {
     if (!canNext) return;
     regenerationAttemptsRef.current = 0;
     setError('');
-    setCurrentVizIndex(currentVizIndex + 1); // Reducer handles code/library update
+    vizDispatch({ type: 'SET_CURRENT_VIZ_INDEX', payload: currentVizIndex + 1 });
   };
 
   // Keep a ref of the current view mode for the screenshot effect without re-creating the interval
