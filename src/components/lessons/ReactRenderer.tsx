@@ -62,6 +62,10 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         return input;
       };
 
+      // Detect which libraries the code actually needs
+      const needsRecharts = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|Recharts)\b/.test(code);
+      const needsLeaflet = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/.test(code);
+
       // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
       const codeJson = JSON.stringify(normalizeUserCode(code));
       const returnStatement = '\n\n// Return the component\nreturn typeof Component !== \'undefined\' ? Component : typeof App !== \'undefined\' ? App : typeof Quiz !== \'undefined\' ? Quiz : typeof InteractiveComponent !== \'undefined\' ? InteractiveComponent : typeof Calculator !== \'undefined\' ? Calculator : typeof Game !== \'undefined\' ? Game : (() => React.createElement(\'div\', {}, \'No component found\'));';
@@ -77,7 +81,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
   <!-- Tailwind CSS Play CDN for runtime styling -->
   <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
   <script nonce="${nonce}">
@@ -132,15 +136,18 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     window.reactDOMLoaded = true;
   </script>
   
-  <!-- Recharts - Load as ES module -->
-  <script nonce="${nonce}" type="module">
+  <!-- Recharts - Load conditionally as ES module -->
+  ${needsRecharts ? `<script nonce="${nonce}" type="module">
     import * as Recharts from 'https://esm.sh/recharts@3.1.2?deps=react@19,react-dom@19';
     window.Recharts = Recharts;
     window.rechartsLoaded = true;
-  </script>
+  </script>` : `<script nonce="${nonce}">
+    // Recharts not needed - skip loading
+    window.rechartsLoaded = true;
+  </script>`}
   
-  <!-- React-Leaflet - Load as ES module -->
-  <script nonce="${nonce}" type="module">
+  <!-- React-Leaflet - Load conditionally as ES module -->
+  ${needsLeaflet ? `<script nonce="${nonce}" type="module">
     import * as ReactLeaflet from 'https://esm.sh/react-leaflet@5.0.0-rc.2?deps=react@19,react-dom@19';
     import L from 'https://esm.sh/leaflet@1.9.4';
     
@@ -156,7 +163,10 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     window.ReactLeaflet = ReactLeaflet;
     window.L = L;
     window.leafletLoaded = true;
-  </script>
+  </script>` : `<script nonce="${nonce}">
+    // React-Leaflet not needed - skip loading
+    window.leafletLoaded = true;
+  </script>`}
   
   <!-- Simplified UI Components -->
   <script nonce="${nonce}">
