@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback, useMemo, useReducer } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,85 @@ type Visualization = {
   panelDimensions?: { width: number; height: number }
 };
 
+// Visualization state reducer to batch updates and reduce re-renders
+type VizState = {
+  code: string;
+  library: 'p5' | 'three' | 'react' | null;
+  visualizations: Visualization[];
+  currentVizIndex: number;
+  generatingVisualization: boolean;
+};
+
+type VizAction =
+  | { type: 'SET_CODE'; payload: string }
+  | { type: 'SET_LIBRARY'; payload: 'p5' | 'three' | 'react' | null }
+  | { type: 'ADD_VISUALIZATION'; payload: Visualization }
+  | { type: 'UPDATE_VISUALIZATION'; index: number; payload: Partial<Visualization> }
+  | { type: 'SET_CURRENT_VIZ_INDEX'; payload: number }
+  | { type: 'SET_GENERATING'; payload: boolean }
+  | { type: 'SET_CURRENT_VIZ'; payload: { code: string; library: 'p5' | 'three' | 'react'; index: number } }
+  | { type: 'LOAD_VISUALIZATIONS'; payload: Visualization[] }
+  | { type: 'RESET' };
+
+const vizReducer = (state: VizState, action: VizAction): VizState => {
+  switch (action.type) {
+    case 'SET_CODE':
+      return { ...state, code: action.payload };
+    case 'SET_LIBRARY':
+      return { ...state, library: action.payload };
+    case 'ADD_VISUALIZATION':
+      return {
+        ...state,
+        visualizations: [...state.visualizations, action.payload],
+        currentVizIndex: state.visualizations.length,
+        code: action.payload.code,
+        library: action.payload.library,
+      };
+    case 'UPDATE_VISUALIZATION':
+      const updated = [...state.visualizations];
+      updated[action.index] = { ...updated[action.index], ...action.payload };
+      return { ...state, visualizations: updated };
+    case 'SET_CURRENT_VIZ_INDEX':
+      const viz = state.visualizations[action.payload];
+      if (viz) {
+        return { ...state, currentVizIndex: action.payload, code: viz.code, library: viz.library };
+      }
+      return { ...state, currentVizIndex: action.payload };
+    case 'SET_GENERATING':
+      return { ...state, generatingVisualization: action.payload };
+    case 'SET_CURRENT_VIZ':
+      return {
+        ...state,
+        code: action.payload.code,
+        library: action.payload.library,
+        currentVizIndex: action.payload.index,
+      };
+    case 'LOAD_VISUALIZATIONS':
+      if (action.payload.length > 0) {
+        return {
+          ...state,
+          visualizations: action.payload,
+          currentVizIndex: 0,
+          code: action.payload[0].code,
+          library: action.payload[0].library,
+        };
+      }
+      return { ...state, visualizations: action.payload };
+    case 'RESET':
+      return { code: '', library: null, visualizations: [], currentVizIndex: -1, generatingVisualization: false };
+    default:
+      return state;
+  }
+};
+
+const initialVizState: VizState = {
+  code: '',
+  library: null,
+  visualizations: [],
+  currentVizIndex: -1,
+  generatingVisualization: false,
+};
+
 type StudentInteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
   onSessionEnded?: (sessionId: string | null) => void;
@@ -45,10 +124,16 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const lessonGradeFromUrl = searchParams.get('lessonGrade');
   const lessonObjectivesFromUrl = searchParams.get('lessonObjectives');
 
-  const [code, setCode] = useState('');
-  const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
-  const [visualizations, setVisualizations] = useState<Visualization[]>([]);
-  const [currentVizIndex, setCurrentVizIndex] = useState<number>(-1);
+  // Use reducer for visualization state to batch updates and reduce re-renders
+  const [vizState, vizDispatch] = useReducer(vizReducer, initialVizState);
+  const { code, library, visualizations, currentVizIndex, generatingVisualization } = vizState;
+
+  // Helper functions to maintain backward compatibility with existing code
+  const setCode = useCallback((newCode: string) => vizDispatch({ type: 'SET_CODE', payload: newCode }), []);
+  const setLibrary = useCallback((newLib: 'p5' | 'three' | 'react' | null) => vizDispatch({ type: 'SET_LIBRARY', payload: newLib }), []);
+  const setCurrentVizIndex = useCallback((index: number) => vizDispatch({ type: 'SET_CURRENT_VIZ_INDEX', payload: index }), []);
+  const setGeneratingVisualization = useCallback((val: boolean) => vizDispatch({ type: 'SET_GENERATING', payload: val }), []);
+
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
   const [voiceActive, setVoiceActive] = useState(false);
@@ -56,7 +141,6 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const [countdown, setCountdown] = useState(600);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
-  const [generatingVisualization, setGeneratingVisualization] = useState(false);
   const [topic, setTopic] = useState<string | null>(lessonTitleFromUrl || initialLessonContext?.title || null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
@@ -142,10 +226,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       } catch { }
     }
     setVoiceActive(false);
-    setCode('');
-    setLibrary(null);
-    setVisualizations([]);
-    setCurrentVizIndex(-1);
+    vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
     setError('');
     setSessionManuallyStopped(true);
   };
@@ -161,10 +242,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
-    setCode('');
-    setLibrary(null);
-    setVisualizations([]);
-    setCurrentVizIndex(-1);
+    vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
     setError('');
     setSessionManuallyStopped(true);
   };
@@ -174,17 +252,13 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       handleVoiceStop();
     }
 
-    setCode('');
-    setLibrary(null);
-    setVisualizations([]);
-    setCurrentVizIndex(-1);
+    vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
     setError('');
     setTopic(lessonContext?.title || null);
     lastEndedSessionIdRef.current = currentSessionId;
     setCurrentSessionId(null);
     setShowFeedbackForm(getFeedback);
     setFeedbackTrigger(getFeedback ? 'manual_stop' : null);
-    setGeneratingVisualization(false);
     setSessionManuallyStopped(false);
   }, [voiceActive, handleVoiceStop, lessonContext]);
 
@@ -243,13 +317,9 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       const vizData = await response.json();
 
       const updated: Visualization = { id: current.id, code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: current.taskDescription, panelDimensions };
-      setVisualizations(prev => {
-        const next = [...prev];
-        next[currentVizIndex] = updated;
-        return next;
-      });
-      setCode(vizData.code);
-      setLibrary(vizData.library);
+      // Use dispatch to batch update visualization and set current code/library
+      vizDispatch({ type: 'UPDATE_VISUALIZATION', index: currentVizIndex, payload: updated });
+      vizDispatch({ type: 'SET_CURRENT_VIZ', payload: { code: vizData.code, library: vizData.library, index: currentVizIndex } });
 
       if (current.id) {
         try {
@@ -342,12 +412,10 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         const vizData = await response.json();
         regenerationAttemptsRef.current = 0;
         setError('');
-        setCode(vizData.code);
-        setLibrary(vizData.library);
-        setVisualizations(prev => {
-          const next = [...prev, { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: args.task_description, panelDimensions }];
-          setCurrentVizIndex(next.length - 1);
-          return next;
+        // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
+        vizDispatch({
+          type: 'ADD_VISUALIZATION',
+          payload: { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: args.task_description, panelDimensions }
         });
         if (currentSessionId) {
           try {
@@ -520,12 +588,8 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           taskDescription: (row.description || undefined) as string | undefined,
           panelDimensions: row.panel_dimensions || undefined,
         }));
-        setVisualizations(mapped);
-        if (mapped.length > 0) {
-          setCurrentVizIndex(0);
-          setCode(mapped[0].code);
-          setLibrary(mapped[0].library);
-        }
+        // Use LOAD_VISUALIZATIONS to atomically set visualizations, currentVizIndex, code, and library
+        vizDispatch({ type: 'LOAD_VISUALIZATIONS', payload: mapped });
       } catch { }
     })();
   }, [currentSessionId]);
