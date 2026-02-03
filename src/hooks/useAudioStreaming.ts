@@ -189,6 +189,10 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
     const vadMinSpeechMsRef = useRef<number>(150);
     const vadMinSilenceMsRef = useRef<number>(300);
 
+    // Audio batching to reduce main thread processing frequency
+    const audioBatchRef = useRef<Float32Array[]>([]);
+    const AUDIO_BATCH_SIZE = 2; // Accumulate 2 frames before sending (reduces processing by 50%)
+
     const setSessionId = useCallback((id: string | null) => {
         currentSessionIdRef.current = id;
     }, []);
@@ -493,7 +497,7 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
 
             // Build context addition based on lesson context or topic
             let contextAddition = '';
-            
+
             if (lessonContext?.title) {
                 contextAddition = `
 
@@ -515,7 +519,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             } else if (topic) {
                 contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
             }
-            
+
             const finalSystemPrompt = systemPrompt + contextAddition;
 
             const connectConfig: any = {
@@ -660,7 +664,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     const float32Chunk = new Float32Array(event.data.data);
                     onAudioDataListenerRef.current?.(float32Chunk);
 
-                    // Simple RMS-based VAD with hysteresis
+                    // Simple RMS-based VAD with hysteresis (still process every frame for responsiveness)
                     try {
                         let sumSquares = 0;
                         for (let i = 0; i < float32Chunk.length; i++) {
@@ -702,10 +706,28 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         try { onVadStateListenerRef.current?.(vadSpeechActiveRef.current, rms); } catch { }
                     } catch { }
 
-                    // Convert the raw float audio data to 16-bit PCM format
-                    const pcmData = new Int16Array(float32Chunk.length);
-                    for (let i = 0; i < float32Chunk.length; i++) {
-                        const sample = Math.max(-1, Math.min(1, float32Chunk[i]));
+                    // Batch audio frames to reduce main thread processing frequency
+                    audioBatchRef.current.push(float32Chunk);
+
+                    // Only process when we have enough frames (reduces processing by 50%)
+                    if (audioBatchRef.current.length < AUDIO_BATCH_SIZE) {
+                        return; // Wait for more frames
+                    }
+
+                    // Combine batched frames
+                    const totalLength = audioBatchRef.current.reduce((sum, arr) => sum + arr.length, 0);
+                    const combinedFloat32 = new Float32Array(totalLength);
+                    let offset = 0;
+                    for (const chunk of audioBatchRef.current) {
+                        combinedFloat32.set(chunk, offset);
+                        offset += chunk.length;
+                    }
+                    audioBatchRef.current = []; // Clear batch
+
+                    // Convert the combined audio data to 16-bit PCM format
+                    const pcmData = new Int16Array(combinedFloat32.length);
+                    for (let i = 0; i < combinedFloat32.length; i++) {
+                        const sample = Math.max(-1, Math.min(1, combinedFloat32[i]));
                         pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767;
                     }
 
@@ -783,85 +805,99 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         }
     }, []);
 
-    // Process Gemini Live response queue
+    // Process Gemini Live response queue with chunked processing to prevent UI blocking
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
         const FRAGMENT_PARTS = 10;
+        const MAX_MESSAGES_PER_FRAME = 10; // Process max 10 messages per animation frame
 
-        while (responseQueue.length > 0) {
-            const message = responseQueue.shift();
+        const processMessages = () => {
+            let messagesProcessed = 0;
 
-            // Handle session resumption updates
-            if ((message as any)?.sessionResumptionUpdate) {
-                const update = (message as any).sessionResumptionUpdate;
-                if (update.resumable && update.newHandle) {
-                    console.log('Received new session resumption handle:', update.newHandle);
-                    sessionResumptionHandleRef.current = update.newHandle;
+            while (responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
+                messagesProcessed++;
+                const message = responseQueue.shift();
+
+                // Handle session resumption updates
+                if ((message as any)?.sessionResumptionUpdate) {
+                    const update = (message as any).sessionResumptionUpdate;
+                    if (update.resumable && update.newHandle) {
+                        console.log('Received new session resumption handle:', update.newHandle);
+                        sessionResumptionHandleRef.current = update.newHandle;
+                    }
+                    continue;
                 }
-                continue;
-            }
 
-            // Handle GoAway messages
-            if ((message as any)?.goAway) {
-                const goAway = (message as any).goAway;
-                console.log('Received GoAway message, time left:', goAway.timeLeft);
-                // The connection will be terminated soon, but we have the resumption handle
-                continue;
-            }
-
-            if (message?.serverContent && (message as any).serverContent.interrupted) {
-                audioParts.length = 0;
-                setIsSpeaking(false);
-                if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
-                    playbackCtxRef.current.close();
+                // Handle GoAway messages
+                if ((message as any)?.goAway) {
+                    const goAway = (message as any).goAway;
+                    console.log('Received GoAway message, time left:', goAway.timeLeft);
+                    // The connection will be terminated soon, but we have the resumption handle
+                    continue;
                 }
-                playbackCtxRef.current = null;
-                analyserRef.current = null;
-                nextPlaybackTimeRef.current = 0;
-                continue;
-            }
 
-            // Handle tool calls
-            if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
-                for (const fn of message.toolCall.functionCalls) {
-                    toolCallListenerRef.current?.(fn.name || '', fn.args);
+                if (message?.serverContent && (message as any).serverContent.interrupted) {
+                    audioParts.length = 0;
+                    setIsSpeaking(false);
+                    if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
+                        playbackCtxRef.current.close();
+                    }
+                    playbackCtxRef.current = null;
+                    analyserRef.current = null;
+                    nextPlaybackTimeRef.current = 0;
+                    continue;
+                }
 
-                    // Send response back to Gemini
-                    try {
-                        geminiLiveSessionRef.current?.sendToolResponse({
-                            functionResponses: [
-                                {
-                                    id: fn.id || '',
-                                    name: fn.name || '',
-                                    response: {
-                                        result: 'Tool is being called',
-                                        scheduling: FunctionResponseScheduling.SILENT
+                // Handle tool calls
+                if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
+                    for (const fn of message.toolCall.functionCalls) {
+                        toolCallListenerRef.current?.(fn.name || '', fn.args);
+
+                        // Send response back to Gemini
+                        try {
+                            geminiLiveSessionRef.current?.sendToolResponse({
+                                functionResponses: [
+                                    {
+                                        id: fn.id || '',
+                                        name: fn.name || '',
+                                        response: {
+                                            result: 'Tool is being called',
+                                            scheduling: FunctionResponseScheduling.SILENT
+                                        }
                                     }
-                                }
-                            ]
-                        });
-                    } catch (err) {
-                        console.warn('Failed to send tool response back to Gemini:', err);
+                                ]
+                            });
+                        } catch (err) {
+                            console.warn('Failed to send tool response back to Gemini:', err);
+                        }
                     }
                 }
-            }
 
-            // Handle audio data
-            if (message?.serverContent?.modelTurn?.parts) {
-                const part = message.serverContent.modelTurn.parts[0];
-                if (part?.inlineData?.data) {
-                    audioParts.push(part.inlineData.data);
+                // Handle audio data
+                if (message?.serverContent?.modelTurn?.parts) {
+                    const part = message.serverContent.modelTurn.parts[0];
+                    if (part?.inlineData?.data) {
+                        audioParts.push(part.inlineData.data);
+                    }
+                }
+
+                const shouldFlush =
+                    audioParts.length >= FRAGMENT_PARTS ||
+                    (message?.serverContent?.turnComplete && audioParts.length > 0);
+
+                if (shouldFlush) {
+                    playGeminiAudioChunks(audioParts.slice());
+                    audioParts.length = 0;
                 }
             }
 
-            const shouldFlush =
-                audioParts.length >= FRAGMENT_PARTS ||
-                (message?.serverContent?.turnComplete && audioParts.length > 0);
-
-            if (shouldFlush) {
-                playGeminiAudioChunks(audioParts.slice());
-                audioParts.length = 0;
+            // If there are more messages, schedule processing for next animation frame
+            if (responseQueue.length > 0) {
+                requestAnimationFrame(processMessages);
             }
-        }
+        };
+
+        // Start processing
+        processMessages();
     }, []);
 
     // Play audio chunks from Gemini

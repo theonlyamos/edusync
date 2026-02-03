@@ -37,14 +37,14 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const searchParams = useSearchParams();
   const debugMode = searchParams.get('debug') === 'true';
   const getFeedback = searchParams.get('getFeedback') === 'true';
-  
+
   // Parse lesson context from URL params
   const lessonIdFromUrl = searchParams.get('lessonId');
   const lessonTitleFromUrl = searchParams.get('lessonTitle');
   const lessonSubjectFromUrl = searchParams.get('lessonSubject');
   const lessonGradeFromUrl = searchParams.get('lessonGrade');
   const lessonObjectivesFromUrl = searchParams.get('lessonObjectives');
-  
+
   const [code, setCode] = useState('');
   const [library, setLibrary] = useState<'p5' | 'three' | 'react' | null>(null);
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -92,7 +92,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         setLessonLoading(false);
         return;
       }
-      
+
       try {
         setLessonLoading(true);
         const response = await fetch(`/api/lessons/${lessonIdFromUrl}`);
@@ -411,14 +411,23 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
     showRef.current = show;
   }, [show]);
 
-  // Capture and send visualization screenshots
+  // Optimized screenshot capture using requestIdleCallback to prevent UI blocking
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
-    const id = setInterval(() => {
+
+    // Use a longer interval (5s) and requestIdleCallback to capture during idle time
+    const SCREENSHOT_INTERVAL_MS = 5000;
+    const IDLE_TIMEOUT_MS = 2000; // Max wait for idle before forcing capture
+
+    const captureScreenshot = () => {
       const container = vizOnlyRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
       // Skip screenshot when code view is active - Monaco DOM is heavy
       if (showRef.current === 'code') return;
+
+      // Check connection status again in case it changed
+      if (connectionStatus !== 'connected') return;
+
       isCapturingRef.current = true;
       toPng(container, {
         pixelRatio: 1,
@@ -459,7 +468,22 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         .finally(() => {
           isCapturingRef.current = false;
         });
-    }, 3000);
+    };
+
+    const scheduleCapture = () => {
+      // Use requestIdleCallback if available, otherwise use setTimeout as fallback
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(
+          () => captureScreenshot(),
+          { timeout: IDLE_TIMEOUT_MS }
+        );
+      } else {
+        // Fallback for Safari - use setTimeout with a small delay
+        setTimeout(captureScreenshot, 100);
+      }
+    };
+
+    const id = setInterval(scheduleCapture, SCREENSHOT_INTERVAL_MS);
     return () => clearInterval(id);
   }, [connectionStatus]);
 

@@ -30,8 +30,21 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Stable reference for onError to prevent unnecessary effect re-runs
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  // Track previous code to avoid unnecessary iframe recreations
+  const prevCodeRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!iframeRef.current || !code) return;
+
+    // Skip if code hasn't changed (prevents unnecessary iframe reloads)
+    if (prevCodeRef.current === code) return;
+    prevCodeRef.current = code;
 
     setIsLoading(true);
     setError(null);
@@ -497,7 +510,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         const errorMsg = 'Failed to load React component';
         setError(errorMsg);
         setIsLoading(false);
-        if (onError) onError(errorMsg);
+        onErrorRef.current?.(errorMsg);
       };
 
       // Listen for error messages from iframe
@@ -506,7 +519,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
           const errorMsg = event.data.error || 'Failed to render component';
           setError(errorMsg);
           setIsLoading(false);
-          if (onError) onError(errorMsg);
+          onErrorRef.current?.(errorMsg);
         }
       };
 
@@ -523,9 +536,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       const errorMsg = err instanceof Error ? err.message : 'Failed to create React component';
       setError(errorMsg);
       setIsLoading(false);
-      if (onError) onError(errorMsg);
+      onErrorRef.current?.(errorMsg);
     }
-  }, [code, onError]);
+  }, [code]); // Only depend on code - onError is tracked via ref
 
   return (
     <div className="relative w-full h-full">

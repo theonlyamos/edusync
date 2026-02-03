@@ -409,15 +409,26 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     showRef.current = show;
   }, [show]);
 
+  // Optimized screenshot capture using requestIdleCallback to prevent UI blocking
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
-    const id = setInterval(() => {
+
+    // Use a longer interval (5s) and requestIdleCallback to capture during idle time
+    const SCREENSHOT_INTERVAL_MS = 5000;
+    const IDLE_TIMEOUT_MS = 2000; // Max wait for idle before forcing capture
+
+    const captureScreenshot = () => {
       // Skip screenshot when code view is active - Monaco DOM is heavy
       if (showRef.current === 'code') return;
 
       const container = vizOnlyRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
+
+      // Check connection status again in case it changed
+      if (connectionStatus !== 'connected') return;
+
       isCapturingRef.current = true;
+
       toPng(container, {
         pixelRatio: 1,
         skipFonts: true,
@@ -457,9 +468,25 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         .finally(() => {
           isCapturingRef.current = false;
         });
-    }, 3000);
+    };
+
+    const scheduleCapture = () => {
+      // Use requestIdleCallback if available, otherwise use setTimeout as fallback
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(
+          () => captureScreenshot(),
+          { timeout: IDLE_TIMEOUT_MS }
+        );
+      } else {
+        // Fallback for Safari - use setTimeout with a small delay
+        setTimeout(captureScreenshot, 100);
+      }
+    };
+
+    const id = setInterval(scheduleCapture, SCREENSHOT_INTERVAL_MS);
     return () => clearInterval(id);
   }, [connectionStatus]);
+
 
   useEffect(() => {
     if (connectionStatus === 'connected' && voiceActive && !currentSessionId) {
