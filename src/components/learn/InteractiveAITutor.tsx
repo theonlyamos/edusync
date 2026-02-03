@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense, useCallback, useMemo, useContext, useReducer } from 'react';
+import { useEffect, useRef, useState, Suspense, useCallback, useMemo, useReducer } from 'react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,102 +8,15 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose, RefreshCw } from 'lucide-react';
-import { useSearchParams, useRouter, useParams } from 'next/navigation';
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
+import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
-
-type Visualization = {
-  id?: string;
-  code: string;
-  library: 'p5' | 'three' | 'react';
-  explanation?: string;
-  taskDescription?: string;
-  panelDimensions?: { width: number; height: number }
-};
-
-// Visualization state reducer to batch updates and reduce re-renders
-type VizState = {
-  code: string;
-  library: 'p5' | 'three' | 'react' | null;
-  visualizations: Visualization[];
-  currentVizIndex: number;
-  generatingVisualization: boolean;
-};
-
-type VizAction =
-  | { type: 'SET_CODE'; payload: string }
-  | { type: 'SET_LIBRARY'; payload: 'p5' | 'three' | 'react' | null }
-  | { type: 'ADD_VISUALIZATION'; payload: Visualization }
-  | { type: 'UPDATE_VISUALIZATION'; index: number; payload: Partial<Visualization> }
-  | { type: 'SET_CURRENT_VIZ_INDEX'; payload: number }
-  | { type: 'SET_GENERATING'; payload: boolean }
-  | { type: 'SET_CURRENT_VIZ'; payload: { code: string; library: 'p5' | 'three' | 'react'; index: number } }
-  | { type: 'LOAD_VISUALIZATIONS'; payload: Visualization[] }
-  | { type: 'RESET' };
-
-const vizReducer = (state: VizState, action: VizAction): VizState => {
-  switch (action.type) {
-    case 'SET_CODE':
-      return { ...state, code: action.payload };
-    case 'SET_LIBRARY':
-      return { ...state, library: action.payload };
-    case 'ADD_VISUALIZATION':
-      return {
-        ...state,
-        visualizations: [...state.visualizations, action.payload],
-        currentVizIndex: state.visualizations.length,
-        code: action.payload.code,
-        library: action.payload.library,
-      };
-    case 'UPDATE_VISUALIZATION':
-      const updated = [...state.visualizations];
-      updated[action.index] = { ...updated[action.index], ...action.payload };
-      return { ...state, visualizations: updated };
-    case 'SET_CURRENT_VIZ_INDEX':
-      const viz = state.visualizations[action.payload];
-      if (viz) {
-        return { ...state, currentVizIndex: action.payload, code: viz.code, library: viz.library };
-      }
-      return { ...state, currentVizIndex: action.payload };
-    case 'SET_GENERATING':
-      return { ...state, generatingVisualization: action.payload };
-    case 'SET_CURRENT_VIZ':
-      return {
-        ...state,
-        code: action.payload.code,
-        library: action.payload.library,
-        currentVizIndex: action.payload.index,
-      };
-    case 'LOAD_VISUALIZATIONS':
-      if (action.payload.length > 0) {
-        return {
-          ...state,
-          visualizations: action.payload,
-          currentVizIndex: 0,
-          code: action.payload[0].code,
-          library: action.payload[0].library,
-        };
-      }
-      return { ...state, visualizations: action.payload };
-    case 'RESET':
-      return { code: '', library: null, visualizations: [], currentVizIndex: -1, generatingVisualization: false };
-    default:
-      return state;
-  }
-};
-
-const initialVizState: VizState = {
-  code: '',
-  library: null,
-  visualizations: [],
-  currentVizIndex: -1,
-  generatingVisualization: false,
-};
 
 type InteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
@@ -124,13 +37,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   // Helper functions to maintain backward compatibility with existing code
   const setCode = useCallback((newCode: string) => vizDispatch({ type: 'SET_CODE', payload: newCode }), []);
   const setLibrary = useCallback((newLib: 'p5' | 'three' | 'react' | null) => vizDispatch({ type: 'SET_LIBRARY', payload: newLib }), []);
-  const setVisualizations = useCallback((vizs: Visualization[] | ((prev: Visualization[]) => Visualization[])) => {
-    // For backward compatibility with functional updates
-    if (typeof vizs === 'function') {
-      // This case requires reading current state, so we handle it specially
-      console.warn('Functional setVisualizations updates should be migrated to dispatch actions');
-    }
-  }, []);
   const setCurrentVizIndex = useCallback((index: number) => vizDispatch({ type: 'SET_CURRENT_VIZ_INDEX', payload: index }), []);
   const setGeneratingVisualization = useCallback((val: boolean) => vizDispatch({ type: 'SET_GENERATING', payload: val }), []);
 
@@ -462,23 +368,15 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
   const canNext = currentVizIndex >= 0 && currentVizIndex < visualizations.length - 1;
   const goPrev = () => {
     if (!canPrev) return;
-    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
-    setError(''); // Clear any previous error
-    const idx = currentVizIndex - 1;
-    setCurrentVizIndex(idx);
-    const v = visualizations[idx];
-    setCode(v.code);
-    setLibrary(v.library);
+    regenerationAttemptsRef.current = 0;
+    setError('');
+    setCurrentVizIndex(currentVizIndex - 1); // Reducer handles code/library update
   };
   const goNext = () => {
     if (!canNext) return;
-    regenerationAttemptsRef.current = 0; // Reset retry counter when navigating
-    setError(''); // Clear any previous error
-    const idx = currentVizIndex + 1;
-    setCurrentVizIndex(idx);
-    const v = visualizations[idx];
-    setCode(v.code);
-    setLibrary(v.library);
+    regenerationAttemptsRef.current = 0;
+    setError('');
+    setCurrentVizIndex(currentVizIndex + 1); // Reducer handles code/library update
   };
 
   // Keep a ref of the current view mode for the screenshot effect without re-creating the interval

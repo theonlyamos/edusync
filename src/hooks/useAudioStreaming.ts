@@ -731,9 +731,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767;
                     }
 
-                    // Convert to base64 for Gemini
+                    // Convert to base64 for Gemini using chunked approach to avoid stack limits
                     const uint8Array = new Uint8Array(pcmData.buffer);
-                    const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
+                    let binaryString = '';
+                    const chunkSize = 8192; // Process in 8KB chunks to avoid call stack overflow
+                    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+                        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+                    }
+                    const base64Audio = btoa(binaryString);
 
                     try {
                         geminiLiveSessionRef.current.sendRealtimeInput({

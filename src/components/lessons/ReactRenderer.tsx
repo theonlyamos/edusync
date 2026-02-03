@@ -25,6 +25,12 @@ interface ReactRendererProps {
   onError?: (error: string) => void;
 }
 
+// Cached regex patterns - avoid recompilation on every render
+const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|Recharts)\b/;
+const LEAFLET_PATTERN = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/;
+const COMPONENT_EXPORT_PATTERN = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/;
+const BARE_ELEMENT_PATTERN = /^React\.createElement\s*\(/;
+
 export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,17 +60,17 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       // Normalize bare React.createElement(...) to a component so it can render
       const normalizeUserCode = (input: string) => {
         const trimmed = input.trim();
-        const hasComponentExport = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/.test(trimmed);
-        const isBareElement = /^React\.createElement\s*\(/.test(trimmed);
+        const hasComponentExport = COMPONENT_EXPORT_PATTERN.test(trimmed);
+        const isBareElement = BARE_ELEMENT_PATTERN.test(trimmed);
         if (!hasComponentExport && isBareElement) {
           return `const Component = () => (${trimmed});`;
         }
         return input;
       };
 
-      // Detect which libraries the code actually needs
-      const needsRecharts = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|Recharts)\b/.test(code);
-      const needsLeaflet = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/.test(code);
+      // Detect which libraries the code actually needs (using cached patterns)
+      const needsRecharts = RECHARTS_PATTERN.test(code);
+      const needsLeaflet = LEAFLET_PATTERN.test(code);
 
       // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
       const codeJson = JSON.stringify(normalizeUserCode(code));
