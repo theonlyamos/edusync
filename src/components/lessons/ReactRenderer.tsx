@@ -35,6 +35,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadTimeoutRef = useRef<number | null>(null);
 
   // Stable reference for onError to prevent unnecessary effect re-runs
   const onErrorRef = useRef(onError);
@@ -42,15 +43,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     onErrorRef.current = onError;
   }, [onError]);
 
-  // Track previous code to avoid unnecessary iframe recreations
-  const prevCodeRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!iframeRef.current || !code) return;
-
-    // Skip if code hasn't changed (prevents unnecessary iframe reloads)
-    if (prevCodeRef.current === code) return;
-    prevCodeRef.current = code;
 
     setIsLoading(true);
     setError(null);
@@ -177,6 +171,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <!-- Simplified UI Components -->
   <script nonce="${nonce}">
     (function() {
+      const needsRecharts = ${needsRecharts ? 'true' : 'false'};
+      const needsLeaflet = ${needsLeaflet ? 'true' : 'false'};
       // Wait for React and ReactDOM to load
       function waitForReact(callback, maxAttempts = 100) {
         if (window.React && window.ReactDOM && window.reactLoaded && window.reactDOMLoaded) {
@@ -364,59 +360,104 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       
       const Quiz = React.forwardRef(({ className = '', data, onSubmit, ...props }, ref) => {
         const [answers, setAnswers] = React.useState({});
+        const [result, setResult] = React.useState(null);
+        const [currentIndex, setCurrentIndex] = React.useState(0);
+
+        const questions = (data && data.questions) ? data.questions : [];
+        const total = questions.length;
+        const currentQuestion = total > 0 ? questions[currentIndex] : null;
+        const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+        const hasAnswer = currentQuestion
+          ? (currentQuestion.type === 'multiple'
+            ? !!currentAnswer
+            : (typeof currentAnswer === 'string' && currentAnswer.trim() !== ''))
+          : false;
 
         const handleSubmit = () => {
-          if (!data || !data.questions) return;
-          const score = data.questions.reduce((acc, q) => {
+          if (!data || !data.questions || data.questions.length === 0) return;
+          const correctCount = data.questions.reduce((acc, q) => {
             const userAnswer = answers[q.id];
             const correct = userAnswer?.toLowerCase().trim() === q.answer.toLowerCase().trim();
             return acc + (correct ? 1 : 0);
-          }, 0) / data.questions.length;
+          }, 0);
+          const score = correctCount / data.questions.length;
+          setResult({ score, correctCount, total });
 
           if (onSubmit) {
-            onSubmit({ score });
-          } else {
-            alert(\`Quiz finished! Score: \${Math.round(score * 100)}%\`);
+            onSubmit({ score, correctCount, total });
           }
         };
+
+        const isPerfect = result && result.score === 1;
+        const resultMessage = result
+          ? (isPerfect
+            ? 'Perfect! You got all answers correct.'
+            : 'Keep trying! Review the material and try again.')
+          : '';
+        const resultClasses = isPerfect
+          ? 'mt-3 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800'
+          : 'mt-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800';
 
         return React.createElement('div', {
           ref,
           className: cn('space-y-4', className),
           ...props
         },
-          data?.questions?.map(q =>
-            React.createElement('div', { key: q.id, className: 'p-4 border rounded-lg bg-white shadow-sm' },
-              React.createElement('p', { className: 'font-medium mb-3 text-gray-900' }, q.question),
-              q.type === 'multiple' ?
-                React.createElement('div', { className: 'space-y-2' },
-                  q.options?.map(option =>
+          result && React.createElement('div', {
+            className: resultClasses
+          }, resultMessage + ' Score: ' + Math.round(result.score * 100) + '% (' + result.correctCount + '/' + result.total + ').'),
+          total > 0 && React.createElement('div', {
+            className: 'text-sm text-gray-500'
+          }, 'Question ' + (currentIndex + 1) + ' of ' + total),
+          currentQuestion
+            ? React.createElement('div', { key: currentQuestion.id, className: 'p-4 border rounded-lg bg-white shadow-sm' },
+              React.createElement('p', { className: 'font-medium mb-3 text-gray-900' }, currentQuestion.question),
+              currentQuestion.type === 'multiple'
+                ? React.createElement('div', { className: 'space-y-2' },
+                  currentQuestion.options?.map(option =>
                     React.createElement('label', { key: option, className: 'flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded' },
                       React.createElement('input', {
                         type: 'radio',
-                        name: q.id,
+                        name: currentQuestion.id,
                         value: option,
-                        checked: answers[q.id] === option,
-                        onChange: e => setAnswers({ ...answers, [q.id]: e.target.value }),
+                        checked: answers[currentQuestion.id] === option,
+                        onChange: e => setAnswers({ ...answers, [currentQuestion.id]: e.target.value }),
                         className: 'h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500'
                       }),
                       React.createElement('span', { className: 'text-gray-700' }, option)
                     )
                   )
-                ) :
-                React.createElement('input', {
+                )
+                : React.createElement('input', {
                   type: 'text',
                   className: 'w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none',
                   placeholder: 'Type your answer...',
-                  value: answers[q.id] || '',
-                  onChange: e => setAnswers({ ...answers, [q.id]: e.target.value })
+                  value: answers[currentQuestion.id] || '',
+                  onChange: e => setAnswers({ ...answers, [currentQuestion.id]: e.target.value })
                 })
             )
-          ),
-          React.createElement('button', {
-            onClick: handleSubmit,
-            className: 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors shadow-sm'
-          }, 'Submit Quiz')
+            : React.createElement('div', { className: 'text-sm text-gray-500' }, 'No questions available.'),
+          total > 0 && React.createElement('div', { className: 'flex items-center justify-between' },
+            React.createElement('button', {
+              type: 'button',
+              onClick: () => setCurrentIndex(Math.max(0, currentIndex - 1)),
+              disabled: currentIndex === 0,
+              className: 'px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+            }, 'Back'),
+            currentIndex < total - 1
+              ? React.createElement('button', {
+                type: 'button',
+                onClick: () => setCurrentIndex(Math.min(total - 1, currentIndex + 1)),
+                disabled: !hasAnswer,
+                className: 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
+              }, 'Next')
+              : React.createElement('button', {
+                type: 'button',
+                onClick: handleSubmit,
+                disabled: !hasAnswer || isPerfect,
+                className: 'px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed'
+              }, 'Submit Quiz')
+          )
         );
       });
       Quiz.displayName = 'Quiz';
@@ -431,7 +472,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       
       // Wait for Recharts and React-Leaflet to load
       function waitForDeps(callback, maxAttempts = 100) {
-        if ((window.Recharts && window.rechartsLoaded) && (window.ReactLeaflet && window.leafletLoaded)) {
+        const rechartsReady = !needsRecharts || (window.Recharts && window.rechartsLoaded);
+        const leafletReady = !needsLeaflet || (window.ReactLeaflet && window.leafletLoaded);
+        if (rechartsReady && leafletReady) {
           callback();
         } else if (maxAttempts > 0) {
           setTimeout(() => waitForDeps(callback, maxAttempts - 1), 50);
@@ -447,8 +490,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       }
       
       waitForDeps(function() {
-        const Recharts = window.Recharts;
-        const ReactLeaflet = window.ReactLeaflet;
+        const Recharts = window.Recharts || {};
+        const ReactLeaflet = window.ReactLeaflet || {};
         const L = window.L;
         const UIComponents = window.UIComponents;
         
@@ -497,9 +540,11 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
             MapContainer, TileLayer, Marker, Popup, Polyline, Polygon,
             Circle, Rectangle, useMap, useMapEvent, L
           );
-          
           const root = ReactDOM.createRoot(document.getElementById('root'));
           root.render(React.createElement(ComponentFunction));
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'react-render-ready' }, '*');
+          }
         } catch (err) {
           const errorDiv = document.createElement('div');
           errorDiv.className = 'error';
@@ -516,22 +561,35 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 </body>
 </html>`;
 
-      iframe.srcdoc = htmlContent;
+      const clearLoadTimeout = () => {
+        if (loadTimeoutRef.current) {
+          window.clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+      };
 
       const handleLoad = () => {
+        clearLoadTimeout();
         setIsLoading(false);
       };
 
       const handleError = () => {
+        clearLoadTimeout();
         const errorMsg = 'Failed to load React component';
         setError(errorMsg);
         setIsLoading(false);
         onErrorRef.current?.(errorMsg);
       };
 
-      // Listen for error messages from iframe
+      // Listen for error/success messages from iframe
       const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'react-render-ready') {
+          clearLoadTimeout();
+          setIsLoading(false);
+          return;
+        }
         if (event.data?.type === 'react-render-error') {
+          clearLoadTimeout();
           const errorMsg = event.data.error || 'Failed to render component';
           setError(errorMsg);
           setIsLoading(false);
@@ -543,7 +601,30 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       iframe.addEventListener('load', handleLoad);
       iframe.addEventListener('error', handleError);
 
+      loadTimeoutRef.current = window.setTimeout(() => {
+        const errorMsg = 'React component load timed out';
+        setError(errorMsg);
+        setIsLoading(false);
+        onErrorRef.current?.(errorMsg);
+      }, 8000);
+
+      iframe.srcdoc = htmlContent;
+
+      // Fallback: if load event is missed, check readyState
+      const readyCheckId = window.setTimeout(() => {
+        try {
+          if (iframe.contentDocument?.readyState === 'complete') {
+            clearLoadTimeout();
+            setIsLoading(false);
+          }
+        } catch {
+          // Ignore cross-origin access errors
+        }
+      }, 250);
+
       return () => {
+        clearLoadTimeout();
+        window.clearTimeout(readyCheckId);
         window.removeEventListener('message', handleMessage);
         iframe.removeEventListener('load', handleLoad);
         iframe.removeEventListener('error', handleError);

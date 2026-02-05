@@ -61,6 +61,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
 
       if (library === 'p5') {
         htmlContent += `
+  <div id="canvas-container"></div>
   <script src="https://cdn.jsdelivr.net/npm/p5@2.0.5/lib/p5.min.js"></script>
   <script>
     window.addEventListener('error', function(e) {
@@ -69,6 +70,11 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       c.textContent = 'Error: ' + (e.message || 'Unknown error');
       document.body.replaceChildren(c);
     });
+    if (!document.getElementById('canvas-container')) {
+      var container = document.createElement('div');
+      container.id = 'canvas-container';
+      document.body.appendChild(container);
+    }
     ${code}
     try {
       if (typeof setup === 'function' && !("setup" in window)) { window.setup = setup; }
@@ -148,6 +154,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
         title="Code Preview"
         className="w-full h-screen border border-gray-200 rounded bg-white"
         sandbox="allow-scripts"
+        allow={library === 'p5' ? 'accelerometer; gyroscope; magnetometer' : undefined}
         style={{ display: isLoading || error ? 'none' : 'block' }}
       />
     </div>
