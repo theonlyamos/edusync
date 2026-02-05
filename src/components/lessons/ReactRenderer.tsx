@@ -106,11 +106,15 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
       width: 100%;
       min-height: 100vh;
+      display: flex;
+      justify-content: center;
     }
     #root {
       width: 100%;
       min-height: 100vh;
       padding: 0;
+      display: flex;
+      justify-content: center;
     }
     .error {
       padding: 20px;

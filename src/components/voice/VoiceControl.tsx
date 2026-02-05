@@ -53,7 +53,6 @@ export function VoiceControl({ active, sessionId, topic, lessonContext, onError,
   const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
   const [vadActive, setVadActive] = useState(false);
   const [vadRms, setVadRms] = useState(0);
-  const [mobileContainer, setMobileContainer] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     if (connectionStatus === 'connected') {
@@ -166,38 +165,6 @@ export function VoiceControl({ active, sessionId, topic, lessonContext, onError,
     }
   }, [onFeedbackClose]);
 
-  // Find mobile visualizer container - check when active and connected
-  useEffect(() => {
-    // Only look for container when it should exist (connected state)
-    if (!active || connectionStatus !== 'connected') {
-      // Clear container reference when not needed
-      if (mobileContainer) {
-        setMobileContainer(null);
-      }
-      return;
-    }
-
-    const checkForContainer = () => {
-      const container = document.getElementById('mobile-visualizer-container');
-      if (container) {
-        setMobileContainer(container);
-        return true;
-      }
-      return false;
-    };
-
-    // Check immediately
-    checkForContainer();
-
-    // Also check periodically in case the container is added later
-    // This handles viewport resizing and delayed rendering
-    const interval = setInterval(() => {
-      checkForContainer();
-    }, 100);
-
-    // Cleanup
-    return () => clearInterval(interval);
-  }, [active, connectionStatus]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;

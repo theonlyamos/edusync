@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context'
 import OpenAI from 'openai';
 import { rateLimit } from '@/lib/rate-limiter';
+import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server';
 
 interface OpenAIConfig {
     baseURL: string;
@@ -239,6 +240,12 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
                 ?? message.tool_calls[0];
             try {
                 const args = JSON.parse(toolCall?.function?.arguments || '{}');
+
+                // Convert image URLs to base64 server-side to bypass CSP restrictions
+                if (args.code) {
+                    args.code = await convertImageUrlsToBase64(args.code);
+                }
+
                 return NextResponse.json(args);
             } catch {
                 return NextResponse.json({ error: 'Tool call arguments were not valid JSON.' }, { status: 500 });
@@ -247,6 +254,12 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
 
         try {
             const result = JSON.parse(message?.content || '{}');
+
+            // Convert image URLs to base64 server-side to bypass CSP restrictions
+            if (result.code) {
+                result.code = await convertImageUrlsToBase64(result.code);
+            }
+
             return NextResponse.json({ ...result, _source: 'content' });
         } catch {
             return NextResponse.json({ error: 'AI response was not valid JSON.' }, { status: 500 });

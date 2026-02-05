@@ -28,7 +28,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; connect-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   <style>
     body { 
       margin: 0; 
@@ -38,6 +38,9 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       font-family: Arial, sans-serif;
       width: 100vw;
       height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
     }
     canvas { 
       display: block; 

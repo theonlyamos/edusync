@@ -319,6 +319,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         const vizData = await response.json();
         regenerationAttemptsRef.current = 0;
         setError('');
+
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
@@ -688,11 +689,27 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           generatingVisualization ? (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>Visualization</CardTitle>
+                {lessonContext?.title ? (
+                  <div className="absolute top-4 left-4 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-md border">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{lessonContext.title}</p>
+                        {lessonContext.subject && (
+                          <p className="text-xs text-muted-foreground">
+                            {lessonContext.subject} {lessonContext.gradeLevel && `• ${lessonContext.gradeLevel}`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle>Visualization</CardTitle>
+                    </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="flex-1 flex flex-col items-center justify-center">
                 <Loader2 className="w-10 h-10 animate-spin mr-2" />
@@ -704,11 +721,27 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           ) : (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>Visualization</CardTitle>
+                {lessonContext?.title ? (
+                  <div className="absolute top-4 left-4 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-md border">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">{lessonContext.title}</p>
+                        {lessonContext.subject && (
+                          <p className="text-xs text-muted-foreground">
+                            {lessonContext.subject} {lessonContext.gradeLevel && `• ${lessonContext.gradeLevel}`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle>Visualization</CardTitle>
+                    </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="flex-1 flex items-center justify-center">
                 <div className="text-center text-muted-foreground">
@@ -740,9 +773,6 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       {voiceActive && connectionStatus === 'connected' && (
         <div className={`fixed bottom-0 left-0 right-0 z-50`}>
           <div className="flex flex-col items-center py-3 px-4">
-            <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">
-            </div>
-
             <div className="flex items-center gap-4">
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <Button

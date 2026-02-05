@@ -313,6 +313,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         const vizData = await response.json();
         regenerationAttemptsRef.current = 0; // Reset retry counter for new visualization
         setError(''); // Clear any previous error
+
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
@@ -804,11 +805,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       {voiceActive && connectionStatus === 'connected' && (
         <div className={`fixed bottom-0 left-0 right-0 z-50`}>
           <div className="flex flex-col items-center py-3 px-4">
-            {/* Audio Visualizer - visualizer only, no audio initialization */}
-            <div className="w-full max-w-sm h-8 max-h-12 mb-3 mx-auto" id="mobile-visualizer-container">
-              {/* Visualizer will be rendered here by the main VoiceControl */}
-            </div>
-
             {/* Controls */}
             <div className="flex items-center gap-4">
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
