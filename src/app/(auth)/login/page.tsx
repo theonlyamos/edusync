@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
 function LoginContent() {
@@ -108,79 +108,95 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col">
       {/* Header with back to home link */}
-      <header className="absolute top-0 left-0 right-0 z-20 p-6">
+      <header className="absolute top-0 left-0 right-0 z-20 p-6 flex justify-between items-center">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-            <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
+          <div className="w-8 h-8 rounded-lg border bg-card flex items-center justify-center">
+            <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
           </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
+          <span className="text-lg font-semibold tracking-tight text-foreground">InsyteAI</span>
         </Link>
       </header>
 
-      {/* Background decorative elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-indigo-600/20 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-purple-400/20 to-pink-600/20 rounded-full blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-cyan-400/10 to-blue-600/10 rounded-full blur-3xl"></div>
-      </div>
+      <div className="flex-1 grid md:grid-cols-2">
+        {/* Left side - Form */}
+        <div className="flex items-center justify-center p-8 md:p-12 lg:p-16">
+          <div className="w-full max-w-sm space-y-8">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold tracking-tight text-foreground font-display">Welcome back</h1>
+              <p className="text-muted-foreground">
+                Enter your details to access your learning space.
+              </p>
+            </div>
 
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-full max-w-md space-y-8 px-4 relative z-10">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-            <p className="text-sm text-muted-foreground">
-              Sign in to your account
-            </p>
-          </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    required
+                    disabled={isLoading}
+                    className="h-11 bg-transparent"
+                  />
+                </div>
 
-          <div className="backdrop-blur-sm bg-white/70 dark:bg-slate-800/70 p-8 rounded-2xl shadow-xl border border-white/20 dark:border-slate-700/50">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  required
-                  disabled={isLoading}
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    required
+                    disabled={isLoading}
+                    className="h-11 bg-transparent"
+                  />
+                </div>
               </div>
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={isLoading}
               >
                 {isLoading ? (
                   <>
                     <span className="mr-2">Signing in</span>
-                    <div className="w-4 h-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   </>
                 ) : (
                   'Sign in'
                 )}
               </Button>
 
-              <div className="text-center text-sm text-muted-foreground">or</div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
+
               <Button
                 type="button"
                 variant="outline"
-                className="w-full hover:bg-black hover:text-white hover:border-black transition-colors"
+                className="w-full h-11 bg-transparent hover:bg-muted"
                 onClick={() => handleOAuth('google')}
                 disabled={isLoading}
               >
@@ -190,16 +206,115 @@ function LoginContent() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
-                Continue with Google
+                Google
               </Button>
 
               <div className="text-center text-sm">
                 <span className="text-muted-foreground">Don't have an account? </span>
-                <Link href="/signup" className="font-medium text-primary hover:underline">
+                <Link href="/signup" className="font-medium text-foreground hover:underline underline-offset-4">
                   Sign up
                 </Link>
               </div>
             </form>
+          </div>
+        </div>
+
+        {/* Right side - Visual composition */}
+        <div className="hidden md:flex flex-col bg-muted/30 relative overflow-hidden border-l">
+          {/* Dot grid texture */}
+          <div
+            className="absolute inset-0 opacity-[0.35]"
+            style={{
+              backgroundImage: 'radial-gradient(circle, hsl(var(--foreground) / 0.15) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
+          />
+          {/* Warm radial wash */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,hsl(var(--primary)/0.08),transparent_60%),radial-gradient(ellipse_at_80%_80%,hsl(var(--accent)/0.06),transparent_50%)]" />
+
+          <div className="flex-1 flex items-center justify-center p-10 relative">
+            {/* Floating card stack */}
+            <div className="relative w-full max-w-sm h-[420px]">
+              {/* Card 1 - back */}
+              <div
+                className="absolute top-4 left-6 right-10 rounded-xl border bg-card/80 backdrop-blur-sm p-5 shadow-sm opacity-0 animate-[fadeSlideUp_0.6s_0.1s_ease-out_forwards]"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">AI</div>
+                  <div>
+                    <div className="text-xs font-medium text-foreground">Voice Session</div>
+                    <div className="text-[10px] text-muted-foreground">Physics &middot; Wave mechanics</div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-2 w-3/4 rounded-full bg-muted" />
+                  <div className="h-2 w-1/2 rounded-full bg-muted" />
+                </div>
+              </div>
+
+              {/* Card 2 - middle, visualization preview */}
+              <div
+                className="absolute top-24 left-2 right-4 rounded-xl border bg-card shadow-md p-5 opacity-0 animate-[fadeSlideUp_0.6s_0.3s_ease-out_forwards]"
+              >
+                <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3">Generated visualization</div>
+                <div className="grid grid-cols-5 gap-1.5 mb-3">
+                  {[0.3, 0.6, 0.9, 0.7, 0.4].map((h, i) => (
+                    <div
+                      key={i}
+                      className="rounded bg-primary/20"
+                      style={{
+                        height: `${h * 48}px`,
+                        animationDelay: `${0.5 + i * 0.08}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Wave amplitude over time</span>
+                  <span className="text-primary font-medium">Live</span>
+                </div>
+              </div>
+
+              {/* Card 3 - front, chat snippet */}
+              <div
+                className="absolute top-52 left-6 right-2 rounded-xl border bg-card shadow-lg p-5 opacity-0 animate-[fadeSlideUp_0.6s_0.5s_ease-out_forwards]"
+              >
+                <div className="space-y-3">
+                  <div className="flex justify-end">
+                    <div className="bg-primary/10 text-foreground text-xs px-3 py-2 rounded-lg rounded-br-sm max-w-[80%]">
+                      How does light bend through a prism?
+                    </div>
+                  </div>
+                  <div className="flex justify-start">
+                    <div className="bg-muted text-foreground text-xs px-3 py-2 rounded-lg rounded-bl-sm max-w-[80%]">
+                      Great question. I'm generating a refraction diagram for you now...
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Decorative floating badge */}
+              <div
+                className="absolute bottom-6 right-8 rounded-full border bg-card px-3 py-1.5 shadow-sm flex items-center gap-2 opacity-0 animate-[fadeSlideUp_0.6s_0.7s_ease-out_forwards]"
+              >
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-[10px] text-muted-foreground font-medium">Session active</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quote strip at bottom */}
+          <div className="px-10 py-8 border-t bg-background/50 backdrop-blur-sm relative z-10">
+            <p className="text-sm text-muted-foreground italic leading-relaxed">
+              &ldquo;Visual learning isn't just about seeing. It's about understanding.&rdquo;
+            </p>
+            <div className="flex justify-between items-center mt-3 text-xs text-muted-foreground">
+              <span>© InsyteAI {new Date().getFullYear()}</span>
+              <div className="space-x-4">
+                <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+                <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+              </div>
+            </div>
           </div>
         </div>
       </div>

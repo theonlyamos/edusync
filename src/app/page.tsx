@@ -142,31 +142,209 @@ function HomeContent() {
           </div>
 
           <div className="relative">
-            <div className="rounded-2xl border bg-card p-4 shadow-sm">
-              <div className="flex items-center justify-between border-b pb-3 mb-4">
-                <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Studio Session
-                </span>
-                <Badge variant="secondary" className="text-xs">
-                  Live
-                </Badge>
-              </div>
-              <Image
-                src="/hero_image_1.jpg"
-                alt="Interactive learning session preview"
-                width={560}
-                height={420}
-                className="rounded-xl border object-cover"
-                priority
-              />
-              <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
-                <div className="flex items-center justify-between">
-                  <span>Visual explanation: Neural pathways</span>
-                  <span>09:42</span>
+            <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+              {/* Window chrome */}
+              <div className="flex items-center gap-2 border-b px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-foreground/15" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-foreground/15" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-foreground/15" />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>Teacher notes captured</span>
-                  <span>Auto-saved</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[10px] text-muted-foreground">Listening</span>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px]">
+                    09:42
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Active voice waveform */}
+                <div className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Mic className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <div className="flex-1 flex items-center gap-[3px] h-8">
+                    {[2, 4, 6, 3, 8, 5, 7, 4, 6, 3, 5, 8, 4, 6, 3, 7, 5, 2, 4, 6, 3, 5, 7, 4].map((h, i) => (
+                      <div
+                        key={i}
+                        className="flex-1 bg-primary/30 rounded-full min-w-[2px] animate-[equalizer_1.2s_ease-in-out_infinite]"
+                        style={{ height: `${h * 3.5}px`, animationDelay: `${i * 0.06}s` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Transcript bubble */}
+                <div className="rounded-lg bg-muted/60 px-4 py-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5">Transcript</div>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    &ldquo;Explain how neurons fire and connect in a neural network...&rdquo;
+                  </p>
+                </div>
+
+                {/* Live visualization area - SVG neural network */}
+                <div className="rounded-xl border bg-background relative overflow-hidden">
+                  <div className="aspect-[16/9] relative">
+                    <svg viewBox="0 0 480 270" fill="none" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                      {/* Grid dots background */}
+                      <defs>
+                        <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                          <circle cx="10" cy="10" r="0.6" fill="currentColor" opacity="0.1" />
+                        </pattern>
+                        {/* Signal pulse animation along a path */}
+                        <circle id="signal" r="2.5" fill="hsl(var(--primary))" opacity="0.9">
+                          <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite" />
+                        </circle>
+                      </defs>
+                      <rect width="480" height="270" fill="url(#dotGrid)" />
+
+                      {/* ---- Connection lines (drawn first, behind nodes) ---- */}
+                      {/* Input -> Hidden1 connections */}
+                      {(() => {
+                        const inputY = [65, 135, 205];
+                        const hidden1Y = [45, 105, 165, 225];
+                        const lines: React.ReactElement[] = [];
+                        inputY.forEach((iy, ii) => {
+                          hidden1Y.forEach((hy, hi) => {
+                            const delay = (ii * 4 + hi) * 0.15;
+                            lines.push(
+                              <line key={`ih1-${ii}-${hi}`} x1="90" y1={iy} x2="190" y2={hy}
+                                stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.12"
+                              >
+                                <animate attributeName="opacity" values="0.06;0.2;0.06" dur="3s" begin={`${delay}s`} repeatCount="indefinite" />
+                              </line>
+                            );
+                          });
+                        });
+                        return lines;
+                      })()}
+                      {/* Hidden1 -> Hidden2 connections */}
+                      {(() => {
+                        const h1Y = [45, 105, 165, 225];
+                        const h2Y = [55, 115, 175, 230];
+                        const lines: React.ReactElement[] = [];
+                        h1Y.forEach((y1, i1) => {
+                          h2Y.forEach((y2, i2) => {
+                            const delay = 0.6 + (i1 * 4 + i2) * 0.12;
+                            lines.push(
+                              <line key={`h1h2-${i1}-${i2}`} x1="190" y1={y1} x2="290" y2={y2}
+                                stroke="hsl(var(--accent))" strokeWidth="1" opacity="0.1"
+                              >
+                                <animate attributeName="opacity" values="0.05;0.18;0.05" dur="2.8s" begin={`${delay}s`} repeatCount="indefinite" />
+                              </line>
+                            );
+                          });
+                        });
+                        return lines;
+                      })()}
+                      {/* Hidden2 -> Output connections */}
+                      {(() => {
+                        const h2Y = [55, 115, 175, 230];
+                        const outY = [100, 170];
+                        const lines: React.ReactElement[] = [];
+                        h2Y.forEach((y1, i1) => {
+                          outY.forEach((y2, i2) => {
+                            const delay = 1.2 + (i1 * 2 + i2) * 0.2;
+                            lines.push(
+                              <line key={`h2o-${i1}-${i2}`} x1="290" y1={y1} x2="390" y2={y2}
+                                stroke="hsl(var(--foreground))" strokeWidth="1" opacity="0.08"
+                              >
+                                <animate attributeName="opacity" values="0.04;0.16;0.04" dur="3.2s" begin={`${delay}s`} repeatCount="indefinite" />
+                              </line>
+                            );
+                          });
+                        });
+                        return lines;
+                      })()}
+
+                      {/* ---- Signal pulses travelling along select paths ---- */}
+                      {[
+                        { x1: 90, y1: 65, x2: 190, y2: 45, dur: '2.4s', delay: '0s' },
+                        { x1: 90, y1: 135, x2: 190, y2: 165, dur: '2.8s', delay: '0.8s' },
+                        { x1: 90, y1: 205, x2: 190, y2: 225, dur: '2.6s', delay: '1.5s' },
+                        { x1: 190, y1: 105, x2: 290, y2: 55, dur: '2.2s', delay: '0.4s' },
+                        { x1: 190, y1: 165, x2: 290, y2: 175, dur: '2.5s', delay: '1.2s' },
+                        { x1: 290, y1: 115, x2: 390, y2: 100, dur: '2.3s', delay: '0.6s' },
+                        { x1: 290, y1: 175, x2: 390, y2: 170, dur: '2.7s', delay: '1.8s' },
+                      ].map((p, i) => (
+                        <circle key={`sig-${i}`} r="2" fill="hsl(var(--primary))" opacity="0">
+                          <animate attributeName="cx" values={`${p.x1};${p.x2}`} dur={p.dur} begin={p.delay} repeatCount="indefinite" />
+                          <animate attributeName="cy" values={`${p.y1};${p.y2}`} dur={p.dur} begin={p.delay} repeatCount="indefinite" />
+                          <animate attributeName="opacity" values="0;0.8;0.8;0" dur={p.dur} begin={p.delay} repeatCount="indefinite" />
+                        </circle>
+                      ))}
+
+                      {/* ---- Nodes (drawn last, on top) ---- */}
+                      {/* Input layer */}
+                      {[65, 135, 205].map((y, i) => (
+                        <g key={`in-${i}`}>
+                          <circle cx="90" cy={y} r="8" fill="hsl(var(--primary))" opacity="0.1">
+                            <animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" begin={`${i * 0.5}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="90" cy={y} r="5" fill="hsl(var(--card))" stroke="hsl(var(--primary))" strokeWidth="1.5">
+                            <animate attributeName="r" values="5;5.8;5" dur="3s" begin={`${i * 0.5}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="90" cy={y} r="2" fill="hsl(var(--primary))" opacity="0.7" />
+                        </g>
+                      ))}
+                      {/* Hidden layer 1 */}
+                      {[45, 105, 165, 225].map((y, i) => (
+                        <g key={`h1-${i}`}>
+                          <circle cx="190" cy={y} r="7" fill="hsl(var(--accent))" opacity="0.08">
+                            <animate attributeName="opacity" values="0.06;0.15;0.06" dur="2.8s" begin={`${0.3 + i * 0.4}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="190" cy={y} r="4.5" fill="hsl(var(--card))" stroke="hsl(var(--accent))" strokeWidth="1.5">
+                            <animate attributeName="r" values="4.5;5.2;4.5" dur="2.8s" begin={`${0.3 + i * 0.4}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="190" cy={y} r="1.8" fill="hsl(var(--accent))" opacity="0.6" />
+                        </g>
+                      ))}
+                      {/* Hidden layer 2 */}
+                      {[55, 115, 175, 230].map((y, i) => (
+                        <g key={`h2-${i}`}>
+                          <circle cx="290" cy={y} r="7" fill="hsl(var(--accent))" opacity="0.08">
+                            <animate attributeName="opacity" values="0.05;0.14;0.05" dur="3.2s" begin={`${0.6 + i * 0.35}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="290" cy={y} r="4.5" fill="hsl(var(--card))" stroke="hsl(var(--accent))" strokeWidth="1.2">
+                            <animate attributeName="r" values="4.5;5;4.5" dur="3.2s" begin={`${0.6 + i * 0.35}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="290" cy={y} r="1.5" fill="hsl(var(--accent))" opacity="0.5" />
+                        </g>
+                      ))}
+                      {/* Output layer */}
+                      {[100, 170].map((y, i) => (
+                        <g key={`out-${i}`}>
+                          <circle cx="390" cy={y} r="9" fill="hsl(var(--primary))" opacity="0.08">
+                            <animate attributeName="opacity" values="0.06;0.2;0.06" dur="3.5s" begin={`${1 + i * 0.6}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="390" cy={y} r="6" fill="hsl(var(--card))" stroke="hsl(var(--primary))" strokeWidth="1.8">
+                            <animate attributeName="r" values="6;7;6" dur="3.5s" begin={`${1 + i * 0.6}s`} repeatCount="indefinite" />
+                          </circle>
+                          <circle cx="390" cy={y} r="2.5" fill="hsl(var(--primary))" opacity="0.8" />
+                        </g>
+                      ))}
+
+                      {/* Layer labels */}
+                      <text x="90" y="250" textAnchor="middle" fontSize="8" fill="currentColor" opacity="0.3" fontFamily="monospace" letterSpacing="0.1em">INPUT</text>
+                      <text x="190" y="250" textAnchor="middle" fontSize="8" fill="currentColor" opacity="0.3" fontFamily="monospace" letterSpacing="0.1em">HIDDEN 1</text>
+                      <text x="290" y="250" textAnchor="middle" fontSize="8" fill="currentColor" opacity="0.3" fontFamily="monospace" letterSpacing="0.1em">HIDDEN 2</text>
+                      <text x="390" y="250" textAnchor="middle" fontSize="8" fill="currentColor" opacity="0.3" fontFamily="monospace" letterSpacing="0.1em">OUTPUT</text>
+                    </svg>
+                  </div>
+                  <div className="px-4 py-2.5 border-t flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>4-layer neural network &middot; forward pass</span>
+                    <span className="text-primary font-medium">Live</span>
+                  </div>
+                </div>
+
+                {/* Status bar */}
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Voice session active</span>
+                  <span>Auto-saving transcript</span>
                 </div>
               </div>
             </div>
@@ -260,24 +438,52 @@ function HomeContent() {
             </div>
             <div className="p-6 space-y-5">
               <div className="space-y-2">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Prompt</div>
-                <div className="rounded-lg border bg-background px-4 py-3 text-sm">
-                  Explain how energy flows through a circuit and visualize it.
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Voice Command</div>
+                <div className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3 text-sm">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 2, 1, 2, 3, 4, 3, 2, 1].map((h, i) => (
+                      <div
+                        key={i}
+                        className="w-1 bg-primary rounded-full animate-[equalizer_1s_ease-in-out_infinite]"
+                        style={{ height: `${h * 4}px`, animationDelay: `${i * 0.05}s` }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-muted-foreground">"Show me how energy flows in a circuit..."</span>
                 </div>
               </div>
-              <div className="rounded-xl border bg-background p-4">
-                <Image
-                  src="/visualization_example.jpg"
-                  alt="Visualization example"
-                  width={520}
-                  height={320}
-                  className="rounded-lg object-cover"
-                />
-                <div className="mt-3 text-xs text-muted-foreground">Generated visualization · 12 seconds</div>
+              <div className="rounded-xl border bg-background p-4 relative overflow-hidden group">
+                <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="aspect-video w-full rounded-lg bg-muted relative overflow-hidden">
+                  {/* Abstract circuit visualization placeholder */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="relative w-32 h-32">
+                       <div className="absolute inset-0 border-2 border-primary/20 rounded-full animate-[spin_10s_linear_infinite]" />
+                       <div className="absolute inset-4 border-2 border-accent/20 rounded-full animate-[spin_8s_linear_infinite_reverse]" />
+                       <div className="absolute inset-8 border-2 border-foreground/10 rounded-full" />
+                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                         <div className="w-3 h-3 bg-accent rounded-full animate-pulse shadow-[0_0_15px_hsl(var(--accent))]" />
+                       </div>
+                       {/* Orbiting particles */}
+                       <div className="absolute inset-0 animate-[spin_4s_linear_infinite]">
+                         <div className="absolute top-0 left-1/2 w-2 h-2 -ml-1 bg-primary rounded-full shadow-[0_0_10px_hsl(var(--primary))]" />
+                       </div>
+                    </div>
+                  </div>
+                  {/* Grid lines */}
+                  <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Generating live visual...</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    Listening
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Notes saved to session log</span>
-                <span>Auto-sync enabled</span>
+              <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-4">
+                <span>Audio transcribed</span>
+                <span>Session #12</span>
               </div>
             </div>
           </div>

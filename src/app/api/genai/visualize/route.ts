@@ -59,6 +59,17 @@ For non-interactive, informative illustrations (diagrams, title cards, concept e
 * **Visual Hierarchy:** Use size, color saturation, and positioning to guide the eye through the educational narrative.
 * **Whitespace & Balance:** Don't overcrowd. Let elements breathe with generous spacing.
 
+### **Design Quality Standards**
+
+Apply these design principles to every visualization to avoid generic, AI-looking output:
+
+* **Color Philosophy:** Use one dominant color with 1–2 sharp accents. Avoid evenly-distributed rainbow palettes. Commit to a cohesive palette per visualization.
+* **Spatial Composition:** Favor asymmetry, overlap, and diagonal flow where appropriate. Avoid default centered grids. Use generous negative space to let content breathe.
+* **Background & Depth:** Layer gradients (linear, radial), add subtle noise/texture via CSS patterns, and use soft shadows to create atmosphere instead of flat solid backgrounds.
+* **Motion & Reveals:** Use CSS keyframe animations for entrance effects (fade-in, slide-up with staggered delays). Add hover transitions on interactive elements. One orchestrated reveal sequence beats scattered animations.
+* **Anti-Patterns to Avoid:** No generic symmetric card grids. No flat white/gray backgrounds with no texture. No evenly-spaced rainbow color schemes. No cookie-cutter layouts that look like every other AI-generated visual.
+* **Sandbox Constraints:** Do NOT use \`@import\` for fonts, CSS variables, or external animation libraries. Use inline styles, Tailwind utility classes, and CSS keyframes defined inside the component.
+
 ### **Technology Selection Framework**
 
 Choose the correct technology based on the task requirements:
