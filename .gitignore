@@ -40,5 +40,7 @@ yarn-error.log*
 next-env.d.ts
 
 
-.cursor
+.cursor/*
+.agent/*
+.agents/*
 opencode.json
