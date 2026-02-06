@@ -4,9 +4,8 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Mic, Zap, Code2, Sparkles, Play, ArrowRight, Volume2, Eye, MessageSquare, Sun, Moon } from 'lucide-react'
+import { Loader2, Mic, Code2, Play, ArrowRight, MessageSquare, Sun, Moon } from 'lucide-react'
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -42,32 +41,28 @@ function HomeContent() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-gradient-to-b from-background via-indigo-50/40 to-violet-50/30 dark:from-background dark:via-indigo-950/20 dark:to-violet-950/10">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl shadow-sm">
-        <div className="container mx-auto flex h-20 items-center justify-between px-4">
+    <main className="min-h-screen overflow-x-hidden bg-background bg-[radial-gradient(circle_at_20%_20%,rgba(92,74,46,0.08),transparent_55%),radial-gradient(circle_at_85%_10%,rgba(28,74,60,0.08),transparent_45%)]">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/90 backdrop-blur">
+        <div className="container mx-auto flex items-center justify-between px-4 py-5">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-              <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
+            <div className="w-9 h-9 rounded-md border bg-card flex items-center justify-center">
+              <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
             </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
+            <span className="text-lg font-semibold tracking-tight">InsyteAI</span>
           </div>
 
-          <nav className="hidden gap-8 lg:flex text-sm font-medium">
-            <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors relative group">
+          <nav className="hidden gap-8 lg:flex text-sm">
+            <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
               Features
-              <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 group-hover:w-full transition-all duration-300"></div>
             </Link>
-            <Link href="#demo" className="text-muted-foreground hover:text-foreground transition-colors relative group">
+            <Link href="#demo" className="text-muted-foreground hover:text-foreground transition-colors">
               Demo
-              <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 group-hover:w-full transition-all duration-300"></div>
             </Link>
-            <Link href="#solutions" className="text-muted-foreground hover:text-foreground transition-colors relative group">
+            <Link href="#solutions" className="text-muted-foreground hover:text-foreground transition-colors">
               Solutions
-              <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 group-hover:w-full transition-all duration-300"></div>
             </Link>
-            <Link href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors relative group">
+            <Link href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
               Pricing
-              <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 group-hover:w-full transition-all duration-300"></div>
             </Link>
           </nav>
 
@@ -88,592 +83,334 @@ function HomeContent() {
             <Button asChild variant="ghost" className="hidden sm:inline-flex">
               <Link href="/login">Sign in</Link>
             </Button>
-            <Button asChild className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-lg">
+            <Button asChild className="bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
               <Link href="/signup">Get Started</Link>
             </Button>
           </div>
         </div>
       </header>
 
-      <section className="relative container mx-auto px-4 overflow-hidden">
-        <div className="absolute inset-0 -z-10">
-          <Image
-            src="/hero_image.jpg"
-            alt="AI Visual Learning Hero"
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover saturate-150 contrast-125 brightness-110"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/20 via-background/10 " />
-        </div>
-        <div className="grid gap-8 py-20 md:grid-cols-2 md:gap-12">
-          <div className="flex flex-col justify-center space-y-6">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-gradient-to-r from-indigo-500/10 to-violet-500/10 text-indigo-900 dark:text-indigo-100 border-indigo-200/50">
-                <Sparkles className="w-3 h-3 mr-1" />
-                AI-Powered Learning
-              </Badge>
+      <section className="container mx-auto px-4 py-16 md:py-24">
+        <div className="grid gap-12 md:grid-cols-2 md:items-center">
+          <div className="flex flex-col gap-6">
+            <div className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+              InsyteAI Visual Studio
             </div>
-            <h1 className="text-4xl font-bold tracking-tight md:text-6xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 bg-clip-text text-transparent">
-              Talk. Visualize. Learn.
+            <h1 className="text-4xl md:text-6xl leading-[1.05]">
+              Visual learning, reimagined.
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
-              Experience the future of education with <span className="font-semibold text-foreground">voice-controlled AI tutoring</span> that generates
-              <span className="font-semibold text-foreground"> interactive visualizations</span> in real-time.
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              A voice-first learning environment where complex ideas turn into live,
+              clear visuals. Built for modern classrooms and curious minds.
             </p>
-            <div className="flex flex-wrap gap-3 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Mic className="w-4 h-4 text-indigo-500" />
-                Voice Streaming
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Code2 className="w-4 h-4 text-violet-500" />
-                Live Code Generation
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Eye className="w-4 h-4 text-cyan-500" />
-                3D Visualizations
-              </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <Mic className="h-4 w-4" />
+                Voice-led sessions
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Code2 className="h-4 w-4" />
+                Live visualizations
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Context-aware tutoring
+              </span>
             </div>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
+              <Button asChild size="lg" className="px-8 py-6 text-base whitespace-nowrap bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
                 <Link href="/demo" className="flex items-center gap-2">
-                  <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                  Start Learning Now
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  <Play className="w-5 h-5" />
+                  Start a live session
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="rounded-full px-6 py-6 text-base border-2 hover:bg-muted/50">
-                <Link href="/signup" className="flex items-center gap-2">
-                  Sign up free
-                </Link>
+              <Button asChild size="lg" variant="outline" className="px-8 py-6 text-base whitespace-nowrap">
+                <Link href="/signup">Create a free account</Link>
               </Button>
             </div>
-            <div className="text-xs text-muted-foreground">
-              ✨ No credit card required • 🎯 Works in any browser • 🚀 Instant setup
-            </div>
-          </div>
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-violet-500/20 to-cyan-500/20 rounded-3xl blur-3xl"></div>
-            <Card className="relative backdrop-blur-sm bg-background/80 border-2 border-gradient shadow-2xl">
-              <CardContent className="p-8">
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-lg">Live AI Session</h3>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm text-muted-foreground">Connected</span>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-end">
-                      <div className="bg-primary text-primary-foreground px-4 py-2 rounded-2xl rounded-br-md max-w-[80%]">
-                        Explain how neural networks work with a visual
-                      </div>
-                    </div>
-                    <div className="flex justify-start">
-                      <div className="bg-muted px-4 py-2 rounded-2xl rounded-bl-md max-w-[80%]">
-                        I'll create an interactive visualization showing how data flows through layers...
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-950/50 dark:to-violet-950/50 rounded-xl p-6 border">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-sm font-medium">React Visualization</span>
-                      <Code2 className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      <div className="h-8 bg-indigo-200 dark:bg-indigo-800 rounded animate-pulse"></div>
-                      <div className="h-8 bg-violet-200 dark:bg-violet-800 rounded animate-pulse delay-75"></div>
-                      <div className="h-8 bg-cyan-200 dark:bg-cyan-800 rounded animate-pulse delay-150"></div>
-                    </div>
-                    <div className="text-xs text-muted-foreground">Neural network layers processing...</div>
-                  </div>
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="flex items-center gap-2">
-                      <Volume2 className="w-4 h-4 text-muted-foreground" />
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <div key={i} className={`w-1 h-4 bg-indigo-500 rounded-full ${i <= 3 ? 'animate-pulse' : 'opacity-30'}`}></div>
-                        ))}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">9:42 remaining</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" className="container mx-auto px-4 py-24">
-        <div className="text-center mb-16">
-          <Badge variant="outline" className="mb-4">
-            <Zap className="w-3 h-3 mr-1" />
-            Powerful Features
-          </Badge>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Everything you need for modern learning</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Advanced AI capabilities that transform how students and teachers interact with complex concepts
-          </p>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-3 mb-16">
-          <Card className="relative overflow-hidden border-2 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 group-hover:from-indigo-500/10 group-hover:to-violet-500/10 transition-all duration-300"></div>
-            <CardContent className="relative p-8">
-              <div className="mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center mb-4">
-                  <Mic className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">Real-Time Voice Streaming</h3>
-                <p className="text-muted-foreground mb-4">
-                  Talk naturally with AI that understands context, generates responses, and creates visualizations based on your voice commands.
-                </p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    Natural conversation
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    Hands-free learning
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    Progress tracking
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-6 pt-4 text-sm text-muted-foreground">
+              <div>
+                <div className="text-2xl font-semibold text-foreground">120+ hours</div>
+                of guided learning sessions
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="relative overflow-hidden border-2 hover:border-violet-200 dark:hover:border-violet-800 transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-cyan-500/5 group-hover:from-violet-500/10 group-hover:to-cyan-500/10 transition-all duration-300"></div>
-            <CardContent className="relative p-8">
-              <div className="mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center mb-4">
-                  <Code2 className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">Interactive Visualizations</h3>
-                <p className="text-muted-foreground mb-4">
-                  Watch as AI creates interactive visualizations and animations tailored to explain complex concepts clearly.
-                </p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
-                    Interactive diagrams
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                    Animated simulations
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    3D visualizations
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="relative overflow-hidden border-2 hover:border-cyan-200 dark:hover:border-cyan-800 transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-indigo-500/5 group-hover:from-cyan-500/10 group-hover:to-indigo-500/10 transition-all duration-300"></div>
-            <CardContent className="relative p-8">
-              <div className="mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-500 flex items-center justify-center mb-4">
-                  <MessageSquare className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2">Intelligent Chat Interface</h3>
-                <p className="text-muted-foreground mb-4">
-                  Seamlessly switch between voice and text, with a focused chat panel that captures explanations and guides learning.
-                </p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                    Context-aware responses
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-violet-500 rounded-full"></div>
-                    Visual feedback loop
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
-                    Session continuity
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Learning benefits showcase */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-950/20 dark:to-violet-950/20">
-            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">Instant</div>
-            <div className="text-sm text-muted-foreground">Get immediate visual explanations for any concept</div>
-          </div>
-          <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-violet-50 to-cyan-50 dark:from-violet-950/20 dark:to-cyan-950/20">
-            <div className="text-2xl font-bold text-violet-700 dark:text-violet-300 mb-2">Adaptive</div>
-            <div className="text-sm text-muted-foreground">AI adjusts to your learning style and pace</div>
-          </div>
-          <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-cyan-50 to-indigo-50 dark:from-cyan-950/20 dark:to-indigo-950/20">
-            <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 mb-2">Engaging</div>
-            <div className="text-sm text-muted-foreground">Interactive content keeps you focused and motivated</div>
-          </div>
-          <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-950/20 dark:to-violet-950/20">
-            <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">Effective</div>
-            <div className="text-sm text-muted-foreground">Visual learning improves comprehension and retention</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Demo Section */}
-      <section id="demo" className="relative container mx-auto px-4 py-24 overflow-hidden">
-        <div className="absolute inset-0 -z-10">
-          <Image
-            src="/hero_image.jpg"
-            alt="AI Learning Demo Background"
-            fill
-            sizes="100vw"
-            className="object-cover saturate-150 contrast-125 brightness-110 scale-x-[-1]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-br from-background/80 via-background/60 to-background/80" />
-        </div>
-        <div className="text-center mb-16">
-          <Badge variant="outline" className="mb-4">
-            <Play className="w-3 h-3 mr-1" />
-            See it in Action
-          </Badge>
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Experience AI-powered learning</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-            Watch how students interact with complex topics through voice and receive instant visual feedback
-          </p>
-          <Button asChild size="lg" className="rounded-full px-8 py-6 text-base shadow-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white">
-            <Link href="/demo" className="flex items-center gap-2">
-              <Play className="w-5 h-5" />
-              Try Live Demo
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
-        </div>
-
-        <div className="grid gap-8 lg:grid-cols-2 items-center">
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-2xl font-semibold">How it works</h3>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-200">1</span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Start a voice session</h4>
-                    <p className="text-sm text-muted-foreground">Click "Start Learning" and grant microphone access for real-time interaction</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-violet-800 dark:text-violet-200">2</span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Ask questions naturally</h4>
-                    <p className="text-sm text-muted-foreground">Speak your questions or type them - AI understands context and learning goals</p>
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">3</span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Get visual explanations</h4>
-                    <p className="text-sm text-muted-foreground">Watch as AI generates interactive code and visualizations to explain concepts</p>
-                  </div>
-                </div>
+              <div>
+                <div className="text-2xl font-semibold text-foreground">20k+</div>
+                interactive visuals generated
               </div>
             </div>
           </div>
 
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-violet-500/10 to-cyan-500/10 rounded-2xl blur-2xl"></div>
-            <Card className="relative backdrop-blur-sm bg-background/95 border-2 shadow-2xl">
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b">
-                    <span className="text-sm font-medium">Live Demo Session</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs text-muted-foreground">Recording</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-end">
-                      <div className="bg-primary text-primary-foreground px-3 py-2 rounded-2xl rounded-br-md max-w-[85%] text-sm">
-                        How do neural networks work? Can you show me?
-                      </div>
-                    </div>
-
-                    <div className="flex justify-start">
-                      <div className="bg-muted px-3 py-2 rounded-2xl rounded-bl-md max-w-[85%] text-sm">
-                        I'll create an interactive visualization showing how artificial neurons work together...
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative rounded-xl overflow-hidden border shadow-lg">
-                    <Image
-                      src="/visualization_example.jpg"
-                      alt="Neural Networks Explained - Interactive Learning Visualization"
-                      width={400}
-                      height={300}
-                      className="w-full h-auto object-cover"
-                      priority
-                    />
-                    <div className="absolute top-3 right-3">
-                      <Badge variant="secondary" className="bg-white/90 text-violet-700 text-xs">
-                        Live Visualization
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div className="flex items-center gap-2">
-                      <Volume2 className="w-3 h-3 text-muted-foreground" />
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className={`w-1 h-3 bg-indigo-500 rounded-full ${i <= 2 ? 'animate-pulse' : 'opacity-30'}`}></div>
-                        ))}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">Learning in progress</span>
-                  </div>
+            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b pb-3 mb-4">
+                <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Studio Session
+                </span>
+                <Badge variant="secondary" className="text-xs">
+                  Live
+                </Badge>
+              </div>
+              <Image
+                src="/hero_image_1.jpg"
+                alt="Interactive learning session preview"
+                width={560}
+                height={420}
+                className="rounded-xl border object-cover"
+                priority
+              />
+              <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>Visual explanation: Neural pathways</span>
+                  <span>09:42</span>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="flex items-center justify-between">
+                  <span>Teacher notes captured</span>
+                  <span>Auto-saved</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="solutions" className="container mx-auto px-4 py-24">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for every learner</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Tailored experiences for students, teachers, and administrators
+      <section id="features" className="container mx-auto px-4 py-20">
+        <div className="flex flex-col gap-4 max-w-3xl">
+          <Badge variant="outline" className="w-fit">Feature set</Badge>
+          <h2 className="text-3xl md:text-4xl leading-tight">
+            Crafted for real classrooms, not just demos.
+          </h2>
+          <p className="text-lg text-muted-foreground">
+            Every tool is designed to keep learners engaged while educators stay in control.
           </p>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-3">
-          <Card className="relative overflow-hidden border-2 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 group">
-            <Link href="/learn" className="block">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 group-hover:from-indigo-500/10 group-hover:to-violet-500/10 transition-all duration-300"></div>
-              <CardContent className="relative p-8">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center mb-6">
-                  <Eye className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold mb-3">For Learners</h3>
-                <p className="text-muted-foreground mb-4">
-                  Personalized, visual-first learning with interactive practice sessions and real-time feedback.
-                </p>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <div>• Voice-guided tutorials</div>
-                  <div>• Interactive visualizations</div>
-                  <div>• Progress tracking</div>
-                </div>
-                <div className="flex items-center gap-2 mt-6 text-indigo-700 dark:text-indigo-300 font-medium">
-                  Start learning now
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
-              </CardContent>
-            </Link>
-          </Card>
-
-          <Card className="relative overflow-hidden border-2 border-dashed border-violet-200 dark:border-violet-800 transition-all duration-300 opacity-75">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-cyan-500/5"></div>
-            <CardContent className="relative p-8">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500/50 to-cyan-500/50 flex items-center justify-center mb-6">
-                <Sparkles className="w-6 h-6 text-violet-400" />
+        <div className="grid gap-6 md:grid-cols-3 mt-10">
+          {[
+            {
+              title: 'Voice-driven lessons',
+              description: 'Speak naturally and see concepts unfold as visual diagrams.',
+              icon: <Mic className="h-5 w-5" />,
+            },
+            {
+              title: 'Live visualization engine',
+              description: 'Generate clear, interactive visuals in the moment.',
+              icon: <Code2 className="h-5 w-5" />,
+            },
+            {
+              title: 'Guided chat companion',
+              description: 'Summaries, next steps, and follow-ups are captured automatically.',
+              icon: <MessageSquare className="h-5 w-5" />,
+            },
+          ].map((feature) => (
+            <div key={feature.title} className="rounded-xl border bg-card p-6 shadow-sm">
+              <div className="flex items-center gap-3 text-sm uppercase tracking-[0.2em] text-muted-foreground">
+                {feature.icon}
+                Feature
               </div>
-              <h3 className="text-xl font-semibold mb-3">For Teachers</h3>
-              <p className="text-muted-foreground mb-4">
-                Plan lessons, generate content, and deliver live visual explanations that engage every student.
-              </p>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div>• Lesson planning tools</div>
-                <div>• Content generation</div>
-                <div>• Student analytics</div>
-              </div>
-              <div className="flex items-center gap-2 mt-6">
-                <Badge variant="outline" className="bg-gradient-to-r from-violet-50 to-cyan-50 dark:from-violet-950/50 dark:to-cyan-950/50 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800">
-                  Coming Soon
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="relative overflow-hidden border-2 border-dashed border-cyan-200 dark:border-cyan-800 transition-all duration-300 opacity-75">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-indigo-500/5"></div>
-            <CardContent className="relative p-8">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/50 to-indigo-500/50 flex items-center justify-center mb-6">
-                <Zap className="w-6 h-6 text-cyan-400" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">For Admins</h3>
-              <p className="text-muted-foreground mb-4">
-                Manage users, grades, timetables, and get school-wide insights into learning outcomes.
-              </p>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div>• User management</div>
-                <div>• Performance analytics</div>
-                <div>• System administration</div>
-              </div>
-              <div className="flex items-center gap-2 mt-6">
-                <Badge variant="outline" className="bg-gradient-to-r from-cyan-50 to-indigo-50 dark:from-cyan-950/50 dark:to-indigo-950/50 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800">
-                  Coming Soon
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+              <h3 className="mt-4 text-xl font-semibold">{feature.title}</h3>
+              <p className="mt-3 text-muted-foreground">{feature.description}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      <section id="pricing" className="container mx-auto px-4 py-24">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to transform learning?</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Join thousands of students and teachers already using AI-powered visual learning
+      <section id="demo" className="container mx-auto px-4 py-20">
+        <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center">
+          <div className="space-y-5">
+            <Badge variant="outline" className="w-fit">Live demo</Badge>
+            <h2 className="text-3xl md:text-4xl leading-tight">
+              Watch a session unfold in real time.
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              Students talk through a topic. The visual layer responds instantly,
+              creating an experience that feels closer to a studio than a lecture.
+            </p>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <span className="text-foreground font-semibold">1.</span>
+                Start a voice session and set the learning goal.
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-foreground font-semibold">2.</span>
+                Ask questions as the system builds visuals.
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-foreground font-semibold">3.</span>
+                Export notes and visuals for later review.
+              </div>
+            </div>
+            <Button asChild size="lg" className="px-8 py-6 text-base bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
+              <Link href="/demo" className="flex items-center gap-2">
+                <Play className="w-5 h-5" />
+                Open the live demo
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 border-b px-4 py-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-foreground/30"></span>
+                <span className="h-2 w-2 rounded-full bg-foreground/30"></span>
+                <span className="h-2 w-2 rounded-full bg-foreground/30"></span>
+              </div>
+              <span className="ml-auto">Session 12 · Physics</span>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Prompt</div>
+                <div className="rounded-lg border bg-background px-4 py-3 text-sm">
+                  Explain how energy flows through a circuit and visualize it.
+                </div>
+              </div>
+              <div className="rounded-xl border bg-background p-4">
+                <Image
+                  src="/visualization_example.jpg"
+                  alt="Visualization example"
+                  width={520}
+                  height={320}
+                  className="rounded-lg object-cover"
+                />
+                <div className="mt-3 text-xs text-muted-foreground">Generated visualization · 12 seconds</div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Notes saved to session log</span>
+                <span>Auto-sync enabled</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="solutions" className="container mx-auto px-4 py-20">
+        <div className="flex flex-col gap-4 max-w-3xl">
+          <Badge variant="outline" className="w-fit">Solutions</Badge>
+          <h2 className="text-3xl md:text-4xl leading-tight">
+            Designed for every learning role.
+          </h2>
+          <p className="text-lg text-muted-foreground">
+            From students to administrators, each workspace is tailored to the way they teach or learn.
           </p>
         </div>
 
-        <div className="relative max-w-4xl mx-auto">
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-violet-500/20 to-cyan-500/20 rounded-3xl blur-3xl"></div>
-          <Card className="relative backdrop-blur-sm bg-background/90 border-2 border-gradient shadow-2xl">
-            <CardContent className="p-12 text-center">
-              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-100 to-violet-100 dark:from-indigo-900/50 dark:to-violet-900/50 px-4 py-2 rounded-full mb-6">
-                <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-sm font-medium text-indigo-800 dark:text-indigo-200">Free to start</span>
-              </div>
-
-              <h3 className="text-3xl font-bold mb-4">Start free, upgrade when you grow</h3>
-              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                All core features included. No credit card required. Experience the future of education today.
-              </p>
-
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
-                <Button asChild size="lg" className="relative group rounded-full px-8 py-6 text-base shadow-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-600 hover:from-indigo-500 hover:via-violet-500 hover:to-cyan-500 text-white transition-all duration-300">
-                  <Link href="/learn" className="flex items-center gap-2">
-                    <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    Try Live Demo
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="outline" className="rounded-full px-8 py-6 text-base border-2 hover:bg-muted/50">
-                  <Link href="/signup" className="flex items-center gap-2">
-                    Sign up free
-                  </Link>
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300 mb-1">✨</div>
-                  <div className="text-sm text-muted-foreground">No credit card required</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-violet-700 dark:text-violet-300 mb-1">🚀</div>
-                  <div className="text-sm text-muted-foreground">Instant setup in seconds</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 mb-1">🎯</div>
-                  <div className="text-sm text-muted-foreground">Works in any browser</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid gap-6 md:grid-cols-3 mt-10">
+          <Link href="/learn" className="rounded-xl border bg-card p-6 shadow-sm hover:border-foreground/40 transition-colors">
+            <h3 className="text-xl font-semibold">For Learners</h3>
+            <p className="mt-3 text-muted-foreground">
+              Focused sessions, instant visuals, and personalized practice pathways.
+            </p>
+            <div className="mt-6 flex items-center gap-2 text-sm text-foreground">
+              Start learning
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </Link>
+          <div className="rounded-xl border bg-card p-6 shadow-sm">
+            <h3 className="text-xl font-semibold">For Teachers</h3>
+            <p className="mt-3 text-muted-foreground">
+              Lesson prep, live delivery tools, and student insights in one place.
+            </p>
+            <Badge variant="secondary" className="mt-6">Coming soon</Badge>
+          </div>
+          <div className="rounded-xl border bg-card p-6 shadow-sm">
+            <h3 className="text-xl font-semibold">For Admins</h3>
+            <p className="mt-3 text-muted-foreground">
+              Manage classrooms, track progress, and support school-wide outcomes.
+            </p>
+            <Badge variant="secondary" className="mt-6">Coming soon</Badge>
+          </div>
         </div>
       </section>
 
-      <footer className="border-t bg-gradient-to-br from-indigo-50/30 to-violet-50/20 dark:from-indigo-950/10 dark:to-violet-950/10">
-        <div className="container mx-auto px-4 py-16">
-          <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
-            {/* Brand Section */}
+      <section id="pricing" className="container mx-auto px-4 py-20">
+        <div className="rounded-2xl border bg-card p-10 md:p-14 text-center">
+          <Badge variant="outline" className="mb-4">Pricing</Badge>
+          <h2 className="text-3xl md:text-4xl leading-tight">
+            Start free, scale when you are ready.
+          </h2>
+          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
+            Everything you need to run modern lessons, with no credit card required to begin.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button asChild size="lg" className="px-8 py-6 text-base bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
+              <Link href="/learn" className="flex items-center gap-2">
+                <Play className="w-5 h-5" />
+                Try the live demo
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="px-8 py-6 text-base">
+              <Link href="/signup">Create free account</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t">
+        <div className="container mx-auto px-4 py-14">
+          <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-                  <Image src="/globe.svg" alt="InsyteAI logo" width={20} height={20} className="brightness-0 invert" />
+                <div className="w-9 h-9 rounded-md border bg-card flex items-center justify-center">
+                  <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
                 </div>
-                <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">InsyteAI</span>
+                <span className="text-lg font-semibold tracking-tight">InsyteAI</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Transforming education through AI-powered visual learning experiences that make complex concepts simple and engaging.
+                A visual learning platform built for clarity, focus, and real student outcomes.
               </p>
-              <div className="flex items-center gap-3">
-                <Button asChild size="sm" className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white">
-                  <Link href="/learn">Try Demo</Link>
-                </Button>
-              </div>
+              <Button asChild size="sm" className="bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
+                <Link href="/learn">Try Demo</Link>
+              </Button>
             </div>
 
-            {/* Product Links */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="font-semibold text-foreground">Product</h3>
-              <div className="space-y-3">
-                <Link href="#features" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Features
-                </Link>
-                <Link href="#demo" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Live Demo
-                </Link>
-                <Link href="#solutions" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Solutions
-                </Link>
-                <Link href="#pricing" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Pricing
-                </Link>
-              </div>
+              <Link href="#features" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Features
+              </Link>
+              <Link href="#demo" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Live Demo
+              </Link>
+              <Link href="#solutions" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Solutions
+              </Link>
+              <Link href="#pricing" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Pricing
+              </Link>
             </div>
 
-            {/* User Types */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="font-semibold text-foreground">For Everyone</h3>
-              <div className="space-y-3">
-                <Link href="/students/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Students
-                </Link>
-                <Link href="/teachers/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Teachers
-                </Link>
-                <Link href="/admin/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Administrators
-                </Link>
-              </div>
+              <Link href="/students/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Students
+              </Link>
+              <Link href="/teachers/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Teachers
+              </Link>
+              <Link href="/admin/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Administrators
+              </Link>
             </div>
 
-            {/* Get Started */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="font-semibold text-foreground">Get Started</h3>
-              <div className="space-y-3">
-                <Link href="/signup" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Create Account
-                </Link>
-                <Link href="/login" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Sign In
-                </Link>
-                <div className="pt-2">
-                  <div className="text-xs text-muted-foreground mb-2">Start learning today</div>
-                  <div className="text-xs text-muted-foreground">✨ Free • 🚀 Instant • 🎯 No setup required</div>
-                </div>
+              <Link href="/signup" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Create Account
+              </Link>
+              <Link href="/login" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Sign In
+              </Link>
+              <div className="pt-2 text-xs text-muted-foreground">
+                Start learning today with a free account.
               </div>
             </div>
           </div>
 
-          {/* Bottom Section */}
-          <div className="border-t pt-8 mt-12 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} InsyteAI. All rights reserved. Powered by AI for visual learning.
-            </div>
-            <div className="flex items-center gap-6 text-xs text-muted-foreground">
+          <div className="border-t pt-8 mt-10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+            <div>© {new Date().getFullYear()} InsyteAI. All rights reserved.</div>
+            <div className="flex items-center gap-6">
               <span>Privacy</span>
               <span>Terms</span>
               <span>Support</span>

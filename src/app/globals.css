@@ -4,48 +4,48 @@
 
 @layer base {
   :root {
-    --background: 220 50% 98%;
-    --foreground: 220 40% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 40% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 40% 15%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 199 89% 48%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 220 15% 95%;
-    --muted-foreground: 220 20% 45%;
-    --accent: 262 83% 58%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 20% 90%;
-    --input: 220 20% 90%;
-    --ring: 221 83% 53%;
-    --radius: 0.75rem;
+    --background: 38 38% 97%;
+    --foreground: 24 18% 12%;
+    --card: 36 33% 99%;
+    --card-foreground: 24 18% 12%;
+    --popover: 36 33% 99%;
+    --popover-foreground: 24 18% 12%;
+    --primary: 162 42% 26%;
+    --primary-foreground: 36 33% 98%;
+    --secondary: 24 26% 88%;
+    --secondary-foreground: 24 18% 18%;
+    --muted: 30 24% 92%;
+    --muted-foreground: 24 12% 38%;
+    --accent: 18 74% 50%;
+    --accent-foreground: 36 33% 98%;
+    --destructive: 0 74% 52%;
+    --destructive-foreground: 36 33% 98%;
+    --border: 28 18% 86%;
+    --input: 28 18% 86%;
+    --ring: 162 42% 26%;
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 220 40% 10%;
-    --foreground: 220 20% 98%;
-    --card: 220 35% 15%;
-    --card-foreground: 220 20% 98%;
-    --popover: 220 35% 15%;
-    --popover-foreground: 220 20% 98%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 220 20% 98%;
-    --secondary: 199 89% 48%;
-    --secondary-foreground: 220 20% 98%;
-    --muted: 220 30% 20%;
-    --muted-foreground: 220 20% 70%;
-    --accent: 262 83% 58%;
-    --accent-foreground: 220 20% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 30% 25%;
-    --input: 220 30% 25%;
-    --ring: 221 83% 53%;
+    --background: 24 20% 9%;
+    --foreground: 36 33% 94%;
+    --card: 24 18% 12%;
+    --card-foreground: 36 33% 94%;
+    --popover: 24 18% 12%;
+    --popover-foreground: 36 33% 94%;
+    --primary: 162 52% 38%;
+    --primary-foreground: 24 20% 10%;
+    --secondary: 26 20% 20%;
+    --secondary-foreground: 36 33% 92%;
+    --muted: 26 16% 18%;
+    --muted-foreground: 30 16% 68%;
+    --accent: 20 78% 52%;
+    --accent-foreground: 24 20% 10%;
+    --destructive: 0 70% 52%;
+    --destructive-foreground: 36 33% 94%;
+    --border: 26 18% 20%;
+    --input: 26 18% 20%;
+    --ring: 162 52% 38%;
   }
 }
 
@@ -55,6 +55,9 @@
   }
   body {
     @apply bg-background text-foreground antialiased min-h-screen;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   }
   html, body {
     overscroll-behavior: none;
