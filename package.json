@@ -10,6 +10,7 @@
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@google/adk": "^0.4.0",
     "@google/genai": "^1.16.0",
     "@googlemaps/js-api-loader": "^1.16.10",
     "@hookform/resolvers": "^5.0.1",
@@ -71,6 +72,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
+    "@google/adk-devtools": "^0.4.0",
     "@tailwindcss/nesting": "^0.0.0-insiders.565cd3e",
     "@tailwindcss/typography": "^0.5.15",
     "@types/bcryptjs": "^2.4.6",
