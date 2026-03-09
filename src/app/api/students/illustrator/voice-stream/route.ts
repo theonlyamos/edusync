@@ -198,9 +198,16 @@ async function handleStartSession(ws: any, sessionId: string, sampleRate: number
 
     try {
         const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error('GEMINI_API_KEY environment variable not set.');
+        if (!apiKey && !process.env.GEMINI_PROJECT_ID) throw new Error('GEMINI_API_KEY or GEMINI_PROJECT_ID environment variable not set.');
 
-        const ai = new GoogleGenAI({ apiKey });
+        const useVertex = !!process.env.GEMINI_PROJECT_ID;
+        const ai = new GoogleGenAI(useVertex ? {
+            vertexai: true,
+            project: process.env.GEMINI_PROJECT_ID,
+            location: process.env.GEMINI_LOCATION || 'us-central1'
+        } : {
+            apiKey
+        });
 
         const responseQueue: LiveServerMessage[] = [];
         const audioParts: string[] = [];

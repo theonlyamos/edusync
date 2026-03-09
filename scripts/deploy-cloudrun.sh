@@ -32,6 +32,6 @@ gcloud run deploy $SERVICE_NAME \
   --max-instances 10 \
   --cpu 1 \
   --memory 1Gi \
-  --set-env-vars="NODE_ENV=production,GEMINI_API_KEY=replace-in-console,NEXT_PUBLIC_SUPABASE_URL=replace-in-console,SUPABASE_SERVICE_ROLE_KEY=replace-in-console,TAVILY_API_KEY=replace-in-console"
+  --set-env-vars="NODE_ENV=production,GEMINI_PROJECT_ID=replace-with-your-google-cloud-project-id,GEMINI_LOCATION=us-central1,NEXT_PUBLIC_SUPABASE_URL=replace-in-console,SUPABASE_SERVICE_ROLE_KEY=replace-in-console,TAVILY_API_KEY=replace-in-console"
 
 echo "Deployment complete! Don't forget to update your environment variables in the Cloud Run console."

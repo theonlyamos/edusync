@@ -49,7 +49,12 @@ async function handleStartSession(sessionId: string) {
             }), { status: 500 });
         }
 
-        const ai = new GoogleGenAI({
+        const useVertex = !!process.env.GEMINI_PROJECT_ID;
+        const ai = new GoogleGenAI(useVertex ? {
+            vertexai: true,
+            project: process.env.GEMINI_PROJECT_ID,
+            location: process.env.GEMINI_LOCATION || 'us-central1'
+        } : {
             apiKey: apiKey,
         });
 

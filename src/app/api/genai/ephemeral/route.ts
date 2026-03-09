@@ -11,7 +11,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const ai = new GoogleGenAI({ apiKey });
+        const useVertex = !!process.env.GEMINI_PROJECT_ID;
+        const ai = new GoogleGenAI(useVertex ? {
+            vertexai: true,
+            project: process.env.GEMINI_PROJECT_ID,
+            location: process.env.GEMINI_LOCATION || 'us-central1'
+        } : {
+            apiKey,
+        });
 
         const now = new Date();
         const expireTime = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes

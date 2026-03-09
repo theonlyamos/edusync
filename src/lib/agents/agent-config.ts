@@ -11,7 +11,7 @@ import { Gemini, InMemorySessionService, Runner, type BaseAgent } from '@google/
 // Model
 // ---------------------------------------------------------------------------
 
-const MODEL_NAME = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+const MODEL_NAME = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
 
 /**
  * Returns a pre-configured `Gemini` LLM instance.
@@ -20,7 +20,13 @@ const MODEL_NAME = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
  * `GOOGLE_GENAI_API_KEY` env vars by the ADK Gemini class.
  */
 export function getModel(): Gemini {
-    return new Gemini({
+    const useVertex = !!process.env.GEMINI_PROJECT_ID;
+    return new Gemini(useVertex ? {
+        model: MODEL_NAME,
+        vertexai: true,
+        project: process.env.GEMINI_PROJECT_ID,
+        location: process.env.GEMINI_LOCATION || 'us-central1'
+    } : {
         model: MODEL_NAME,
         apiKey: process.env.GEMINI_API_KEY,
     });

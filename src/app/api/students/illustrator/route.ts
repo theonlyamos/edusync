@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
-const openai = new OpenAI({
-  baseURL: process.env.GEMINI_BASE_URL,
-  apiKey: process.env.GEMINI_API_KEY,
+const apiKey = process.env.GEMINI_API_KEY;
+const useVertex = !!process.env.GEMINI_PROJECT_ID;
+const ai = new GoogleGenAI(useVertex ? {
+  vertexai: true,
+  project: process.env.GEMINI_PROJECT_ID,
+  location: process.env.GEMINI_LOCATION || 'us-central1'
+} : {
+  apiKey: apiKey,
 });
 
 const SYSTEM_PROMPT = `You are an expert educator and creative coder. When a student asks a question, you:
@@ -54,20 +59,20 @@ export async function POST(req: NextRequest) {
     const { question } = await req.json();
     if (!question) return NextResponse.json({ error: 'Missing question' }, { status: 400 });
 
-    const completion = await openai.chat.completions.create({
+    const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: question }
-      ],
-      temperature: 0.7,
-      max_tokens: 16384,
-      response_format: { type: 'json_object' },
+      contents: question,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        temperature: 0.7,
+        maxOutputTokens: 16384,
+        responseMimeType: 'application/json',
+      }
     });
 
     let result;
     try {
-      result = JSON.parse(completion.choices[0].message.content || '{}');
+      result = JSON.parse(response.text || '{}');
     } catch {
       return NextResponse.json({ error: 'AI response was not valid JSON.' }, { status: 500 });
     }

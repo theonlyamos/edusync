@@ -10,7 +10,14 @@ if (!API_KEY) {
 
 export async function POST(request: NextRequest) {
     try {
-        const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
+        const useVertex = !!process.env.GEMINI_PROJECT_ID;
+        const ai = new GoogleGenAI(useVertex ? {
+            vertexai: true,
+            project: process.env.GEMINI_PROJECT_ID,
+            location: process.env.GEMINI_LOCATION || 'us-central1'
+        } : {
+            apiKey: API_KEY || '',
+        });
 
         const body = await request.json();
         const { message, canvasData }: { message: string; canvasData: string } = body;
