@@ -178,7 +178,7 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
         const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo;
 
         const completion = await openai.chat.completions.create({
-            model: PROVIDER_MODEL as string,
+            model: 'gemini-3.1-flash-lite',
             messages: [
                 { role: 'system', content: systemPromptWithDimensions },
                 { role: 'user', content: task_description }

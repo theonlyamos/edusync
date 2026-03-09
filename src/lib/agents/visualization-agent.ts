@@ -68,7 +68,7 @@ Respond with a JSON object containing exactly these fields:
 
 export const visualizationAgent = new LlmAgent({
     name: 'visualization_generator',
-    model: getModel(),
+    model: 'gemini-3.1-flash-lite',
     instruction: VISUALIZATION_INSTRUCTION,
     tools: [googleSearch],
     generateContentConfig: {
