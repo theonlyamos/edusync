@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Serif_Display, Manrope } from "next/font/google";
-import { SupabaseAuthProvider } from "../components/providers/SupabaseAuthProvider";
 import { Toaster } from "@/components/ui/toaster";
-import { Analytics } from '@vercel/analytics/next';
 import "./globals.css";
 
 const dmSerif = DM_Serif_Display({
@@ -17,8 +15,9 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "InsyteAI - AI Visual Learning Platform | Interactive Education with Voice & Visualizations",
-  description: "Transform learning with AI-powered visual explanations, interactive demos, and voice-guided education. Get personalized tutoring with real-time visualizations, quizzes, and collaborative tools for students and teachers.",
+  title: "InsyteAI - AI Visual Learning Platform | Voice & Live Visualizations",
+  description:
+    "A voice-first AI tutor that turns complex concepts into live, interactive visualizations. Powered by Google Gemini, ADK, and Vertex AI.",
 };
 
 export default function RootLayout({
@@ -29,11 +28,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${manrope.className} ${dmSerif.variable}`}>
-        <SupabaseAuthProvider>
-          {children}
-          <Toaster />
-          <Analytics />
-        </SupabaseAuthProvider>
+        {children}
+        <Toaster />
       </body>
     </html>
   );
