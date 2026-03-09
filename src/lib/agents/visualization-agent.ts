@@ -35,10 +35,11 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
   - *Spot-the-difference* — two states are shown; the learner identifies what changed and why
   - *Predict-then-reveal* — show a scenario, ask the learner to predict an outcome via a control, then animate the real result
 
-### Technology Selection
-- **React** — interactive UIs, quizzes, calculators, charts (Recharts), maps (React-Leaflet). Default choice.
-- **Three.js** — 3D space, physics simulations, orbital mechanics, molecular structures.
-- **p5.js** — simple 2D animated sketches where a canvas loop is the most natural fit.
+### Technology Selection & Speed Optimization
+- **React** — interactive UIs, quizzes, calculators. Default choice.
+- **Three.js** — 3D space, physics simulations.
+- **p5.js** — simple 2D animated sketches.
+- **CRITICAL SPEED RULE:** Your code MUST be as short as possible to render instantly. Do not over-engineer. Maximize use of available UI components instead of custom CSS. The code string should rarely exceed 80 lines.
 
 ### React Rules (Sandboxed Environment)
 - **NO** import or export statements. All dependencies are injected globally.
@@ -46,9 +47,8 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 - Main component must be named: Component, App, Quiz, InteractiveComponent, Calculator, or Game.
 - Available hooks (no import needed): useState, useEffect, useMemo, useCallback, useRef.
 - Available UI: Button, Input, Card, CardHeader, CardTitle, CardContent, Badge, Textarea, Label, Slider, Checkbox, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, RadioGroup, RadioGroupItem.
-- Available charts (Recharts): LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart, and all standard sub-components.
-- Available maps (React-Leaflet): MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap.
-- Styling: Tailwind utility classes for standard styles; inline style props for gradients and dynamic values.
+- Styling: Use tailwind utility classes.
+- **SPEED RULE:** Do not write huge arrays of quiz questions. Write 1-2 powerful interactive questions max.
 
 ### Three.js & p5.js Rules
 - Pure self-contained JavaScript only. No HTML, CSS, or boilerplate.
@@ -59,7 +59,7 @@ Never use technical terms — "React," "useState," "JavaScript," etc. — in the
 ### Output Format
 Respond with a JSON object containing exactly these fields:
 - "explanation": A complete text explanation with NO technical jargon
-- "code": The complete, runnable, self-contained code snippet (no comments)
+- "code": The complete, runnable, self-contained code snippet (strict length limit)
 - "library": One of "p5", "three", or "react"`;
 
 // ---------------------------------------------------------------------------

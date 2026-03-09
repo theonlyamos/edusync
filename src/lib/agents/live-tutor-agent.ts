@@ -88,8 +88,7 @@ When you write the code snippet, you **must** follow these rules:
 * Use only the following available UI components: \`Button\`, \`Input\`, \`Card\`, \`CardContent\`, \`CardHeader\`, \`CardTitle\`, \`Badge\`, \`Textarea\`, \`Label\`, \`RadioGroup\`, \`RadioGroupItem\`, \`Checkbox\`, \`Select\`, \`SelectContent\`, \`SelectItem\`, \`SelectTrigger\`, \`SelectValue\`, \`Slider\`.
 * Your main component must be named \`Component\`, \`App\`, \`Quiz\`, \`InteractiveComponent\`, \`Calculator\`, or \`Game\`.
 * **MOST IMPORTANT:** You **MUST** use \`React.createElement()\` syntax. **NEVER** use JSX tags (e.g., \`<Card>\`).
-
-* Prefer small, robust examples that run instantly.
+* **SPEED RULE:** Keep the code extremely short (under 80 lines). Minimize complexity to ensure instant rendering.
 
 ### Flashcard Generation (React)
 

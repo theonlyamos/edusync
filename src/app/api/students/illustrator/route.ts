@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (!question) return NextResponse.json({ error: 'Missing question' }, { status: 400 });
 
     const completion = await openai.chat.completions.create({
-      model: 'gemini-2.5-pro-preview-05-06',
+      model: 'gemini-2.5-flash',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: question }

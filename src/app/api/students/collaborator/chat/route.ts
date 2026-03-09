@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         ];
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp-image-generation',
+            model: 'gemini-2.5-flash',
             contents: contents,
             config: {
                 responseModalities: [Modality.TEXT, Modality.IMAGE],
