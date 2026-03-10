@@ -116,14 +116,25 @@ export async function generateVisualization(
         userId: 'system',
         newMessage: { role: 'user', parts: [{ text: prompt }] },
     })) {
-        if (event.content?.parts) {
+        // Only capture text from the agent's response, not user echo
+        if (event.author === 'visualization_generator' && event.content?.parts) {
             for (const part of event.content.parts) {
                 if (part.text) {
-                    finalText = part.text;
+                    finalText += part.text;
                 }
             }
         }
     }
 
-    return JSON.parse(finalText);
+    // Strip markdown code fences if present (```json ... ```)
+    let cleaned = finalText.trim();
+    if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    }
+
+    if (!cleaned) {
+        throw new Error('Visualization agent returned empty response');
+    }
+
+    return JSON.parse(cleaned);
 }
