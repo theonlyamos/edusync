@@ -669,8 +669,26 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   return (
     <div className="relative w-full h-full">
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
-          <div className="text-sm text-gray-600">Loading React component...</div>
+        <div
+          className="absolute inset-0 flex flex-col gap-4 rounded-lg border border-gray-100 bg-gray-50 p-6"
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <span className="sr-only">Loading your interactive preview. This usually takes a few seconds.</span>
+          <div className="h-7 w-2/3 max-w-sm rounded-md bg-gray-200 animate-pulse" />
+          <div className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="h-4 w-full rounded bg-gray-100 animate-pulse" />
+            <div className="h-4 w-11/12 rounded bg-gray-100 animate-pulse" />
+            <div className="mt-2 flex flex-1 gap-3">
+              <div className="h-full min-h-[100px] flex-1 rounded-lg bg-gray-100 animate-pulse" />
+              <div className="flex w-28 flex-col justify-center gap-2">
+                <div className="h-3 w-full rounded bg-gray-100 animate-pulse" />
+                <div className="h-8 w-full rounded-md bg-gray-200 animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-sm text-gray-500">Loading your interactive preview…</p>
         </div>
       )}
       {error && (
