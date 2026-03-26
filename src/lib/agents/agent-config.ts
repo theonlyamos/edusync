@@ -11,7 +11,7 @@ import { Gemini, InMemorySessionService, Runner, type BaseAgent } from '@google/
 // Model
 // ---------------------------------------------------------------------------
 
-const MODEL_NAME = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite';
+const MODEL_NAME = process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-lite-preview';
 
 /**
  * Returns a pre-configured `Gemini` LLM instance.

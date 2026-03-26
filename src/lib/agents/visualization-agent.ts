@@ -44,6 +44,8 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 ### React Rules (Sandboxed Environment)
 - **NO** import or export statements. All dependencies are injected globally.
 - **NO** JSX. Use React.createElement() exclusively.
+- **FORBIDDEN:** Do not pull hook names off the React object via destructuring (for example a const line that assigns useState from React). Hooks are already injected as bare names; destructuring redeclares them and breaks execution.
+- **Pattern:** Wrong — any leading line that assigns useState or other hooks from React using object destructuring. Right — define function App or another allowed component name, then call useState and other hooks directly by name with the usual tuple pattern.
 - Main component must be named: Component, App, Quiz, InteractiveComponent, Calculator, or Game.
 - Available hooks (no import needed): useState, useEffect, useMemo, useCallback, useRef.
 - Available UI: Button, Input, Card, CardHeader, CardTitle, CardContent, Badge, Textarea, Label, Slider, Checkbox, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, RadioGroup, RadioGroupItem.
@@ -68,7 +70,7 @@ Respond with a JSON object containing exactly these fields:
 
 export const visualizationAgent = new LlmAgent({
     name: 'visualization_generator',
-    model: 'gemini-3.1-flash-lite',
+    model: 'gemini-3.1-flash-lite-preview',
     instruction: VISUALIZATION_INSTRUCTION,
     tools: [googleSearch],
     generateContentConfig: {

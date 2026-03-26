@@ -30,6 +30,23 @@ const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|Ra
 const LEAFLET_PATTERN = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/;
 const COMPONENT_EXPORT_PATTERN = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/;
 const BARE_ELEMENT_PATTERN = /^React\.createElement\s*\(/;
+/** Hook destructuring from React redeclares names already passed as new Function parameters → SyntaxError. */
+const SANDBOX_REACT_HOOK_DESTRUCTURE_LINE =
+  /^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*React\s*;?\s*$/;
+const SANDBOX_REACT_IMPORT_LINE =
+  /^\s*import\s+.+from\s+['"]react(?:-dom)?['"]\s*;?\s*$/;
+
+function sanitizeSandboxReactCode(input: string): string {
+  const lines = input.split(/\r?\n/);
+  let start = 0;
+  while (start < lines.length && SANDBOX_REACT_IMPORT_LINE.test(lines[start]!)) {
+    start++;
+  }
+  const body = lines
+    .slice(start)
+    .filter((line) => !SANDBOX_REACT_HOOK_DESTRUCTURE_LINE.test(line));
+  return body.join('\n');
+}
 
 export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -51,6 +68,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
     try {
       const iframe = iframeRef.current;
+      const sanitizedCode = sanitizeSandboxReactCode(code);
+
       // Normalize bare React.createElement(...) to a component so it can render
       const normalizeUserCode = (input: string) => {
         const trimmed = input.trim();
@@ -67,7 +86,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       const needsLeaflet = LEAFLET_PATTERN.test(code);
 
       // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
-      const codeJson = JSON.stringify(normalizeUserCode(code));
+      const codeJson = JSON.stringify(normalizeUserCode(sanitizedCode));
       const returnStatement = '\n\n// Return the component\nreturn typeof Component !== \'undefined\' ? Component : typeof App !== \'undefined\' ? App : typeof Quiz !== \'undefined\' ? Quiz : typeof InteractiveComponent !== \'undefined\' ? InteractiveComponent : typeof Calculator !== \'undefined\' ? Calculator : typeof Game !== \'undefined\' ? Game : (() => React.createElement(\'div\', {}, \'No component found\'));';
       const returnStatementJson = JSON.stringify(returnStatement);
 

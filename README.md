@@ -72,7 +72,7 @@ Open [http://localhost:3000](http://localhost:3000) — the app boots directly i
 | `GEMINI_API_KEY` | **Yes**\* | — | Your Google Gemini API key |
 | `GEMINI_PROJECT_ID` | No | — | GCP project ID (enables Vertex AI) |
 | `GEMINI_LOCATION` | No | `us-central1` | Vertex AI region |
-| `GEMINI_MODEL` | No | `gemini-3.1-flash-lite` | Override the default model |
+| `GEMINI_MODEL` | No | `gemini-3.1-flash-lite-preview` | Override the default model |
 
 \*Not required if using Vertex AI (`GEMINI_PROJECT_ID` is set and you're authenticated via `gcloud auth application-default login`).
 
