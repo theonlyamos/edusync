@@ -366,19 +366,25 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       const SelectTrigger = ({ children, ...props }) => React.createElement('div', { className: 'flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm', ...props }, children);
       const SelectValue = ({ placeholder }) => placeholder;
       
-      const Slider = React.forwardRef(({ className = '', value = [0], min = 0, max = 100, step = 1, onChange, ...props }, ref) => {
-        return React.createElement('input', {
-          ref,
-          type: 'range',
-          min,
-          max,
-          step,
-          value: Array.isArray(value) ? value[0] : value,
-          onChange: (e) => onChange && onChange([parseFloat(e.target.value)]),
-          className: cn('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer', className),
-          ...props
-        });
-      });
+      const Slider = React.forwardRef(
+        ({ className = '', value = [0], min = 0, max = 100, step = 1, onChange, onValueChange, ...props }, ref) => {
+          return React.createElement('input', {
+            ref,
+            type: 'range',
+            min,
+            max,
+            step,
+            value: Array.isArray(value) ? value[0] : value,
+            onChange: (e) => {
+              const arr = [parseFloat(e.target.value)];
+              onChange?.(arr);
+              onValueChange?.(arr);
+            },
+            className: cn('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer', className),
+            ...props
+          });
+        },
+      );
       Slider.displayName = 'Slider';
       
       const Quiz = React.forwardRef(({ className = '', data, onSubmit, ...props }, ref) => {
