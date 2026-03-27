@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSSRUserSupabase } from '@/lib/supabase.server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -21,12 +22,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (typeof body.session_handle === 'string') updates.session_handle = body.session_handle
         if (body.ended === true) updates.ended_at = new Date().toISOString()
 
-        const supabase = authContext.authType === 'apiKey'
-            ? createClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!
-              )
-            : await createSSRUserSupabase();
+        // createClient vs createServerClient unions break `.from()` inference; normalize to one client type.
+        const supabase = (
+            authContext.authType === 'apiKey'
+                ? createClient(
+                      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                      process.env.SUPABASE_SERVICE_ROLE_KEY!
+                  )
+                : await createSSRUserSupabase()
+        ) as SupabaseClient
 
         const { data: existing, error: fetchErr } = await supabase
             .from('learning_sessions')

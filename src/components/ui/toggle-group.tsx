@@ -30,7 +30,7 @@ const toggleGroupVariants = cva(
 
 const ToggleGroup = React.forwardRef<
   React.ElementRef<typeof ToggleGroupPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root>
+  React.PropsWithChildren<React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root>>
 >(({ className, ...props }, ref) => (
   <ToggleGroupPrimitive.Root
     ref={ref}
@@ -43,8 +43,10 @@ ToggleGroup.displayName = ToggleGroupPrimitive.Root.displayName
 
 const ToggleGroupItem = React.forwardRef<
   React.ElementRef<typeof ToggleGroupPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Item> &
-    VariantProps<typeof toggleGroupVariants>
+  React.PropsWithChildren<
+    React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Item> &
+      VariantProps<typeof toggleGroupVariants>
+  >
 >(({ className, variant, size, ...props }, ref) => (
   <ToggleGroupPrimitive.Item
     ref={ref}

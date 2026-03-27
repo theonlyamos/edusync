@@ -1,0 +1,20 @@
+{
+  "name": "live-class-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/agent.ts",
+    "download-files": "tsx src/agent.ts download-files"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.2.1",
+    "@livekit/agents-plugin-google": "^1.2.1",
+    "dotenv": "^16.4.5",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

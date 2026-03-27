@@ -72,6 +72,8 @@ export function setAuthHeaders(response: NextResponse, authContext: AuthContext)
 export type ApiAuthMode = 'session' | 'apiKey' | 'both' | 'none';
 
 export const API_AUTH_CONFIG: Record<string, ApiAuthMode> = {
+    '/api/live-classes/agent/persist-visualization': 'none',
+    '/api/livekit/webhook': 'none',
     '/api/embed/keys': 'session',
     '/api/embed/keys/*': 'session',
     '/api/embed/sessions': 'apiKey',
