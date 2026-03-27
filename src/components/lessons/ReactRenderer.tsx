@@ -30,6 +30,23 @@ const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|Ra
 const LEAFLET_PATTERN = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/;
 const COMPONENT_EXPORT_PATTERN = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/;
 const BARE_ELEMENT_PATTERN = /^React\.createElement\s*\(/;
+/** Hook destructuring from React redeclares names already passed as new Function parameters → SyntaxError. */
+const SANDBOX_REACT_HOOK_DESTRUCTURE_LINE =
+  /^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*React\s*;?\s*$/;
+const SANDBOX_REACT_IMPORT_LINE =
+  /^\s*import\s+.+from\s+['"]react(?:-dom)?['"]\s*;?\s*$/;
+
+function sanitizeSandboxReactCode(input: string): string {
+  const lines = input.split(/\r?\n/);
+  let start = 0;
+  while (start < lines.length && SANDBOX_REACT_IMPORT_LINE.test(lines[start]!)) {
+    start++;
+  }
+  const body = lines
+    .slice(start)
+    .filter((line) => !SANDBOX_REACT_HOOK_DESTRUCTURE_LINE.test(line));
+  return body.join('\n');
+}
 
 export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -51,6 +68,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
     try {
       const iframe = iframeRef.current;
+      const sanitizedCode = sanitizeSandboxReactCode(code);
+
       // Normalize bare React.createElement(...) to a component so it can render
       const normalizeUserCode = (input: string) => {
         const trimmed = input.trim();
@@ -62,12 +81,12 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         return input;
       };
 
-      // Detect which libraries the code actually needs (using cached patterns)
-      const needsRecharts = RECHARTS_PATTERN.test(code);
-      const needsLeaflet = LEAFLET_PATTERN.test(code);
+      // Detect which libraries the code actually needs (using cached patterns; match injected source)
+      const needsRecharts = RECHARTS_PATTERN.test(sanitizedCode);
+      const needsLeaflet = LEAFLET_PATTERN.test(sanitizedCode);
 
       // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
-      const codeJson = JSON.stringify(normalizeUserCode(code));
+      const codeJson = JSON.stringify(normalizeUserCode(sanitizedCode));
       const returnStatement = '\n\n// Return the component\nreturn typeof Component !== \'undefined\' ? Component : typeof App !== \'undefined\' ? App : typeof Quiz !== \'undefined\' ? Quiz : typeof InteractiveComponent !== \'undefined\' ? InteractiveComponent : typeof Calculator !== \'undefined\' ? Calculator : typeof Game !== \'undefined\' ? Game : (() => React.createElement(\'div\', {}, \'No component found\'));';
       const returnStatementJson = JSON.stringify(returnStatement);
 
@@ -347,19 +366,25 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       const SelectTrigger = ({ children, ...props }) => React.createElement('div', { className: 'flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm', ...props }, children);
       const SelectValue = ({ placeholder }) => placeholder;
       
-      const Slider = React.forwardRef(({ className = '', value = [0], min = 0, max = 100, step = 1, onChange, ...props }, ref) => {
-        return React.createElement('input', {
-          ref,
-          type: 'range',
-          min,
-          max,
-          step,
-          value: Array.isArray(value) ? value[0] : value,
-          onChange: (e) => onChange && onChange([parseFloat(e.target.value)]),
-          className: cn('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer', className),
-          ...props
-        });
-      });
+      const Slider = React.forwardRef(
+        ({ className = '', value = [0], min = 0, max = 100, step = 1, onChange, onValueChange, ...props }, ref) => {
+          return React.createElement('input', {
+            ref,
+            type: 'range',
+            min,
+            max,
+            step,
+            value: Array.isArray(value) ? value[0] : value,
+            onChange: (e) => {
+              const arr = [parseFloat(e.target.value)];
+              onChange?.(arr);
+              onValueChange?.(arr);
+            },
+            className: cn('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer', className),
+            ...props
+          });
+        },
+      );
       Slider.displayName = 'Slider';
       
       const Quiz = React.forwardRef(({ className = '', data, onSubmit, ...props }, ref) => {
@@ -644,8 +669,26 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   return (
     <div className="relative w-full h-full">
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg">
-          <div className="text-sm text-gray-600">Loading React component...</div>
+        <div
+          className="absolute inset-0 flex flex-col gap-4 rounded-lg border border-gray-100 bg-gray-50 p-6"
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <span className="sr-only">Loading your interactive preview. This usually takes a few seconds.</span>
+          <div className="h-7 w-2/3 max-w-sm rounded-md bg-gray-200 animate-pulse" />
+          <div className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="h-4 w-full rounded bg-gray-100 animate-pulse" />
+            <div className="h-4 w-11/12 rounded bg-gray-100 animate-pulse" />
+            <div className="mt-2 flex flex-1 gap-3">
+              <div className="h-full min-h-[100px] flex-1 rounded-lg bg-gray-100 animate-pulse" />
+              <div className="flex w-28 flex-col justify-center gap-2">
+                <div className="h-3 w-full rounded bg-gray-100 animate-pulse" />
+                <div className="h-8 w-full rounded-md bg-gray-200 animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-sm text-gray-500">Loading your interactive preview…</p>
         </div>
       )}
       {error && (

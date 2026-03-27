@@ -13,6 +13,11 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
   useEffect(() => {
     if (!iframeRef.current || !code) return;
 
@@ -22,6 +27,12 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
     try {
       const iframe = iframeRef.current;
 
+      // Device sensors are gated by iframe `allow` and by Permissions-Policy inside the document (not CSP script-src).
+      const sensorPermissionsMeta =
+        library === 'p5'
+          ? '<meta http-equiv="Permissions-Policy" content="accelerometer=(self); gyroscope=(self); magnetometer=(self)">'
+          : '';
+
       // Create sandboxed content based on library type
       let htmlContent = `<!DOCTYPE html>
 <html>
@@ -29,6 +40,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; connect-src https://cdn.jsdelivr.net https://esm.sh;">
+  ${sensorPermissionsMeta}
   <style>
     body { 
       margin: 0; 
@@ -122,7 +134,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       const handleError = () => {
         setError('Failed to load visualization');
         setIsLoading(false);
-        if (onError) onError('Failed to load visualization');
+        onErrorRef.current?.('Failed to load visualization');
       };
 
       iframe.addEventListener('load', handleLoad);
@@ -136,15 +148,33 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       const errorMsg = err instanceof Error ? err.message : 'Failed to create visualization';
       setError(errorMsg);
       setIsLoading(false);
-      if (onError) onError(errorMsg);
+      onErrorRef.current?.(errorMsg);
     }
-  }, [code, library, onError]);
+  }, [code, library]);
 
   return (
     <div className="relative w-full">
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded">
-          <div className="text-sm text-gray-600">Loading visualization...</div>
+        <div
+          className="absolute inset-0 flex min-h-[50vh] flex-col gap-4 rounded border border-gray-100 bg-gray-50 p-6"
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <span className="sr-only">Loading your interactive preview. This usually takes a few seconds.</span>
+          <div className="h-7 w-2/3 max-w-sm rounded-md bg-gray-200 animate-pulse" />
+          <div className="flex min-h-[200px] flex-1 flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="h-4 w-full rounded bg-gray-100 animate-pulse" />
+            <div className="h-4 w-11/12 rounded bg-gray-100 animate-pulse" />
+            <div className="mt-2 flex flex-1 gap-3">
+              <div className="h-full min-h-[120px] flex-1 rounded-lg bg-gray-100 animate-pulse" />
+              <div className="flex w-28 flex-col justify-center gap-2">
+                <div className="h-3 w-full rounded bg-gray-100 animate-pulse" />
+                <div className="h-8 w-full rounded-md bg-gray-200 animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <p className="text-center text-sm text-gray-500">Loading your interactive preview…</p>
         </div>
       )}
       {error && (
