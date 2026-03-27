@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { DM_Serif_Display, Manrope } from "next/font/google";
+import { Source_Serif_4, Manrope } from "next/font/google";
 import { SupabaseAuthProvider } from "../components/providers/SupabaseAuthProvider";
 import { Toaster } from "@/components/ui/toaster";
 import { Analytics } from '@vercel/analytics/next';
 import "./globals.css";
 
-const dmSerif = DM_Serif_Display({
+const sourceSerif = Source_Serif_4({
   subsets: ["latin"],
-  weight: ["400"],
   variable: "--font-display",
 });
 
@@ -28,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${manrope.className} ${dmSerif.variable}`}>
+      <body className={`${manrope.className} ${sourceSerif.variable}`}>
         <SupabaseAuthProvider>
           {children}
           <Toaster />
