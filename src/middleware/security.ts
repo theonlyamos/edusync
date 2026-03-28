@@ -27,7 +27,7 @@ export function addSecurityHeaders(response: NextResponse, request?: NextRequest
         "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net",
         "img-src 'self' data: blob: https: https://images.unsplash.com",
         "media-src 'self' blob: https://*.supabase.co",
-        "connect-src 'self' data: https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://vitals.vercel-insights.com https://cdn.jsdelivr.net https://esm.sh",
+        "connect-src 'self' data: https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://vitals.vercel-insights.com https://cdn.jsdelivr.net https://esm.sh https://*.livekit.cloud wss://*.livekit.cloud",
         "worker-src 'self' blob:",
         frameAncestors,
         "base-uri 'self'",
