@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { type JobContext, cli, defineAgent, getJobContext, llm, voice, WorkerOptions } from '@livekit/agents'
+import { type JobContext, cli, defineAgent, getJobContext, llm, voice, ServerOptions } from '@livekit/agents'
 import * as google from '@livekit/agents-plugin-google'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
@@ -84,7 +84,7 @@ export default defineAgent({
     const session = new voice.AgentSession({
       llm: new google.beta.realtime.RealtimeModel({
         model,
-        voice: (process.env.GEMINI_VOICE as 'Puck' | undefined) || 'Puck',
+        voice: (process.env.GEMINI_VOICE as 'Zephyr' | undefined) || 'Zephyr',
         temperature: 0.75,
         instructions:
           'You are Eureka, a live class tutor. Multiple students may speak. Teach visually and call tools as specified in your instructions.',
@@ -101,5 +101,6 @@ export default defineAgent({
 })
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  cli.runApp(new WorkerOptions({ agent: fileURLToPath(import.meta.url) }))
+  const agentName = (process.env.LIVEKIT_AGENT_NAME || '').trim()
+  cli.runApp(new ServerOptions({ agent: fileURLToPath(import.meta.url), agentName }))
 }

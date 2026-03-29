@@ -1,4 +1,4 @@
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk'
+import { AccessToken, AgentDispatchClient, RoomAgentDispatch, RoomServiceClient } from 'livekit-server-sdk'
 
 export async function mintLiveKitParticipantToken(params: {
   roomName: string
@@ -58,18 +58,38 @@ export async function ensureLiveKitRoomSessionMetadata(roomName: string, learnin
   const client = new RoomServiceClient(host, apiKey, apiSecret)
   const metadata = JSON.stringify({ learning_session_id: learningSessionId })
 
+  const agentName = (process.env.LIVEKIT_AGENT_NAME || '').trim()
+  const agentDispatches =
+    agentName.length > 0
+      ? [new RoomAgentDispatch({ agentName, metadata: '' })]
+      : undefined
+
   try {
     await client.createRoom({
       name: roomName,
       metadata,
       emptyTimeout: 600,
       maxParticipants: 50,
+      ...(agentDispatches ? { agents: agentDispatches } : {}),
     })
   } catch {
     try {
       await client.updateRoomMetadata(roomName, metadata)
     } catch (e) {
       console.warn('[LiveKit] could not set room metadata (room may not exist yet):', e)
+    }
+
+    // Room already existed: createRoom did not run, so inline agent dispatches were not applied.
+    if (agentName.length > 0) {
+      try {
+        const dispatchClient = new AgentDispatchClient(host, apiKey, apiSecret)
+        await dispatchClient.createDispatch(roomName, agentName)
+      } catch (e) {
+        console.warn(
+          '[LiveKit] could not create agent dispatch (agent may already be dispatched):',
+          e,
+        )
+      }
     }
   }
 }

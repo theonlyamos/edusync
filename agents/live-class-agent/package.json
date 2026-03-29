@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/agent.ts",
+    "dev": "tsx src/agent.ts dev",
     "download-files": "tsx src/agent.ts download-files"
   },
   "dependencies": {
