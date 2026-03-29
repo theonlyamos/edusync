@@ -1,10 +1,9 @@
 'use client'
 
+import { useContext, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { Button } from '@/components/ui/button'
+import { useParams, useRouter } from 'next/navigation'
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Loader2 } from 'lucide-react'
 
 const LiveClassInteractiveTutor = dynamic(
@@ -15,8 +14,8 @@ const LiveClassInteractiveTutor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex justify-center py-16 text-muted-foreground">
-        <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
       </div>
     ),
   }
@@ -24,20 +23,29 @@ const LiveClassInteractiveTutor = dynamic(
 
 export default function StudentLiveClassRoomPage() {
   const params = useParams()
+  const router = useRouter()
+  const session = useContext(SupabaseSessionContext)
   const eventId = typeof params.eventId === 'string' ? params.eventId : ''
 
-  if (!eventId) {
-    return null
+  useEffect(() => {
+    if (session === null) {
+      router.push(`/login?redirectedFrom=${encodeURIComponent(`/students/live/${eventId}`)}`)
+    }
+  }, [session, router, eventId])
+
+  if (!session?.user || !eventId) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      </div>
+    )
   }
 
   return (
-    <DashboardLayout>
-      <div className="border-b px-4 py-2 flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/students/live">← Back</Link>
-        </Button>
-      </div>
-      <LiveClassInteractiveTutor liveClassEventId={eventId} />
-    </DashboardLayout>
+    <LiveClassInteractiveTutor
+      liveClassEventId={eventId}
+      backHref="/students/live"
+      currentUserId={session.user.id}
+    />
   )
 }
