@@ -18,6 +18,50 @@ function learningSessionIdFromRoomMetadata(meta: string | undefined): string {
   }
 }
 
+/**
+ * Validates room context and env, then returns the resolved sessionId.
+ * Throws ToolError if anything is misconfigured so the model gets a clear message.
+ */
+function requireSessionContext(): string {
+  const room = getJobContext().room
+  const sessionId = learningSessionIdFromRoomMetadata(room.metadata)
+  if (!sessionId) {
+    throw new llm.ToolError('Room is missing learning_session_id in metadata. A participant must join from the app first.')
+  }
+  if (!appBase || !agentSecret) {
+    throw new llm.ToolError('LIVE_CLASS_APP_BASE_URL and LIVE_CLASS_AGENT_SECRET must be set on the worker.')
+  }
+  return sessionId
+}
+
+const agentHeaders = {
+  'Content-Type': 'application/json',
+  'x-live-class-agent-secret': agentSecret,
+} as const
+
+/**
+ * Fire-and-forget POST to one of the agent API routes.
+ * Gemini realtime blocks all audio until sendToolResponse, so tool execute
+ * functions must not await HTTP calls.
+ */
+function postInBackground(path: string, body: Record<string, unknown>): void {
+  void (async () => {
+    try {
+      const res = await fetch(`${appBase}${path}`, {
+        method: 'POST',
+        headers: agentHeaders,
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        console.error(`[live-class-agent] ${path} failed:`, t)
+      }
+    } catch (e) {
+      console.error(`[live-class-agent] ${path} error:`, e)
+    }
+  })()
+}
+
 const generateVisualizationDescription = llm.tool({
   description:
     'Generate an interactive or visual teaching aid. Call whenever you would show, draw, or demonstrate something to the class.',
@@ -28,32 +72,13 @@ const generateVisualizationDescription = llm.tool({
     description: z.string().optional().describe('Short label for the timeline.'),
   }),
   execute: async ({ task_description, description }) => {
-    const room = getJobContext().room
-    const sessionId = learningSessionIdFromRoomMetadata(room.metadata)
-    if (!sessionId) {
-      throw new llm.ToolError('Room is missing learning_session_id in metadata. A participant must join from the app first.')
-    }
-    if (!appBase || !agentSecret) {
-      throw new llm.ToolError('LIVE_CLASS_APP_BASE_URL and LIVE_CLASS_AGENT_SECRET must be set on the worker.')
-    }
-    const res = await fetch(`${appBase}/api/live-classes/agent/persist-visualization`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-live-class-agent-secret': agentSecret,
-      },
-      body: JSON.stringify({
-        session_id: sessionId,
-        task_description,
-        description: description ?? null,
-      }),
+    const sessionId = requireSessionContext()
+    postInBackground('/api/live-classes/agent/persist-visualization', {
+      session_id: sessionId,
+      task_description,
+      description: description ?? null,
     })
-    if (!res.ok) {
-      const t = await res.text()
-      throw new llm.ToolError(`Visualize failed: ${t}`)
-    }
-    const data = (await res.json()) as { id?: string }
-    return `Visualization saved. Students will see it in the shared panel (id: ${data.id ?? 'unknown'}). Continue teaching.`
+    return 'Visualization is being generated. Students will see it shortly. Continue teaching.'
   },
 })
 
@@ -63,7 +88,16 @@ const setTopic = llm.tool({
   parameters: z.object({
     topic: z.string().describe('Topic title, e.g. How Photosynthesis Works'),
   }),
-  execute: async ({ topic }) => `Topic noted: ${topic}`,
+  execute: async ({ topic }) => {
+    const t = typeof topic === 'string' ? topic.trim() : ''
+    if (!t) return 'No topic text was provided.'
+    const sessionId = requireSessionContext()
+    postInBackground('/api/live-classes/agent/persist-session-topic', {
+      session_id: sessionId,
+      topic: t,
+    })
+    return `Topic noted: ${t}`
+  },
 })
 
 export default defineAgent({

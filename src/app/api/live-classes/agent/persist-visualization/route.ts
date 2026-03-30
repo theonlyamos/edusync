@@ -1,32 +1,18 @@
-import { timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { runVisualizeGeneration } from '@/lib/visualize-ai-task'
+import { validateAgentSecret, UUID_RE } from '@/lib/live-class-agent-auth'
 
-const HEADER = 'x-live-class-agent-secret'
 const MAX_TASK_LEN = 12_000
 const MAX_DESC_LEN = 2_000
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-function agentSecretOk(received: string | null, expected: string): boolean {
-  if (!received) return false
-  const a = Buffer.from(received, 'utf8')
-  const b = Buffer.from(expected, 'utf8')
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 /**
  * Called by the LiveKit agent worker (shared secret). Generates code from a task
  * description and inserts a learning_visualizations row for the room session.
  */
 export async function POST(request: NextRequest) {
-  const secret = request.headers.get(HEADER)
-  const expected = process.env.LIVE_CLASS_AGENT_SECRET
-  if (!expected || !agentSecretOk(secret, expected)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const authErr = validateAgentSecret(request)
+  if (authErr) return authErr
 
   const body = await request.json().catch(() => ({}))
   const { session_id, task_description, panel_dimensions, theme, theme_colors, description } = body
