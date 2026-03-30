@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useReducer,
@@ -13,7 +12,6 @@ import { Room, RoomEvent, Track as LkTrack } from 'livekit-client'
 import axios from 'axios'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAuthProvider'
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick'
 import {
   getClientLiveClassLobbyMinutes,
@@ -84,7 +82,6 @@ export function LiveClassInteractiveTutor({
   backHref,
   currentUserId,
 }: Props) {
-  const supabase = useContext(SupabaseBrowserClientContext)
   const [vizState, vizDispatch] = useReducer(vizReducer, initialVizState)
   const { code, library } = vizState
 
@@ -104,6 +101,7 @@ export function LiveClassInteractiveTutor({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [micOn, setMicOn] = useState(true)
   const [showParticipants, setShowParticipants] = useState(true)
+  const [currentTopic, setCurrentTopic] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
   const audioMountRef = useRef<HTMLDivElement>(null)
   const seenVizIds = useRef<Set<string>>(new Set())
@@ -122,6 +120,7 @@ export function LiveClassInteractiveTutor({
     roomRef.current = null
     if (r) await r.disconnect()
     setSessionId(null)
+    setCurrentTopic(null)
     setPhase('lobby')
     seenVizIds.current.clear()
     vizDispatch({ type: 'RESET' })
@@ -187,44 +186,6 @@ export function LiveClassInteractiveTutor({
     return liveClassJoinWindowBlockedMessage(eventMeta.start, clientLobbyMinutes, joinWindow)
   }, [scheduleLoad, eventMeta, joinWindow, clientLobbyMinutes])
 
-  useEffect(() => {
-    if (!supabase || !sessionId) return
-
-    const channel = supabase
-      .channel(`live_class_viz:${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'learning_visualizations',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        (payload: { new: Record<string, unknown> }) => {
-          const row = payload.new
-          const id = row.id as string
-          if (!id || seenVizIds.current.has(id)) return
-          seenVizIds.current.add(id)
-          vizDispatch({
-            type: 'ADD_VISUALIZATION',
-            payload: {
-              id,
-              code: row.code as string,
-              library: row.library as Visualization['library'],
-              explanation: row.explanation as string | undefined,
-              taskDescription: (row.description as string) || undefined,
-              panelDimensions: row.panel_dimensions as Visualization['panelDimensions'],
-            },
-          })
-        },
-      )
-      .subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [supabase, sessionId])
-
   const joinRoom = useCallback(async () => {
     setErr('')
     setPhase('connecting')
@@ -275,6 +236,35 @@ export function LiveClassInteractiveTutor({
       room.on(RoomEvent.TrackSubscribed, (track) => attachAudio(track))
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         track.detach().forEach((el) => el.remove())
+      })
+
+      room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+        if (topic !== 'agent') return
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>
+          if (msg.type === 'set_topic' && typeof msg.topic === 'string') {
+            setCurrentTopic(msg.topic)
+            return
+          }
+          if (msg.type === 'visualization') {
+            const id = msg.id as string
+            if (!id || seenVizIds.current.has(id)) return
+            seenVizIds.current.add(id)
+            vizDispatch({
+              type: 'ADD_VISUALIZATION',
+              payload: {
+                id,
+                code: msg.code as string,
+                library: msg.library as Visualization['library'],
+                explanation: msg.explanation as string | undefined,
+                taskDescription: (typeof msg.description === 'string' ? msg.description : '') || undefined,
+                panelDimensions: msg.panel_dimensions as Visualization['panelDimensions'],
+              },
+            })
+          }
+        } catch {
+          /* ignore malformed agent payloads */
+        }
       })
 
       await room.connect(data.url, data.token)
@@ -416,7 +406,7 @@ export function LiveClassInteractiveTutor({
                   size="lg"
                   className="w-full"
                   onClick={() => void joinRoom()}
-                  disabled={phase === 'connecting' || !joinAllowed}
+                  disabled={!joinAllowed}
                 >
                   {scheduleLoad === 'loading' ? (
                     <>
@@ -449,12 +439,19 @@ export function LiveClassInteractiveTutor({
         </Link>
         <div className="h-4 w-px bg-border" />
 
-        <h1
-          className="text-sm font-semibold truncate flex-1 min-w-0"
-          style={{ fontFamily: 'var(--font-display), ui-serif, Georgia, serif' }}
-        >
-          {eventMeta?.title || 'Live class'}
-        </h1>
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+          <h1
+            className="text-sm font-semibold truncate"
+            style={{ fontFamily: 'var(--font-display), ui-serif, Georgia, serif' }}
+          >
+            {eventMeta?.title || 'Live class'}
+          </h1>
+          {currentTopic ? (
+            <p className="text-xs text-muted-foreground truncate hidden sm:block" title={currentTopic}>
+              {currentTopic}
+            </p>
+          ) : null}
+        </div>
 
         <div className="flex items-center gap-2 shrink-0">
           {countdown !== null && (

@@ -78,5 +78,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save visualization' }, { status: 500 })
   }
 
-  return NextResponse.json({ id: inserted.id })
+  return NextResponse.json({
+    id: inserted.id,
+    code: viz.code,
+    library: viz.library,
+    explanation: viz.explanation,
+    description: descStr ?? null,
+    panel_dimensions: panel_dimensions ?? null,
+  })
 }

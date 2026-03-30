@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { type JobContext, cli, defineAgent, getJobContext, llm, voice, ServerOptions } from '@livekit/agents'
 import * as google from '@livekit/agents-plugin-google'
+import type { Room } from '@livekit/rtc-node'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '../eureka-prompt.js'
@@ -18,11 +19,13 @@ function learningSessionIdFromRoomMetadata(meta: string | undefined): string {
   }
 }
 
+type SessionContext = { room: Room; sessionId: string }
+
 /**
- * Validates room context and env, then returns the resolved sessionId.
+ * Validates room context and env, then returns room + sessionId.
  * Throws ToolError if anything is misconfigured so the model gets a clear message.
  */
-function requireSessionContext(): string {
+function requireSessionContext(): SessionContext {
   const room = getJobContext().room
   const sessionId = learningSessionIdFromRoomMetadata(room.metadata)
   if (!sessionId) {
@@ -31,7 +34,7 @@ function requireSessionContext(): string {
   if (!appBase || !agentSecret) {
     throw new llm.ToolError('LIVE_CLASS_APP_BASE_URL and LIVE_CLASS_AGENT_SECRET must be set on the worker.')
   }
-  return sessionId
+  return { room, sessionId }
 }
 
 const agentHeaders = {
@@ -39,12 +42,30 @@ const agentHeaders = {
   'x-live-class-agent-secret': agentSecret,
 } as const
 
+function broadcastToRoom(room: Room, payload: Record<string, unknown>): void {
+  const lp = room.localParticipant
+  if (!lp) {
+    console.warn('[live-class-agent] broadcastToRoom: no localParticipant')
+    return
+  }
+  void lp
+    .publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+      reliable: true,
+      topic: 'agent',
+    })
+    .catch((e) => console.error('[live-class-agent] publishData failed:', e))
+}
+
 /**
  * Fire-and-forget POST to one of the agent API routes.
  * Gemini realtime blocks all audio until sendToolResponse, so tool execute
  * functions must not await HTTP calls.
  */
-function postInBackground(path: string, body: Record<string, unknown>): void {
+function postInBackground(
+  path: string,
+  body: Record<string, unknown>,
+  onSuccess?: (data: unknown) => void,
+): void {
   void (async () => {
     try {
       const res = await fetch(`${appBase}${path}`, {
@@ -55,6 +76,14 @@ function postInBackground(path: string, body: Record<string, unknown>): void {
       if (!res.ok) {
         const t = await res.text()
         console.error(`[live-class-agent] ${path} failed:`, t)
+        return
+      }
+      if (onSuccess) {
+        try {
+          onSuccess(await res.json())
+        } catch {
+          console.error(`[live-class-agent] ${path}: invalid JSON response`)
+        }
       }
     } catch (e) {
       console.error(`[live-class-agent] ${path} error:`, e)
@@ -72,12 +101,20 @@ const generateVisualizationDescription = llm.tool({
     description: z.string().optional().describe('Short label for the timeline.'),
   }),
   execute: async ({ task_description, description }) => {
-    const sessionId = requireSessionContext()
-    postInBackground('/api/live-classes/agent/persist-visualization', {
-      session_id: sessionId,
-      task_description,
-      description: description ?? null,
-    })
+    const { room, sessionId } = requireSessionContext()
+    postInBackground(
+      '/api/live-classes/agent/persist-visualization',
+      {
+        session_id: sessionId,
+        task_description,
+        description: description ?? null,
+      },
+      (data) => {
+        if (data && typeof data === 'object' && 'id' in data) {
+          broadcastToRoom(room, { type: 'visualization', ...(data as Record<string, unknown>) })
+        }
+      },
+    )
     return 'Visualization is being generated. Students will see it shortly. Continue teaching.'
   },
 })
@@ -91,7 +128,8 @@ const setTopic = llm.tool({
   execute: async ({ topic }) => {
     const t = typeof topic === 'string' ? topic.trim() : ''
     if (!t) return 'No topic text was provided.'
-    const sessionId = requireSessionContext()
+    const { room, sessionId } = requireSessionContext()
+    broadcastToRoom(room, { type: 'set_topic', topic: t })
     postInBackground('/api/live-classes/agent/persist-session-topic', {
       session_id: sessionId,
       topic: t,
