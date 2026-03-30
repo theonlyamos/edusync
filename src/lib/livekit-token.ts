@@ -45,18 +45,34 @@ export function getLiveKitHttpHost(): string {
   return url
 }
 
+/** Serialized into LiveKit room metadata for the live-class agent (lesson context). */
+export type LiveClassRoomLessonMetadata = {
+  title: string
+  subject: string
+  gradeLevel: string
+  objectives: string[]
+  content: string
+}
+
 /**
- * Ensure the LiveKit room exists with metadata the agent reads (`learning_session_id`).
+ * Ensure the LiveKit room exists with metadata the agent reads (`learning_session_id`, optional `lesson`).
  * Create if missing; update metadata if the room already exists.
  */
-export async function ensureLiveKitRoomSessionMetadata(roomName: string, learningSessionId: string): Promise<void> {
+export async function ensureLiveKitRoomSessionMetadata(
+  roomName: string,
+  learningSessionId: string,
+  lesson?: LiveClassRoomLessonMetadata,
+): Promise<void> {
   const apiKey = process.env.LIVEKIT_API_KEY
   const apiSecret = process.env.LIVEKIT_API_SECRET
   if (!apiKey || !apiSecret) return
 
   const host = getLiveKitHttpHost()
   const client = new RoomServiceClient(host, apiKey, apiSecret)
-  const metadata = JSON.stringify({ learning_session_id: learningSessionId })
+  const metadata = JSON.stringify({
+    learning_session_id: learningSessionId,
+    ...(lesson ? { lesson } : {}),
+  })
 
   const agentName = (process.env.LIVEKIT_AGENT_NAME || '').trim()
   const agentDispatches =

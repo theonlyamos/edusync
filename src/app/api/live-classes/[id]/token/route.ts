@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { liveClassRoomName, isWithinLiveClassWindow, ensureRoomLearningSession } from '@/lib/live-class'
-import { ensureLiveKitRoomSessionMetadata, getLiveKitWsUrl, mintLiveKitParticipantToken } from '@/lib/livekit-token'
+import {
+  ensureLiveKitRoomSessionMetadata,
+  getLiveKitWsUrl,
+  mintLiveKitParticipantToken,
+  type LiveClassRoomLessonMetadata,
+} from '@/lib/livekit-token'
 import { deductCreditsForMinute, hasEnoughCredits } from '@/lib/credits'
 import { isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
 
@@ -52,6 +57,16 @@ export async function GET(request: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: window.reason || 'Outside class window' }, { status: 403 })
   }
 
+  // Start the lesson fetch early so it runs in parallel with user-name / session-ensure / credits.
+  const lessonId = (ev as { lesson_id?: string | null }).lesson_id
+  const lessonPromise = lessonId
+    ? supabase
+        .from('lessons')
+        .select('title, subject, gradelevel, objectives, content')
+        .eq('id', lessonId)
+        .maybeSingle()
+    : null
+
   const { data: userRow } = await supabase.from('users').select('name').eq('id', auth.userId).maybeSingle()
   const displayName = (userRow as { name?: string } | null)?.name || auth.userId
 
@@ -83,8 +98,31 @@ export async function GET(request: NextRequest, ctx: Ctx) {
 
   const roomName = liveClassRoomName(eventId, ev.livekit_room_name as string | null)
 
+  let lessonContext: LiveClassRoomLessonMetadata | undefined
+  if (lessonPromise) {
+    const { data: lesson } = await lessonPromise
+    if (lesson) {
+      const row = lesson as {
+        title?: string | null
+        subject?: string | null
+        gradelevel?: string | null
+        objectives?: string[] | null
+        content?: string | null
+      }
+      lessonContext = {
+        title: String(row.title ?? ''),
+        subject: String(row.subject ?? ''),
+        gradeLevel: String(row.gradelevel ?? ''),
+        objectives: Array.isArray(row.objectives)
+          ? row.objectives.filter((o): o is string => typeof o === 'string')
+          : [],
+        content: (row.content != null ? String(row.content) : '').substring(0, 3000),
+      }
+    }
+  }
+
   // Idempotent: ensures agent-visible metadata even if a prior LiveKit call failed.
-  await ensureLiveKitRoomSessionMetadata(roomName, learningSessionId)
+  await ensureLiveKitRoomSessionMetadata(roomName, learningSessionId, lessonContext)
 
   try {
     const url = getLiveKitWsUrl()

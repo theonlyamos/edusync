@@ -9,14 +9,53 @@ import { EUREKA_TUTOR_SYSTEM_PROMPT } from '../eureka-prompt.js'
 const appBase = (process.env.LIVE_CLASS_APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
 const agentSecret = process.env.LIVE_CLASS_AGENT_SECRET || ''
 
-function learningSessionIdFromRoomMetadata(meta: string | undefined): string {
-  if (!meta) return ''
+type RoomMetaLesson = {
+  title: string
+  subject: string
+  gradeLevel: string
+  objectives: string[]
+  content: string
+}
+
+function parseMeta(meta: string | undefined): { learning_session_id: string; lesson?: RoomMetaLesson } {
+  if (!meta) return { learning_session_id: '' }
   try {
-    const m = JSON.parse(meta) as { learning_session_id?: string }
-    return typeof m.learning_session_id === 'string' ? m.learning_session_id : ''
+    const m = JSON.parse(meta) as {
+      learning_session_id?: string
+      lesson?: {
+        title?: string
+        subject?: string
+        gradeLevel?: string
+        objectives?: unknown
+        content?: string
+      }
+    }
+    const learning_session_id =
+      typeof m.learning_session_id === 'string' ? m.learning_session_id : ''
+    let lesson: RoomMetaLesson | undefined
+    if (m.lesson && typeof m.lesson.title === 'string') {
+      const objs = m.lesson.objectives
+      lesson = {
+        title: m.lesson.title,
+        subject: typeof m.lesson.subject === 'string' ? m.lesson.subject : '',
+        gradeLevel: typeof m.lesson.gradeLevel === 'string' ? m.lesson.gradeLevel : '',
+        objectives: Array.isArray(objs)
+          ? objs.filter((o): o is string => typeof o === 'string')
+          : [],
+        content: typeof m.lesson.content === 'string' ? m.lesson.content : '',
+      }
+    }
+    return { learning_session_id, lesson }
   } catch {
-    return ''
+    return { learning_session_id: '' }
   }
+}
+
+function lessonContextBlock(lesson: RoomMetaLesson): string {
+  const objectivesText = lesson.objectives?.length
+    ? lesson.objectives.map((o) => `- ${o}`).join('\n')
+    : 'No specific objectives provided.'
+  return `\n\n### **Lesson Context**\n\nYou are teaching a live class based on a specific lesson:\n- **Lesson:** ${lesson.title}\n- **Subject:** ${lesson.subject || 'Not specified'}\n- **Grade Level:** ${lesson.gradeLevel || 'Not specified'}\n\n**Learning Objectives:**\n${objectivesText}\n\n**Lesson Content:**\n${lesson.content || 'No content provided.'}\n\nFocus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes.`
 }
 
 type SessionContext = { room: Room; sessionId: string }
@@ -27,7 +66,7 @@ type SessionContext = { room: Room; sessionId: string }
  */
 function requireSessionContext(): SessionContext {
   const room = getJobContext().room
-  const sessionId = learningSessionIdFromRoomMetadata(room.metadata)
+  const sessionId = parseMeta(room.metadata).learning_session_id
   if (!sessionId) {
     throw new llm.ToolError('Room is missing learning_session_id in metadata. A participant must join from the app first.')
   }
@@ -140,8 +179,14 @@ const setTopic = llm.tool({
 
 export default defineAgent({
   entry: async (ctx: JobContext) => {
+    const meta = parseMeta(ctx.room.metadata)
+    let instructions = EUREKA_TUTOR_SYSTEM_PROMPT
+    if (meta.lesson) {
+      instructions += lessonContextBlock(meta.lesson)
+    }
+
     const agent = new voice.Agent({
-      instructions: EUREKA_TUTOR_SYSTEM_PROMPT,
+      instructions,
       tools: {
         generate_visualization_description: generateVisualizationDescription,
         set_topic: setTopic,
@@ -151,7 +196,7 @@ export default defineAgent({
     const model =
       process.env.GEMINI_LIVE_MODEL ||
       process.env.GOOGLE_LIVE_MODEL ||
-      'gemini-2.5-flash-native-audio-preview-12-2025'
+      'gemini-3.1-flash-live-preview'
 
     const session = new voice.AgentSession({
       llm: new google.beta.realtime.RealtimeModel({
