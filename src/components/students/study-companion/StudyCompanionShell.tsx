@@ -97,7 +97,7 @@ export function StudyCompanionShell() {
       }
     };
 
-    if (session?.user?.role === 'student') {
+    if (session?.user) {
       fetchStudentContext();
     }
   }, [session, toast]);
@@ -119,7 +119,7 @@ export function StudyCompanionShell() {
       }
     };
 
-    if (session?.user?.role === 'student') {
+    if (session?.user) {
       fetchChatHistory();
     }
   }, [session, toast]);
@@ -305,13 +305,20 @@ export function StudyCompanionShell() {
         throw new Error('Failed to get a response from your study companion');
       }
 
-      const { message: companionResponse, chatId, aiStatus, errorCode } = await response.json();
+      const { message: companionResponse, chatId, aiStatus, errorCode, visualizationStatus } = await response.json();
 
       if (chatId && !currentChatId) {
         setCurrentChatId(chatId);
         updateHistoryTimestamp(chatId, userMessage.content.slice(0, 50) || 'Study session', selectedLesson || undefined);
       } else if (chatId) {
         updateHistoryTimestamp(chatId);
+      }
+
+      if (visualizationStatus === 'failed') {
+        toast({
+          title: 'Interactive visual unavailable',
+          description: 'You still have the text answer below; we could not generate the interactive piece.',
+        });
       }
 
       if (aiStatus === 'unavailable') {

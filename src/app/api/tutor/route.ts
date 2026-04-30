@@ -8,7 +8,10 @@ import {
     assertLessonAccess,
     buildChatTitle,
     buildTrimmedPrompt,
+    buildVisualizationTaskDescription,
     getSafeAIErrorCode,
+    MAX_EXPLANATION_LENGTH,
+    MAX_INTERACTIVE_CODE_LENGTH,
     normalizeMessages,
     parseAssistantContent,
     tutorRequestSchema,
@@ -18,6 +21,8 @@ import {
     type StudyMessage,
     type StudyMode,
 } from '@/lib/study-companion';
+import { randomUUID } from 'crypto';
+import { runVisualizeGeneration } from '@/lib/visualize-ai-task';
 
 const getSystemPrompt = (
     gradeLevel: string,
@@ -54,6 +59,11 @@ Intent guidance:
 - walkthrough: guide step by step and pause for learner input.
 - review: identify weak spots and turn them into a short review queue.
 
+Interactive visualization:
+- Only include optional key interactiveElementRequest when a manipulable visual clearly helps learning (diagrams, simulations, visual quizzes, cause/effect). Omit for greetings, short plans, or purely verbal answers.
+- Do NOT put executable code in the JSON. Only describe what to build in taskDescription.
+- Prefer kind "visualization" with a concise taskDescription grounded in the lesson and grade.
+
 Return ONLY a JSON object with this shape:
 {
   "content": "main response markdown",
@@ -62,8 +72,14 @@ Return ONLY a JSON object with this shape:
   "followUpQuestions": ["short learner-facing question"],
   "suggestedActions": [
     { "label": "Quiz me", "intent": "quiz", "prompt": "Quiz me one question at a time on this topic." }
-  ]
+  ],
+  "interactiveElementRequest": {
+    "kind": "visualization",
+    "taskDescription": "precise description of the interactive visual or quiz to generate"
+  }
 }
+
+interactiveElementRequest is OPTIONAL — omit it entirely when no visual aid is needed.
 
 Use 2-3 suggestedActions at most.`;
 
@@ -186,13 +202,13 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-            const content = await generateAICompletion(
+            const assistantRaw = await generateAICompletion(
                 getSystemPrompt(gradeLevel, mode, intent, lesson),
                 buildTrimmedPrompt(messagesWithUser, mode, intent),
                 undefined,
                 true
             );
-            const parsedResponse = parseAssistantContent(content || '', mode, intent);
+            const parsedResponse = parseAssistantContent(assistantRaw || '', mode, intent);
 
             const tutorMessage: StudyMessage = {
                 role: 'assistant',
@@ -201,8 +217,49 @@ export async function POST(req: NextRequest) {
                 suggestedActions: parsedResponse.suggestedActions,
                 mode: parsedResponse.mode,
                 intent: parsedResponse.intent,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
+
+            let visualizationStatus: 'ok' | 'failed' | undefined;
+            const vizReq = parsedResponse.interactiveElementRequest;
+            if (vizReq?.kind === 'visualization') {
+                const taskDescription = buildVisualizationTaskDescription({
+                    request: vizReq,
+                    gradeLevel,
+                    lesson,
+                    latestUserContent: userMessage.content,
+                });
+                try {
+                    const vizResult = await runVisualizeGeneration({
+                        task_description: taskDescription,
+                        panel_dimensions: { width: 704, height: 504 },
+                        theme: 'dark',
+                    });
+                    const code = vizResult.code?.slice(0, MAX_INTERACTIVE_CODE_LENGTH) ?? '';
+                    const explanation = vizResult.explanation
+                        ? vizResult.explanation.trim().slice(0, MAX_EXPLANATION_LENGTH)
+                        : undefined;
+                    if (code.trim()) {
+                        tutorMessage.interactiveElements = [
+                            {
+                                id: randomUUID(),
+                                type: 'visualization',
+                                library: vizResult.library,
+                                code,
+                                explanation,
+                                taskDescription: vizReq.taskDescription,
+                                status: 'ready',
+                            },
+                        ];
+                        visualizationStatus = 'ok';
+                    } else {
+                        visualizationStatus = 'failed';
+                    }
+                } catch (vizErr) {
+                    console.error('Study companion visualization generation failed:', vizErr);
+                    visualizationStatus = 'failed';
+                }
+            }
 
             const { error } = await supabase
                 .from('chats')
@@ -218,6 +275,7 @@ export async function POST(req: NextRequest) {
                 message: tutorMessage,
                 chatId: persistedChatId,
                 aiStatus: 'ok',
+                ...(visualizationStatus ? { visualizationStatus } : {}),
             });
         } catch (error) {
             console.error('AI provider unavailable:', error);

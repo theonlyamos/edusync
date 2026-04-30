@@ -2,6 +2,18 @@ export type StudyMode = 'companion' | 'tutor';
 
 export type StudyIntent = 'general' | 'plan' | 'hint' | 'explain' | 'quiz' | 'review' | 'walkthrough';
 
+export type InteractiveLibrary = 'p5' | 'three' | 'react';
+
+export interface InteractiveElement {
+  id: string;
+  type: 'visualization';
+  library: InteractiveLibrary;
+  code: string;
+  explanation?: string;
+  taskDescription: string;
+  status: 'ready';
+}
+
 export interface SuggestedAction {
   label: string;
   intent: StudyIntent;
@@ -18,6 +30,7 @@ export interface StudyMessage {
   mode?: StudyMode;
   intent?: StudyIntent;
   confidence?: 'shaky' | 'okay' | 'confident' | 'mastered';
+  interactiveElements?: InteractiveElement[];
 }
 
 export interface ChatHistory {

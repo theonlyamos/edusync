@@ -6,6 +6,7 @@ import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { StudyMessage, SuggestedAction } from './types';
+import { InteractiveElementCard } from './InteractiveElementCard';
 
 interface ChatThreadProps {
   messages: StudyMessage[];
@@ -33,6 +34,13 @@ const MessageBubble = memo(function MessageBubble({
         <div className="prose prose-sm max-w-none dark:prose-invert">
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
+        {!isUser && message.interactiveElements?.length ? (
+          <div className="mt-4 space-y-4">
+            {message.interactiveElements.map((el) => (
+              <InteractiveElementCard key={el.id} element={el} />
+            ))}
+          </div>
+        ) : null}
         {(message.followUpQuestions?.length || message.suggestedActions?.length) && !isUser ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {message.suggestedActions?.map((action) => (
