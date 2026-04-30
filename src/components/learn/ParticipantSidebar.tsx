@@ -232,7 +232,9 @@ function ParticipantSidebarInner({
                         )}
                       </span>
                       {isEntryHost && (
-                        <Crown className="h-3 w-3 text-amber-500 shrink-0" title="Host" />
+                        <span title="Host">
+                          <Crown className="h-3 w-3 text-amber-500 shrink-0" />
+                        </span>
                       )}
                     </div>
                   </div>

@@ -1,14 +1,34 @@
-import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { NextRequest, NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { generateAICompletion } from '@/lib/ai';
+import { rateLimit } from '@/lib/rate-limiter';
+import {
+    LessonAccessError,
+    MAX_STORED_MESSAGES,
+    assertLessonAccess,
+    buildChatTitle,
+    buildTrimmedPrompt,
+    getSafeAIErrorCode,
+    normalizeMessages,
+    parseAssistantContent,
+    tutorRequestSchema,
+    type ChatRow,
+    type LessonContext,
+    type StudyIntent,
+    type StudyMessage,
+    type StudyMode,
+} from '@/lib/study-companion';
 
-const openai = new OpenAI({
-    baseURL: process.env.OPENAI_BASE_URL,
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const getSystemPrompt = (
+    gradeLevel: string,
+    mode: StudyMode,
+    intent: StudyIntent,
+    lesson?: LessonContext
+) => {
+    let prompt = `You are a study companion for a grade ${gradeLevel} student. Your default job is to help the learner plan, practice, recall, reflect, and stay active. You can switch into tutor mode on demand when the learner asks for explanation, a walkthrough, or deeper help.
 
-const getSystemPrompt = (gradeLevel: string, lesson?: { title: string; subject: string; objectives?: string }) => {
-    let prompt = `You are an AI tutor helping students learn various subjects. You are currently tutoring a student in grade ${gradeLevel}.`;
+Current mode: ${mode}
+Current learner intent: ${intent}`;
 
     if (lesson) {
         prompt += `\n\nYou are specifically helping with the lesson "${lesson.title}" in the subject "${lesson.subject}".`;
@@ -17,37 +37,46 @@ const getSystemPrompt = (gradeLevel: string, lesson?: { title: string; subject: 
         }
     }
 
-    prompt += `\n\nYour role is to:
-1. Provide clear, concise explanations appropriate for grade ${gradeLevel} level
-2. Break down complex concepts into simpler parts
-3. Use examples that are relatable to a grade ${gradeLevel} student
-4. Ask guiding questions to help students understand
-5. Provide practice problems appropriate for grade ${gradeLevel}
-6. Encourage critical thinking while keeping explanations at their level
-7. Be patient, supportive, and encouraging
-8. Use markdown formatting for better readability
+    prompt += `\n\nBehavior rules:
+- Prefer active learning over answer dumping.
+- Use the assistance ladder: clarify -> nudge -> hint -> partial step -> worked example -> direct solution.
+- In companion mode, start with a short question or activity unless the learner clearly needs instruction.
+- In tutor mode, explain clearly, check understanding, then give a similar practice task.
+- For homework-like requests, ask for the learner's attempt first or give a similar example before a final answer.
+- Refuse live cheating requests, then offer practice on the same concept.
+- Keep responses concise and grade-appropriate. Use markdown inside the content string when useful.
 
-After each response, suggest 3-4 follow-up questions that would help deepen the student's understanding of the topic.
-Format your response as follows:
-1. Your main explanation/answer
-2. A line break
-3. "Follow-up Questions:" on a new line
-4. A numbered list of follow-up questions
+Intent guidance:
+- plan: create a realistic study plan and ask for missing goal/time information if needed.
+- quiz: ask one question at a time and wait for the learner's answer.
+- hint: give the smallest useful nudge, not a full answer.
+- explain: teach the concept clearly, then ask one check-for-understanding question.
+- walkthrough: guide step by step and pause for learner input.
+- review: identify weak spots and turn them into a short review queue.
 
-Remember to:
-- Keep explanations at the appropriate level for a grade ${gradeLevel} student
-- Use analogies and real-world examples that students of this age can relate to
-- Provide step-by-step solutions when solving problems
-- Encourage students to think through problems themselves
-- Be encouraging and positive
-- If a topic is too advanced for their grade level, explain why and offer to break it down or suggest prerequisite topics to learn first
-- If a topic is too basic for their grade level, acknowledge this and offer more challenging aspects of the topic`;
+Return ONLY a JSON object with this shape:
+{
+  "content": "main response markdown",
+  "mode": "companion" | "tutor",
+  "intent": "general" | "plan" | "hint" | "explain" | "quiz" | "review" | "walkthrough",
+  "followUpQuestions": ["short learner-facing question"],
+  "suggestedActions": [
+    { "label": "Quiz me", "intent": "quiz", "prompt": "Quiz me one question at a time on this topic." }
+  ]
+}
+
+Use 2-3 suggestedActions at most.`;
 
     return prompt;
 };
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
     try {
+        const rateLimitResponse = await rateLimit(req, 'tutor');
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         const supabase = await createSSRUserSupabase();
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -73,91 +102,131 @@ export async function POST(req: Request) {
             .eq('user_id', user.id)
             .maybeSingle();
 
-        if (!student?.grade) {
-            return new NextResponse('Student grade level not found', { status: 400 });
+        const parsedBody = tutorRequestSchema.safeParse(await req.json());
+        if (!parsedBody.success) {
+            return NextResponse.json(
+                { message: 'Invalid study companion request', issues: parsedBody.error.flatten() },
+                { status: 400 }
+            );
         }
 
-        const { messages, lessonId, chatId } = await req.json();
+        const { chatId, content, mode, intent } = parsedBody.data;
+        const gradeLevel = student?.grade ?? "the student's current level";
 
-        // If lessonId is provided, get lesson details
-        let lesson: any;
-        if (lessonId) {
-            const { data } = await supabase
-                .from('lessons')
-                .select('title, subject, objectives')
-                .eq('id', lessonId)
+        let existingChat: ChatRow | null = null;
+        if (chatId) {
+            const { data, error } = await supabase
+                .from('chats')
+                .select('id, userid, lessonid, title, messages, createdat, updatedat')
+                .eq('id', chatId)
+                .eq('userid', user.id)
                 .maybeSingle();
-            lesson = data;
+            if (error) throw error;
+            if (!data) {
+                return NextResponse.json({ message: 'Chat not found' }, { status: 404 });
+            }
+            existingChat = data as ChatRow;
         }
 
-        const completion = await openai.chat.completions.create({
-            model: process.env.OPENAI_MODEL as string,
-            messages: [
-                {
-                    role: "system",
-                    content: getSystemPrompt(student.grade, lesson)
-                },
-                ...messages.map((msg: any) => ({
-                    role: msg.role,
-                    content: msg.content
-                }))
-            ],
-            temperature: 0.7,
-            max_tokens: 1000,
-        });
+        const effectiveLessonId = existingChat?.lessonid ?? parsedBody.data.lessonId ?? null;
+        let lesson: LessonContext | undefined;
+        if (effectiveLessonId) {
+            try {
+                lesson = await assertLessonAccess(supabase, effectiveLessonId, student?.grade);
+            } catch (error) {
+                if (error instanceof LessonAccessError) {
+                    return NextResponse.json({ message: 'Lesson not found or not accessible' }, { status: 403 });
+                }
+                throw error;
+            }
+        }
 
-        const reply = completion.choices[0].message;
-        const content = reply.content || '';
-
-        // Split content into main response and follow-up questions
-        const parts = content.split(/Follow-up Questions:/i);
-        const mainResponse = parts[0].trim();
-        const followUpQuestions = parts[1]
-            ? parts[1]
-                .trim()
-                .split(/\d+\.\s+/)
-                .filter(q => q.trim())
-                .map(q => q.trim())
-            : [];
-
-        const tutorMessage = {
-            role: 'assistant',
-            content: mainResponse,
-            followUpQuestions,
-            timestamp: new Date().toISOString()
+        const userMessage: StudyMessage = {
+            role: 'user',
+            content,
+            timestamp: new Date().toISOString(),
+            lessonId: effectiveLessonId ?? undefined,
+            mode,
+            intent,
         };
 
-        // If no chatId provided, create a new chat
-        let newChatId;
-        if (!chatId) {
-            const now = new Date().toISOString();
-            const { data } = await supabase
+        const previousMessages = normalizeMessages(existingChat?.messages);
+        const lastMessage = previousMessages.at(-1);
+        const isRetryingSavedUserTurn = lastMessage?.role === 'user' && lastMessage.content === content;
+        const messagesWithUser = (isRetryingSavedUserTurn ? previousMessages : [...previousMessages, userMessage]).slice(-MAX_STORED_MESSAGES);
+
+        let persistedChatId = existingChat?.id;
+        const now = new Date().toISOString();
+
+        if (!persistedChatId) {
+            const { data, error } = await supabase
                 .from('chats')
                 .insert({
-                    userId: user.id,
-                    lessonId: lessonId ?? null,
-                    messages: [...messages, tutorMessage],
-                    title: messages[0]?.content?.slice(0, 50) + '...',
-                    createdAt: now,
-                    updatedAt: now
+                    userid: user.id,
+                    lessonid: effectiveLessonId,
+                    messages: messagesWithUser,
+                    title: buildChatTitle(content),
+                    createdat: now,
+                    updatedat: now,
                 })
                 .select('id')
                 .single();
-            newChatId = data?.id;
+            if (error) throw error;
+            persistedChatId = data.id;
         } else {
-            await supabase
+            const { error } = await supabase
                 .from('chats')
                 .update({
-                    messages: [...messages, tutorMessage],
-                    updatedAt: new Date().toISOString()
+                    messages: messagesWithUser,
+                    updatedat: now,
                 })
-                .eq('id', chatId);
+                .eq('id', persistedChatId)
+                .eq('userid', user.id);
+            if (error) throw error;
         }
 
-        return NextResponse.json({
-            message: tutorMessage,
-            chatId: newChatId || chatId
-        });
+        try {
+            const content = await generateAICompletion(
+                getSystemPrompt(gradeLevel, mode, intent, lesson),
+                buildTrimmedPrompt(messagesWithUser, mode, intent),
+                undefined,
+                true
+            );
+            const parsedResponse = parseAssistantContent(content || '', mode, intent);
+
+            const tutorMessage: StudyMessage = {
+                role: 'assistant',
+                content: parsedResponse.content,
+                followUpQuestions: parsedResponse.followUpQuestions,
+                suggestedActions: parsedResponse.suggestedActions,
+                mode: parsedResponse.mode,
+                intent: parsedResponse.intent,
+                timestamp: new Date().toISOString()
+            };
+
+            const { error } = await supabase
+                .from('chats')
+                .update({
+                    messages: [...messagesWithUser, tutorMessage].slice(-MAX_STORED_MESSAGES),
+                    updatedat: new Date().toISOString(),
+                })
+                .eq('id', persistedChatId)
+                .eq('userid', user.id);
+            if (error) throw error;
+
+            return NextResponse.json({
+                message: tutorMessage,
+                chatId: persistedChatId,
+                aiStatus: 'ok',
+            });
+        } catch (error) {
+            console.error('AI provider unavailable:', error);
+            return NextResponse.json({
+                chatId: persistedChatId,
+                aiStatus: 'unavailable',
+                errorCode: getSafeAIErrorCode(error),
+            });
+        }
     } catch (error) {
         console.error('Error in AI tutor:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

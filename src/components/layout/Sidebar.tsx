@@ -171,7 +171,7 @@ const studentLinks: SidebarLink[] = [
     href: '/students/timetable'
   },
   {
-    label: 'AI Tutor',
+    label: 'Study Companion',
     icon: <MessagesSquare className="h-5 w-5" />,
     href: '/students/tutor'
   },
