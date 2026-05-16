@@ -8,10 +8,11 @@
     "download-files": "tsx src/agent.ts download-files"
   },
   "dependencies": {
-    "@livekit/agents": "^1.2.1",
-    "@livekit/agents-plugin-google": "^1.2.1",
+    "@livekit/agents": "^1.4.2",
+    "@livekit/agents-plugin-google": "^1.4.2",
+    "@livekit/rtc-node": "^0.13.28",
     "dotenv": "^16.4.5",
-    "zod": "^3.24.3"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

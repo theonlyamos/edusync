@@ -1,7 +1,6 @@
 import 'dotenv/config'
 import { type JobContext, cli, defineAgent, getJobContext, llm, voice, ServerOptions } from '@livekit/agents'
 import * as google from '@livekit/agents-plugin-google'
-import type { Room } from '@livekit/rtc-node'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '../eureka-prompt.js'
@@ -58,7 +57,10 @@ function lessonContextBlock(lesson: RoomMetaLesson): string {
   return `\n\n### **Lesson Context**\n\nYou are teaching a live class based on a specific lesson:\n- **Lesson:** ${lesson.title}\n- **Subject:** ${lesson.subject || 'Not specified'}\n- **Grade Level:** ${lesson.gradeLevel || 'Not specified'}\n\n**Learning Objectives:**\n${objectivesText}\n\n**Lesson Content:**\n${lesson.content || 'No content provided.'}\n\nFocus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes.`
 }
 
-type SessionContext = { room: Room; sessionId: string }
+/** Matches `getJobContext().room` (same @livekit/rtc-node instance as @livekit/agents — avoids duplicate-package Room mismatch). */
+type AgentRoom = ReturnType<typeof getJobContext>['room']
+
+type SessionContext = { room: AgentRoom; sessionId: string }
 
 /**
  * Validates room context and env, then returns room + sessionId.
@@ -81,7 +83,7 @@ const agentHeaders = {
   'x-live-class-agent-secret': agentSecret,
 } as const
 
-function broadcastToRoom(room: Room, payload: Record<string, unknown>): void {
+function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): void {
   const lp = room.localParticipant
   if (!lp) {
     console.warn('[live-class-agent] broadcastToRoom: no localParticipant')

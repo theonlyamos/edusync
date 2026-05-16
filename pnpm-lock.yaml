@@ -23,6 +23,9 @@ importers:
       '@livekit/agents-plugin-google':
         specifier: ^1.4.2
         version: 1.4.2(@livekit/agents@1.4.2(@livekit/rtc-node@0.13.28)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))(@livekit/rtc-node@0.13.28)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@livekit/rtc-node':
+        specifier: ^0.13.28
+        version: 0.13.28
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -242,6 +245,31 @@ importers:
         version: 4.22.0
       typescript:
         specifier: ^5.9.3
+        version: 5.9.3
+
+  agents/live-class-agent:
+    dependencies:
+      '@livekit/agents':
+        specifier: ^1.4.2
+        version: 1.4.2(@livekit/rtc-node@0.13.28)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+      '@livekit/agents-plugin-google':
+        specifier: ^1.4.2
+        version: 1.4.2(@livekit/agents@1.4.2(@livekit/rtc-node@0.13.28)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76))(@livekit/rtc-node@0.13.28)(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      '@livekit/rtc-node':
+        specifier: ^0.13.28
+        version: 0.13.28
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.0
+      typescript:
+        specifier: ^5.7.2
         version: 5.9.3
 
 packages:
@@ -2262,6 +2290,10 @@ packages:
 
   dompurify@3.2.7:
     resolution: {integrity: sha512-WhL/YuveyGXJaerVlMYGWhvQswa7myDG17P7Vu65EWC05o8vfeNbvNf4d/BOvH99+ZW+LlQsc1GDKMa1vNK6dw==}
+
+  dotenv@16.6.1:
+    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+    engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -5737,6 +5769,8 @@ snapshots:
   dompurify@3.2.7:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
+
+  dotenv@16.6.1: {}
 
   dunder-proto@1.0.1:
     dependencies:
