@@ -1,10 +1,60 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 
+export type AudioVisualizerVariant = 'ai' | 'mic' | 'mic-ai';
+
 interface AudioVisualizerProps {
   audioData: Float32Array;
   isActive: boolean;
   analyser?: AnalyserNode | null;
-  variant?: 'ai' | 'mic';
+  variant?: AudioVisualizerVariant;
+}
+
+type CenterSpreadStyle = 'neutral' | 'aiGradient';
+
+/** Shared geometry for Study Companion mic strip: symmetric capsules, FFT mapped from horizontal center. */
+function drawCenterSpreadCapsules(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  dataArray: Uint8Array,
+  bufferLength: number,
+  numBars: number,
+  style: CenterSpreadStyle,
+): void {
+  const slotWidth = width / numBars;
+  const thinBarWidth = Math.max(2, slotWidth * 0.42);
+  const gap = (slotWidth - thinBarWidth) / 2;
+  const maxHalf = height * 0.44;
+  const minHalf = thinBarWidth * 0.45;
+  const cx = (numBars - 1) / 2;
+  const maxDist = cx > 0 ? cx : 1;
+
+  for (let i = 0; i < numBars; i++) {
+    const distFromCenter = Math.abs(i - cx);
+    const t = distFromCenter / maxDist;
+    const bin = Math.min(bufferLength - 1, Math.floor(t * (bufferLength - 1)));
+    const amp = dataArray[bin] / 255;
+    const halfH = Math.max(minHalf, amp * maxHalf);
+    const x = i * slotWidth + gap;
+    const y = height / 2 - halfH;
+    const h = halfH * 2;
+    const r = thinBarWidth / 2;
+
+    if (style === 'neutral') {
+      ctx.fillStyle = 'rgba(212, 212, 216, 0.92)';
+    } else {
+      const hue = (i / numBars) * 120 + 200;
+      const g = ctx.createLinearGradient(x, y, x, y + h);
+      g.addColorStop(0, `hsla(${hue}, 72%, 62%, 0.82)`);
+      g.addColorStop(0.5, `hsla(${hue + 20}, 78%, 58%, 0.76)`);
+      g.addColorStop(1, `hsla(${hue + 40}, 82%, 52%, 0.68)`);
+      ctx.fillStyle = g;
+    }
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, thinBarWidth, h, r);
+    ctx.fill();
+  }
 }
 
 const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, analyser, variant = 'ai' }) => {
@@ -18,7 +68,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
     const canvasCtx = canvas.getContext('2d');
     if (!canvasCtx) return;
 
-    // Set canvas size to match its display size
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * window.devicePixelRatio;
     canvas.height = rect.height * window.devicePixelRatio;
@@ -27,43 +76,25 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
     const width = rect.width;
     const height = rect.height;
 
-    // Get frequency data from the real audio analyser
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
 
-    // Clear canvas
     canvasCtx.clearRect(0, 0, width, height);
 
-    const numBars = Math.min(variant === 'mic' ? 42 : 64, bufferLength);
+    const stripBars = variant === 'mic' || variant === 'mic-ai';
+    const numBars = Math.min(stripBars ? 42 : 64, bufferLength);
 
-    if (variant === 'mic') {
-      // Minimal centered bars; FFT energy spreads from horizontal middle (low bins center → highs at edges)
-      const slotWidth = width / numBars;
-      const thinBarWidth = Math.max(2, slotWidth * 0.42);
-      const gap = (slotWidth - thinBarWidth) / 2;
-      const maxHalf = height * 0.44;
-      const minHalf = thinBarWidth * 0.45;
-      const cx = (numBars - 1) / 2;
-      const maxDist = cx > 0 ? cx : 1;
-
-      canvasCtx.fillStyle = 'rgba(212, 212, 216, 0.92)'; // zinc-300-ish
-
-      for (let i = 0; i < numBars; i++) {
-        const distFromCenter = Math.abs(i - cx);
-        const t = distFromCenter / maxDist;
-        const bin = Math.min(bufferLength - 1, Math.floor(t * (bufferLength - 1)));
-        const amp = dataArray[bin] / 255;
-        const halfH = Math.max(minHalf, amp * maxHalf);
-        const x = i * slotWidth + gap;
-        const y = height / 2 - halfH;
-        const h = halfH * 2;
-        const r = thinBarWidth / 2;
-
-        canvasCtx.beginPath();
-        canvasCtx.roundRect(x, y, thinBarWidth, h, r);
-        canvasCtx.fill();
-      }
+    if (variant === 'mic' || variant === 'mic-ai') {
+      drawCenterSpreadCapsules(
+        canvasCtx,
+        width,
+        height,
+        dataArray,
+        bufferLength,
+        numBars,
+        variant === 'mic' ? 'neutral' : 'aiGradient',
+      );
     } else {
       const barWidth = width / numBars;
       const thinBarWidth = Math.max(2, barWidth * 0.6);
@@ -92,13 +123,11 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
       }
     }
 
-    // Continue animation
     if (isActive) {
       animationRef.current = requestAnimationFrame(drawVisualization);
     }
   }, [isActive, analyser, variant]);
 
-  // Start/stop animation based on isActive
   useEffect(() => {
     if (isActive && analyser) {
       drawVisualization();
@@ -106,7 +135,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      // Clear canvas when inactive
       const canvas = canvasRef.current;
       if (canvas) {
         const canvasCtx = canvas.getContext('2d');
@@ -123,7 +151,6 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
     };
   }, [isActive, analyser, drawVisualization]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (animationRef.current) {
@@ -133,8 +160,8 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, 
   }, []);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="w-full h-full"
       style={{ imageRendering: 'auto' }}
     />

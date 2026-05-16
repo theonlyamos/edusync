@@ -196,7 +196,13 @@ export function Composer({
         />
         <div className="flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
           {voice.isStreaming ? (
-            <LiveWaveformStrip audioData={micAudioData} analyser={voice.getMicAnalyser?.() ?? null} active={waveformActive} />
+            <LiveWaveformStrip
+              audioData={micAudioData}
+              analyser={voice.getMicAnalyser?.() ?? null}
+              active={waveformActive}
+              aiAnalyser={voice.getAnalyser()}
+              aiActive={voice.isSpeaking && voice.connectionStatus === 'connected'}
+            />
           ) : null}
           <Button
             type="button"

@@ -16,6 +16,63 @@ export type LiveTranscriptionPayload = {
     finished: boolean;
 };
 
+const DEBUG_GEMINI_LIVE_TRANSCRIPTION =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_DEBUG_GEMINI_LIVE_TRANSCRIPTION === 'true';
+
+function normalizeTranscriptionChunk(raw: unknown): { text: string; finished: boolean } | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const text = typeof o.text === 'string' ? o.text : '';
+    const finished = Boolean(o.finished);
+    if (!text && !finished) return null;
+    return { text, finished };
+}
+
+/** Resolve Live transcription blobs from serverContent (camelCase + snake_case fallbacks). */
+function extractServerTranscriptions(serverContent: unknown): {
+    input: { text: string; finished: boolean } | null;
+    output: { text: string; finished: boolean } | null;
+} {
+    if (!serverContent || typeof serverContent !== 'object') return { input: null, output: null };
+    const sc = serverContent as Record<string, unknown>;
+    const inputRaw = sc.inputTranscription ?? sc.input_audio_transcription;
+    const outputRaw = sc.outputTranscription ?? sc.output_audio_transcription;
+    return {
+        input: normalizeTranscriptionChunk(inputRaw),
+        output: normalizeTranscriptionChunk(outputRaw),
+    };
+}
+
+/**
+ * Merge streaming transcription chunks. Gemini Live often sends cumulative strings,
+ * but some models/updates send only the latest token/word — replacing the buffer then loses prior words.
+ */
+function mergeStreamingTranscript(prev: string, incoming: string): string {
+    const a = prev.replace(/\s+/g, ' ').trim();
+    const b = incoming.replace(/\s+/g, ' ').trim();
+    if (!b) return a;
+    if (!a) return b;
+
+    if (b.startsWith(a)) return b;
+    if (a.startsWith(b)) return a;
+    if (a === b) return a;
+    if (a.endsWith(b)) return a;
+
+    const stripEnds = (w: string) => w.replace(/^[.,!?;:]+|[.,!?;:]+$/g, '').toLowerCase();
+    const aWords = a.split(/\s+/).filter(Boolean);
+    const bWords = b.split(/\s+/).filter(Boolean);
+    if (bWords.length > 0 && aWords.length > 0) {
+        const lastA = stripEnds(aWords[aWords.length - 1] ?? '');
+        const firstB = stripEnds(bWords[0] ?? '');
+        if (lastA && firstB && lastA === firstB) {
+            const base = aWords.slice(0, -1).join(' ');
+            return base ? `${base} ${b}`.replace(/\s+/g, ' ').trim() : b;
+        }
+    }
+
+    return `${a} ${b}`.replace(/\s+/g, ' ').trim();
+}
+
 interface AudioStreamingState {
     isStreaming: boolean;
     audioUrl: string | null;
@@ -91,6 +148,9 @@ export function useAudioStreaming(
     const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
     liveOptionsRef.current = liveOptions;
     const onTranscriptionListenerRef = useRef<((payload: LiveTranscriptionPayload) => void) | null>(null);
+    /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
+    const liveUserTranscriptRef = useRef('');
+    const liveAssistantTranscriptRef = useRef('');
     // Session resumption
     const sessionResumptionHandleRef = useRef<string | null>(null);
     const isResumingSessionRef = useRef<boolean>(false);
@@ -285,6 +345,9 @@ export function useAudioStreaming(
             clearTimeout(speakingTimeoutRef.current);
             speakingTimeoutRef.current = null;
         }
+
+        liveUserTranscriptRef.current = '';
+        liveAssistantTranscriptRef.current = '';
     }, []);
 
     // Function to handle stopping the stream
@@ -777,6 +840,19 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         const processMessages = () => {
             let messagesProcessed = 0;
 
+            const flushUserTranscript = () => {
+                const t = liveUserTranscriptRef.current.trim();
+                if (!t) return;
+                liveUserTranscriptRef.current = '';
+                onTranscriptionListenerRef.current?.({ role: 'user', text: t, finished: true });
+            };
+            const flushAssistantTranscript = () => {
+                const t = liveAssistantTranscriptRef.current.trim();
+                if (!t) return;
+                liveAssistantTranscriptRef.current = '';
+                onTranscriptionListenerRef.current?.({ role: 'assistant', text: t, finished: true });
+            };
+
             while (responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
                 messagesProcessed++;
                 const message = responseQueue.shift();
@@ -801,6 +877,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                 if (message?.serverContent && (message as any).serverContent.interrupted) {
                     audioParts.length = 0;
+                    liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
                     if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
                         playbackCtxRef.current.close();
@@ -811,22 +888,59 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     continue;
                 }
 
-                const serverContent = message?.serverContent;
-                if (serverContent?.inputTranscription) {
-                    const tr = serverContent.inputTranscription;
-                    onTranscriptionListenerRef.current?.({
-                        role: 'user',
-                        text: tr.text ?? '',
-                        finished: Boolean(tr.finished),
+                const serverContent = message?.serverContent as any;
+                const isStudyCompanionLive = liveOptionsRef.current?.variant === 'studyCompanion';
+
+                if (isStudyCompanionLive && serverContent && DEBUG_GEMINI_LIVE_TRANSCRIPTION) {
+                    const { input, output } = extractServerTranscriptions(serverContent);
+                    console.log('[GeminiLive transcription]', {
+                        serverKeys: Object.keys(serverContent),
+                        turnComplete: Boolean(serverContent.turnComplete),
+                        input: input ? { textLen: input.text.length, finished: input.finished } : null,
+                        output: output ? { textLen: output.text.length, finished: output.finished } : null,
                     });
                 }
-                if (serverContent?.outputTranscription) {
-                    const tr = serverContent.outputTranscription;
-                    onTranscriptionListenerRef.current?.({
-                        role: 'assistant',
-                        text: tr.text ?? '',
-                        finished: Boolean(tr.finished),
-                    });
+
+                if (isStudyCompanionLive) {
+                    const { input, output } = extractServerTranscriptions(serverContent);
+                    if (input) {
+                        liveUserTranscriptRef.current = mergeStreamingTranscript(liveUserTranscriptRef.current, input.text);
+                        if (input.finished) {
+                            flushUserTranscript();
+                        }
+                    }
+                    if (output) {
+                        if (liveUserTranscriptRef.current.trim()) {
+                            flushUserTranscript();
+                        }
+                        liveAssistantTranscriptRef.current = mergeStreamingTranscript(
+                            liveAssistantTranscriptRef.current,
+                            output.text,
+                        );
+                        if (output.finished) {
+                            flushAssistantTranscript();
+                        }
+                    }
+                    if (serverContent?.turnComplete) {
+                        flushAssistantTranscript();
+                    }
+                } else {
+                    if (serverContent?.inputTranscription) {
+                        const tr = serverContent.inputTranscription;
+                        onTranscriptionListenerRef.current?.({
+                            role: 'user',
+                            text: tr.text ?? '',
+                            finished: Boolean(tr.finished),
+                        });
+                    }
+                    if (serverContent?.outputTranscription) {
+                        const tr = serverContent.outputTranscription;
+                        onTranscriptionListenerRef.current?.({
+                            role: 'assistant',
+                            text: tr.text ?? '',
+                            finished: Boolean(tr.finished),
+                        });
+                    }
                 }
 
                 // Handle tool calls
