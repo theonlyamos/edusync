@@ -150,6 +150,10 @@ export function useAudioStreaming(
     const geminiLiveSessionRef = useRef<any>(null);
     const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
     liveOptionsRef.current = liveOptions;
+    const lessonContextRef = useRef<LessonContext | undefined>(lessonContext);
+    lessonContextRef.current = lessonContext;
+    const topicRef = useRef(topic);
+    topicRef.current = topic;
     const onTranscriptionListenerRef = useRef<((payload: LiveTranscriptionPayload) => void) | null>(null);
     /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
     const liveUserTranscriptRef = useRef('');
@@ -498,29 +502,31 @@ export function useAudioStreaming(
             const responseQueue: LiveServerMessage[] = [];
             const audioParts: string[] = [];
 
-            // Build context addition based on lesson context or topic
+            // Build context addition based on lesson context or topic (read refs — startGeminiLiveSession is []-memoized)
             let contextAddition = '';
+            const lessonCtx = lessonContextRef.current;
+            const topicNow = topicRef.current;
 
-            if (lessonContext?.title) {
+            if (lessonCtx?.title) {
                 contextAddition = `
 
 ### **Lesson Context**
 
 You are helping a student learn material from a specific lesson:
-- **Lesson:** ${lessonContext.title}
-- **Subject:** ${lessonContext.subject || 'Not specified'}
-- **Grade Level:** ${lessonContext.gradeLevel || 'Not specified'}
+- **Lesson:** ${lessonCtx.title}
+- **Subject:** ${lessonCtx.subject || 'Not specified'}
+- **Grade Level:** ${lessonCtx.gradeLevel || 'Not specified'}
 
 **Learning Objectives:**
-${lessonContext.objectives || 'No specific objectives provided.'}
+${lessonCtx.objectives || 'No specific objectives provided.'}
 
 **Lesson Content:**
-${lessonContext.content ? lessonContext.content.substring(0, 2000) + (lessonContext.content.length > 2000 ? '...' : '') : 'No content provided.'}
+${lessonCtx.content ? lessonCtx.content.substring(0, 2000) + (lessonCtx.content.length > 2000 ? '...' : '') : 'No content provided.'}
 
 Focus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes. When the student asks questions, relate answers back to the lesson objectives.
 `;
-            } else if (topic) {
-                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
+            } else if (topicNow) {
+                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topicNow}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
             }
 
             const variant = liveOptionsRef.current?.variant ?? 'tutor';
@@ -532,12 +538,12 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 const sm = liveOptionsRef.current?.studyMode ?? 'companion';
                 const si = liveOptionsRef.current?.studyIntent ?? 'general';
                 const lessonHint =
-                    lessonContext?.title && lessonContext.title.trim().length > 0
+                    lessonCtx?.title && lessonCtx.title.trim().length > 0
                         ? {
-                              title: lessonContext.title,
-                              subject: lessonContext.subject || 'general',
-                              objectives: lessonContext.objectives ?? null,
-                              content: lessonContext.content ?? null,
+                              title: lessonCtx.title,
+                              subject: lessonCtx.subject || 'general',
+                              objectives: lessonCtx.objectives ?? null,
+                              content: lessonCtx.content ?? null,
                           }
                         : undefined;
                 finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
@@ -1005,16 +1011,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     // Play audio chunks from Gemini
     const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
         try {
-            const pcmData = rawData.map(data => {
-                const binaryString = atob(data);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                return bytes;
-            });
-
-            const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
+            // Single decode path via convertToWav (avoid duplicate base64→PCM work per chunk).
             const wavBuffer = convertToWav(rawData, 24000);
 
             let ctx = playbackCtxRef.current;
