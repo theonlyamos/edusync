@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GraduationCap, Loader2, Plus, Sparkles } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronLeft, ChevronRight, GraduationCap, Loader2, Plus, Sparkles } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { Composer } from './Composer';
 import { LessonContextPanel } from './LessonContextPanel';
 import { QuickActions } from './QuickActions';
 import { quickActions, type QuickAction } from './study-actions';
-import type { ChatHistory, Lesson, StudyIntent, StudyMessage, StudyMode, SuggestedAction } from './types';
+import type { ChatHistory, Lesson, StudyIntent, StudyMessage, StudyMode, SuggestedAction, VoiceInteractiveGenEvent } from './types';
 import { getChatId, getLessonId } from './types';
 
 const starterPrompts = [
@@ -203,6 +203,26 @@ export function StudyCompanionShell() {
     } catch (error) {
       console.warn('Unable to refresh study session history:', error);
     }
+  };
+
+  const scheduleVoiceChatPersist = () => {
+    if (!chatIdRef.current) return;
+
+    if (voicePersistTimerRef.current) clearTimeout(voicePersistTimerRef.current);
+    voicePersistTimerRef.current = setTimeout(() => {
+      voicePersistTimerRef.current = null;
+      const id = chatIdRef.current;
+      if (!id) return;
+      void fetch(`/api/students/chats/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messagesRef.current }),
+      })
+        .then((response) => {
+          if (response.ok) void refreshChatHistory();
+        })
+        .catch(() => {});
+    }, 200);
   };
 
   const startNewChat = async (lessonId?: string): Promise<string | null> => {
@@ -416,28 +436,47 @@ export function StudyCompanionShell() {
     setMessages((prev) => [...prev, msg]);
     setLocalSendCount((current) => current + 1);
 
-    if (!chatIdRef.current) return;
+    scheduleVoiceChatPersist();
+  };
 
-    if (voicePersistTimerRef.current) clearTimeout(voicePersistTimerRef.current);
-    voicePersistTimerRef.current = setTimeout(() => {
-      voicePersistTimerRef.current = null;
-      const id = chatIdRef.current;
-      if (!id) return;
-      void fetch(`/api/students/chats/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messagesRef.current }),
-      })
-        .then((response) => {
-          if (response.ok) void refreshChatHistory();
-        })
-        .catch(() => {});
-    }, 200);
+  const handleVoiceInteractiveGen = (event: VoiceInteractiveGenEvent) => {
+    if (event.type === 'placeholder') {
+      setMessages((prev) => [...prev, event.message]);
+      setLocalSendCount((current) => current + 1);
+      scheduleVoiceChatPersist();
+      return;
+    }
+    if (event.type === 'success') {
+      setMessages((prev) =>
+        prev.map((m) => (m.voiceVizPlaceholderId === event.replaceId ? event.message : m)),
+      );
+      scheduleVoiceChatPersist();
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.voiceVizPlaceholderId === event.replaceId
+          ? {
+              ...m,
+              content:
+                'Could not generate the interactive visual. Your voice session is still active — try asking again or use text chat.',
+              voiceVizPlaceholderId: undefined,
+            }
+          : m,
+      ),
+    );
+    toast({
+      title: 'Interactive visual unavailable',
+      description:
+        event.description ?? 'Generation failed. You can keep using voice or ask again in text.',
+      variant: 'destructive',
+    });
+    scheduleVoiceChatPersist();
   };
 
   if (!session) {
     return (
-      <DashboardLayout>
+      <DashboardLayout fullBleed>
         <div className="flex min-h-screen items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
@@ -446,8 +485,8 @@ export function StudyCompanionShell() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="flex h-[calc(100vh-4rem)]">
+    <DashboardLayout fullBleed>
+      <div className="flex h-[100vh]">
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="border-b p-4">
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
@@ -524,32 +563,6 @@ export function StudyCompanionShell() {
 
           <div className="border-t p-4">
             <div className="mx-auto max-w-3xl space-y-4">
-              {messages.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-muted-foreground">Quick actions</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1 px-2 text-xs text-muted-foreground"
-                      onClick={() => setShowQuickActions((current) => !current)}
-                    >
-                      {showQuickActions ? (
-                        <>
-                          <ChevronUp className="h-3.5 w-3.5" />
-                          Hide
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3.5 w-3.5" />
-                          Show
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  {showQuickActions && <QuickActions actions={quickActions} disabled={isLoading} onAction={selectAction} />}
-                </div>
-              )}
               {outageNotice && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -592,6 +605,16 @@ export function StudyCompanionShell() {
                 lessonVoiceContext={lessonVoiceContext}
                 voiceLiveOptions={voiceLiveOptions}
                 voiceSessionReady={Boolean(currentChatId)}
+                quickActionsToggle={
+                  messages.length > 0
+                    ? { expanded: showQuickActions, onToggle: () => setShowQuickActions((c) => !c) }
+                    : undefined
+                }
+                quickActions={
+                  messages.length > 0 ? (
+                    <QuickActions actions={quickActions} disabled={isLoading} onAction={selectAction} />
+                  ) : undefined
+                }
                 ensureChatForVoice={async () => {
                   if (chatIdRef.current) return true;
                   const id = await startNewChat(selectedLesson ?? undefined);
@@ -600,6 +623,7 @@ export function StudyCompanionShell() {
                 onChange={setInput}
                 onSubmit={sendMessage}
                 onVoiceTranscript={handleVoiceTranscript}
+                onVoiceInteractiveGen={handleVoiceInteractiveGen}
                 onVoiceError={(description) =>
                   toast({
                     title: 'Voice',

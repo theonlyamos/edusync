@@ -382,7 +382,12 @@ Current learner intent: ${intent}`;
 - Keep spoken answers plain and conversational; avoid long lists unless the learner asks for detail.
 - Do not describe or narrate UI elements; stay focused on learning.
 
-Intent guidance:
+Interactive visuals and quizzes (required tool usage):
+- You have a tool \`generate_visualization_description\`. Call it when a manipulable visual, diagram, simulation, or interactive/on-screen quiz would materially help — especially in **quiz** intent, when the learner asks to be quizzed, or when checking understanding is clearer with buttons or a canvas than voice alone.
+- In \`task_description\`, specify layout, interactions, and for quizzes the prompts, choices, and feedback when the learner answers.
+- Do **not** call it on greeting-only turns or bare planning unless a visual or quiz is clearly useful. Avoid firing it repeatedly for the same concept unless the learner asks for another. Never put executable code in speech; the tool generates the UI.`;
+
+    prompt += `\n\nIntent guidance:
 - plan: create a realistic study plan and ask for missing goal or time information if needed.
 - quiz: ask one question at a time and wait for the learner's answer.
 - hint: give the smallest useful nudge, not a full answer.

@@ -1,13 +1,16 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Mic, MicOff, Send } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Mic, MicOff, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { LessonContext, LiveTranscriptionPayload, UseAudioStreamingLiveOptions } from '@/hooks/useAudioStreaming';
 import { useAudioStreaming } from '@/hooks/useAudioStreaming';
-import type { StudyIntent, StudyMessage, StudyMode } from './types';
+import type { InteractiveElement, StudyIntent, StudyMessage, StudyMode, VoiceInteractiveGenEvent } from './types';
+import { MAX_EXPLANATION_LENGTH, MAX_INTERACTIVE_CODE_LENGTH } from '@/lib/study-companion';
+import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
 import { LiveWaveformStrip } from './LiveWaveformStrip';
 
 interface ComposerProps {
@@ -26,7 +29,12 @@ interface ComposerProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   onVoiceTranscript: (message: StudyMessage) => void;
+  /** Gemini Live tool → client viz generation (Study Companion voice only). */
+  onVoiceInteractiveGen?: (event: VoiceInteractiveGenEvent) => void;
   onVoiceError?: (message: string) => void;
+  /** Study Companion: toggle + panel rendered below the mode row when expanded. */
+  quickActionsToggle?: { expanded: boolean; onToggle: () => void };
+  quickActions?: ReactNode;
 }
 
 const modeCopy: Record<StudyMode, string> = {
@@ -59,12 +67,19 @@ export function Composer({
   onChange,
   onSubmit,
   onVoiceTranscript,
+  onVoiceInteractiveGen,
   onVoiceError,
+  quickActionsToggle,
+  quickActions,
 }: ComposerProps) {
   const [vadActive, setVadActive] = useState(false);
   const [ensuringChatForVoice, setEnsuringChatForVoice] = useState(false);
   const userTranscriptRef = useRef('');
   const assistantTranscriptRef = useRef('');
+  const vizGenAbortRef = useRef<AbortController | null>(null);
+  const vizDedupeRef = useRef<{ task: string; at: number }>({ task: '', at: 0 });
+  const onVoiceInteractiveGenRef = useRef(onVoiceInteractiveGen);
+  onVoiceInteractiveGenRef.current = onVoiceInteractiveGen;
 
   const voice = useAudioStreaming(null, lessonVoiceContext, voiceLiveOptions);
 
@@ -73,8 +88,95 @@ export function Composer({
   }, [voice]);
 
   useEffect(() => {
-    voice.setToolCallListener(() => {});
-  }, [voice]);
+    return () => {
+      vizGenAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    voice.setToolCallListener((name, args) => {
+      if (name !== 'generate_visualization_description') return;
+      const notify = onVoiceInteractiveGenRef.current;
+      if (!notify) return;
+
+      const raw = typeof args?.task_description === 'string' ? args.task_description.trim() : '';
+      if (!raw) return;
+
+      const now = Date.now();
+      if (raw === vizDedupeRef.current.task && now - vizDedupeRef.current.at < 3000) {
+        return;
+      }
+      vizDedupeRef.current = { task: raw, at: now };
+
+      vizGenAbortRef.current?.abort();
+      const ac = new AbortController();
+      vizGenAbortRef.current = ac;
+
+      const placeholderId = crypto.randomUUID();
+      const placeholderMsg: StudyMessage = {
+        role: 'assistant',
+        content: 'Generating visualization or quiz…',
+        timestamp: new Date().toISOString(),
+        lessonId: selectedLessonId || undefined,
+        mode,
+        intent,
+        voiceVizPlaceholderId: placeholderId,
+      };
+      notify({ type: 'placeholder', placeholderId, message: placeholderMsg });
+
+      void (async () => {
+        try {
+          const theme =
+            typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+              ? 'dark'
+              : 'light';
+          const result = await requestVisualizationFromGenAi({
+            taskDescription: raw,
+            theme,
+            signal: ac.signal,
+          });
+          const code = result.code.slice(0, MAX_INTERACTIVE_CODE_LENGTH);
+          const explanation = result.explanation.trim().slice(0, MAX_EXPLANATION_LENGTH) || undefined;
+          const element: InteractiveElement = {
+            id: crypto.randomUUID(),
+            type: 'visualization',
+            library: result.library,
+            code,
+            explanation,
+            taskDescription: raw,
+            status: 'ready',
+          };
+          const assistantContent =
+            explanation ??
+            'Here is something interactive on screen — try it while we keep talking if you want.';
+          const message: StudyMessage = {
+            role: 'assistant',
+            content: assistantContent,
+            timestamp: new Date().toISOString(),
+            lessonId: selectedLessonId || undefined,
+            mode,
+            intent,
+            interactiveElements: [element],
+          };
+          notify({ type: 'success', replaceId: placeholderId, message });
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+          notify({
+            type: 'error',
+            replaceId: placeholderId,
+            description: e instanceof Error ? e.message : undefined,
+          });
+        }
+      })();
+    });
+
+    return () => {
+      vizGenAbortRef.current?.abort();
+      voice.setToolCallListener(() => {});
+    };
+    // `voice` is a new object every render; `voice.setToolCallListener` is stable (useCallback []).
+    // Listing `voice` here re-ran cleanup on every paint and aborted in-flight /api/genai/visualize.
+  }, [voice.setToolCallListener, selectedLessonId, mode, intent]);
 
   useEffect(() => {
     voice.setOnVadStateListener?.((active) => {
@@ -172,9 +274,33 @@ export function Composer({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{modeCopy[mode]}</span>
-        {intent !== 'general' && <span className="capitalize">{intent}</span>}
+        <div className="flex min-w-0 items-center gap-2">
+          <span>{modeCopy[mode]}</span>
+          {intent !== 'general' && <span className="capitalize">{intent}</span>}
+        </div>
+        {quickActionsToggle ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground"
+            onClick={quickActionsToggle.onToggle}
+          >
+            {quickActionsToggle.expanded ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Hide Quick actions
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Show Quick actions
+              </>
+            )}
+          </Button>
+        ) : null}
       </div>
+      {quickActionsToggle?.expanded && quickActions ? <div>{quickActions}</div> : null}
       <div
         className={cn(
           'flex items-end gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2 shadow-sm backdrop-blur-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-md dark:bg-muted/15',

@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { StudyMessage, SuggestedAction } from './types';
@@ -32,7 +32,14 @@ const MessageBubble = memo(function MessageBubble({
           {message.intent && message.intent !== 'general' && !isUser && <Badge variant="outline">{message.intent}</Badge>}
         </div>
         <div className="prose prose-sm max-w-none dark:prose-invert">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          {message.voiceVizPlaceholderId ? (
+            <div className="flex items-center gap-2 text-muted-foreground not-prose">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              <span>{message.content}</span>
+            </div>
+          ) : (
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          )}
         </div>
         {!isUser && message.interactiveElements?.length ? (
           <div className="mt-4 space-y-4">

@@ -551,38 +551,49 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 finalSystemPrompt = systemPrompt + contextAddition;
             }
 
+            const visualizationToolDeclaration = {
+                name: 'generate_visualization_description',
+                description:
+                    'Generates an interactive visual or on-screen quiz for the learner. Call when a diagram, simulation, manipulable demo, or interactive/visual quiz would help more than voice alone.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        task_description: {
+                            type: 'string',
+                            description:
+                                'Detailed description: type (illustration, simulation, visual quiz), layout, interactions, feedback, labels. For quizzes, specify prompts, choices, and correct-answer feedback.',
+                        },
+                    },
+                    required: ['task_description'],
+                },
+            };
+
             const tutorTools = [
                 { googleSearch: {} },
                 {
-                    functionDeclarations: [{
-                        name: 'generate_visualization_description',
-                        description: 'Generates a visual aid for the learner. Call whenever you would show, draw, or demonstrate something.',
-                        parameters: {
-                            type: 'object',
-                            properties: {
-                                task_description: {
-                                    type: 'string',
-                                    description: 'A detailed description of the visual to generate. Specify the type (illustration, interactive demo, visual quiz, title card), layout, interactions, labels, and include image URLs in markdown syntax where relevant.'
-                                }
+                    functionDeclarations: [
+                        visualizationToolDeclaration,
+                        {
+                            name: 'set_topic',
+                            description:
+                                'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    topic: {
+                                        type: 'string',
+                                        description: 'A concise 3–8 word title describing the current main topic.',
+                                    },
+                                },
+                                required: ['topic'],
                             },
-                            required: ['task_description']
-                        }
-                    }, {
-                        name: 'set_topic',
-                        description: 'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
-                        parameters: {
-                            type: 'object',
-                            properties: {
-                                topic: {
-                                    type: 'string',
-                                    description: 'A concise 3–8 word title describing the current main topic.'
-                                }
-                            },
-                            required: ['topic']
-                        }
-                    }]
-                }
+                        },
+                    ],
+                },
             ];
+
+            /** Study Companion Live: function calls only (no Google Search); single viz/quiz tool per product constraint. */
+            const studyCompanionLiveTools = [{ functionDeclarations: [visualizationToolDeclaration] }];
 
             const connectConfig: any = {
                 model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
@@ -608,7 +619,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     sessionResumption: {
                         handle: sessionResumptionHandleRef.current || undefined
                     },
-                    tools: isStudyCompanion ? [{ googleSearch: {} }] : tutorTools,
+                    tools: isStudyCompanion ? studyCompanionLiveTools : tutorTools,
                     ...(isStudyCompanion
                         ? { inputAudioTranscription: {}, outputAudioTranscription: {} }
                         : {}),

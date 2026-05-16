@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from '@/lib/auth'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { rateLimit } from '@/lib/rate-limiter'
 import { runVisualizeGeneration } from '@/lib/visualize-ai-task'
 
 export async function POST(request: NextRequest) {
   try {
-    const authContext = getAuthContext(request)
+    let authContext = getAuthContext(request)
+    if (!authContext) {
+      const session = await getServerSession()
+      if (session?.user?.id) {
+        authContext = {
+          userId: session.user.id,
+          authType: 'session',
+          userRole: session.user.role,
+        }
+      }
+    }
     if (!authContext) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
