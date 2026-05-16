@@ -1,6 +1,20 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity, EndSensitivity } from '@google/genai';
+import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
+
+export type UseAudioStreamingLiveOptions = {
+    variant?: 'tutor' | 'studyCompanion';
+    gradeLevel?: string | null;
+    studyMode?: StudyMode;
+    studyIntent?: StudyIntent;
+};
+
+export type LiveTranscriptionPayload = {
+    role: 'user' | 'assistant';
+    text: string;
+    finished: boolean;
+};
 
 interface AudioStreamingState {
     isStreaming: boolean;
@@ -30,6 +44,7 @@ interface AudioStreamingActions {
     submitFeedback: (feedback: any) => Promise<void>;
     setSaveOnlySpeech?: (enabled: boolean) => void;
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
+    setOnTranscription?: (cb: ((payload: LiveTranscriptionPayload) => void) | null) => void;
 }
 
 export interface LessonContext {
@@ -43,7 +58,11 @@ export interface LessonContext {
 
 const systemPrompt = EUREKA_TUTOR_SYSTEM_PROMPT;
 
-export function useAudioStreaming(topic?: string | null, lessonContext?: LessonContext): AudioStreamingState & AudioStreamingActions {
+export function useAudioStreaming(
+    topic?: string | null,
+    lessonContext?: LessonContext,
+    liveOptions?: UseAudioStreamingLiveOptions,
+): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -69,6 +88,9 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
     const onVadStateListenerRef = useRef<((active: boolean, rms: number) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
+    const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
+    liveOptionsRef.current = liveOptions;
+    const onTranscriptionListenerRef = useRef<((payload: LiveTranscriptionPayload) => void) | null>(null);
     // Session resumption
     const sessionResumptionHandleRef = useRef<string | null>(null);
     const isResumingSessionRef = useRef<boolean>(false);
@@ -435,12 +457,63 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
             }
 
-            const finalSystemPrompt = systemPrompt + contextAddition;
+            const variant = liveOptionsRef.current?.variant ?? 'tutor';
+            const isStudyCompanion = variant === 'studyCompanion';
+
+            let finalSystemPrompt: string;
+            if (isStudyCompanion) {
+                const gl = liveOptionsRef.current?.gradeLevel?.trim() || 'the learner';
+                const sm = liveOptionsRef.current?.studyMode ?? 'companion';
+                const si = liveOptionsRef.current?.studyIntent ?? 'general';
+                const lessonHint =
+                    lessonContext?.title && lessonContext.title.trim().length > 0
+                        ? {
+                              title: lessonContext.title,
+                              subject: lessonContext.subject || 'general',
+                              objectives: lessonContext.objectives ?? null,
+                              content: lessonContext.content ?? null,
+                          }
+                        : undefined;
+                finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
+            } else {
+                finalSystemPrompt = systemPrompt + contextAddition;
+            }
+
+            const tutorTools = [
+                { googleSearch: {} },
+                {
+                    functionDeclarations: [{
+                        name: 'generate_visualization_description',
+                        description: 'Generates a visual aid for the learner. Call whenever you would show, draw, or demonstrate something.',
+                        parameters: {
+                            type: 'object',
+                            properties: {
+                                task_description: {
+                                    type: 'string',
+                                    description: 'A detailed description of the visual to generate. Specify the type (illustration, interactive demo, visual quiz, title card), layout, interactions, labels, and include image URLs in markdown syntax where relevant.'
+                                }
+                            },
+                            required: ['task_description']
+                        }
+                    }, {
+                        name: 'set_topic',
+                        description: 'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
+                        parameters: {
+                            type: 'object',
+                            properties: {
+                                topic: {
+                                    type: 'string',
+                                    description: 'A concise 3–8 word title describing the current main topic.'
+                                }
+                            },
+                            required: ['topic']
+                        }
+                    }]
+                }
+            ];
 
             const connectConfig: any = {
                 model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
-                // Configuration is locked server-side via ephemeral token liveConnectConstraints
-                // Session resumption
                 config: {
                     responseModalities: [Modality.AUDIO],
                     proactivity: { proactiveAudio: true },
@@ -463,38 +536,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     sessionResumption: {
                         handle: sessionResumptionHandleRef.current || undefined
                     },
-                    tools: [
-                        { googleSearch: {} },
-                        {
-                            functionDeclarations: [{
-                                name: 'generate_visualization_description',
-                                description: 'Generates a visual aid for the learner. Call whenever you would show, draw, or demonstrate something.',
-                                parameters: {
-                                    type: 'object',
-                                    properties: {
-                                        task_description: {
-                                            type: 'string',
-                                            description: 'A detailed description of the visual to generate. Specify the type (illustration, interactive demo, visual quiz, title card), layout, interactions, labels, and include image URLs in markdown syntax where relevant.'
-                                        }
-                                    },
-                                    required: ['task_description']
-                                }
-                            }, {
-                                name: 'set_topic',
-                                description: 'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
-                                parameters: {
-                                    type: 'object',
-                                    properties: {
-                                        topic: {
-                                            type: 'string',
-                                            description: 'A concise 3–8 word title describing the current main topic.'
-                                        }
-                                    },
-                                    required: ['topic']
-                                }
-                            }]
-                        }
-                    ]
+                    tools: isStudyCompanion ? [{ googleSearch: {} }] : tutorTools,
+                    ...(isStudyCompanion
+                        ? { inputAudioTranscription: {}, outputAudioTranscription: {} }
+                        : {}),
                 },
                 callbacks: {
                     onopen: () => {
@@ -711,8 +756,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
             } catch { }
 
-            // Session resumption initial message
-            const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+            const initialMessage = sessionResumptionHandleRef.current
+                ? 'Continue'
+                : isStudyCompanion
+                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
+                    : 'Hello';
             geminiSession.sendRealtimeInput({ text: initialMessage });
 
         } catch (error: any) {
@@ -761,6 +809,24 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     analyserRef.current = null;
                     nextPlaybackTimeRef.current = 0;
                     continue;
+                }
+
+                const serverContent = message?.serverContent;
+                if (serverContent?.inputTranscription) {
+                    const tr = serverContent.inputTranscription;
+                    onTranscriptionListenerRef.current?.({
+                        role: 'user',
+                        text: tr.text ?? '',
+                        finished: Boolean(tr.finished),
+                    });
+                }
+                if (serverContent?.outputTranscription) {
+                    const tr = serverContent.outputTranscription;
+                    onTranscriptionListenerRef.current?.({
+                        role: 'assistant',
+                        text: tr.text ?? '',
+                        finished: Boolean(tr.finished),
+                    });
                 }
 
                 // Handle tool calls
@@ -1087,6 +1153,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         saveOnlySpeechRef.current = enabled;
     }, []);
 
+    const setOnTranscription = useCallback((cb: ((payload: LiveTranscriptionPayload) => void) | null) => {
+        onTranscriptionListenerRef.current = cb;
+    }, []);
+
     const setOnVadStateListener = useCallback((cb: (active: boolean, rms: number) => void) => {
         onVadStateListenerRef.current = cb;
     }, []);
@@ -1124,6 +1194,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         closeFeedbackForm,
         submitFeedback,
         setSaveOnlySpeech,
-        setOnVadStateListener
+        setOnVadStateListener,
+        setOnTranscription,
     };
 }

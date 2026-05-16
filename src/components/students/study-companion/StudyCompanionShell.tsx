@@ -1,13 +1,14 @@
 'use client';
 
 import type { MouseEvent } from 'react';
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GraduationCap, Loader2, Plus, Sparkles } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
+import type { LessonContext } from '@/hooks/useAudioStreaming';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatThread } from './ChatThread';
 import { Composer } from './Composer';
@@ -65,6 +66,35 @@ export function StudyCompanionShell() {
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [outageNotice, setOutageNotice] = useState<OutageNotice | null>(null);
   const [localSendCount, setLocalSendCount] = useState(0);
+  const chatIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    chatIdRef.current = currentChatId;
+  }, [currentChatId]);
+
+  const lessonVoiceContext = useMemo((): LessonContext | undefined => {
+    if (!selectedLesson) return undefined;
+    const lesson = lessons.find((item) => getLessonId(item) === selectedLesson);
+    if (!lesson) return undefined;
+    return {
+      lessonId: selectedLesson,
+      title: lesson.title,
+      subject: lesson.subject,
+      gradeLevel: lesson.gradeLevel ?? lesson.gradelevel ?? gradeLevel ?? undefined,
+      objectives: lesson.objectives ?? undefined,
+      content: lesson.content ?? undefined,
+    };
+  }, [selectedLesson, lessons, gradeLevel]);
+
+  const voiceLiveOptions = useMemo(
+    () => ({
+      variant: 'studyCompanion' as const,
+      gradeLevel,
+      studyMode: mode,
+      studyIntent: intent,
+    }),
+    [gradeLevel, mode, intent],
+  );
 
   const selectedLessonTitle = useMemo(
     () => lessons.find((lesson) => getLessonId(lesson) === selectedLesson)?.title,
@@ -360,6 +390,26 @@ export function StudyCompanionShell() {
     }
   };
 
+  const handleVoiceTranscript = (msg: StudyMessage) => {
+    setMessages((prev) => {
+      const next = [...prev, msg];
+      const id = chatIdRef.current;
+      if (id) {
+        void fetch(`/api/students/chats/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: next }),
+        })
+          .then((response) => {
+            if (response.ok) void refreshChatHistory();
+          })
+          .catch(() => {});
+      }
+      return next;
+    });
+    setLocalSendCount((current) => current + 1);
+  };
+
   if (!session) {
     return (
       <DashboardLayout>
@@ -512,8 +562,21 @@ export function StudyCompanionShell() {
                 isLoading={isLoading}
                 mode={mode}
                 intent={intent}
+                gradeLevel={gradeLevel}
+                selectedLessonId={selectedLesson}
+                lessonVoiceContext={lessonVoiceContext}
+                voiceLiveOptions={voiceLiveOptions}
+                voiceSessionReady={Boolean(currentChatId && messages.length > 0)}
                 onChange={setInput}
                 onSubmit={sendMessage}
+                onVoiceTranscript={handleVoiceTranscript}
+                onVoiceError={(description) =>
+                  toast({
+                    title: 'Voice',
+                    description,
+                    variant: 'destructive',
+                  })
+                }
               />
               {!gradeLevel && (
                 <p className="text-sm text-muted-foreground">
