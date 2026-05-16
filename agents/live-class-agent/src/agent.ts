@@ -57,8 +57,8 @@ function lessonContextBlock(lesson: RoomMetaLesson): string {
   return `\n\n### **Lesson Context**\n\nYou are teaching a live class based on a specific lesson:\n- **Lesson:** ${lesson.title}\n- **Subject:** ${lesson.subject || 'Not specified'}\n- **Grade Level:** ${lesson.gradeLevel || 'Not specified'}\n\n**Learning Objectives:**\n${objectivesText}\n\n**Lesson Content:**\n${lesson.content || 'No content provided.'}\n\nFocus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes.`
 }
 
-/** Matches `getJobContext().room` (same @livekit/rtc-node instance as @livekit/agents — avoids duplicate-package Room mismatch). */
-type AgentRoom = ReturnType<typeof getJobContext>['room']
+/** Same `Room` as `getJobContext()` default call; `NonNullable` drops the `required?: false` overload’s `undefined`. */
+type AgentRoom = NonNullable<ReturnType<typeof getJobContext>>['room']
 
 type SessionContext = { room: AgentRoom; sessionId: string }
 
