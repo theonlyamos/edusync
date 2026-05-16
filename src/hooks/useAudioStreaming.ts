@@ -43,20 +43,22 @@ function extractServerTranscriptions(serverContent: unknown): {
     };
 }
 
-/**
- * Merge streaming transcription chunks. Gemini Live often sends cumulative strings,
- * but some models/updates send only the latest token/word — replacing the buffer then loses prior words.
- */
+/** Merge streaming transcription chunks; caps length to limit damage from pathological streams. */
+const LIVE_TRANSCRIPT_BUFFER_MAX_CHARS = 32_000;
+
 function mergeStreamingTranscript(prev: string, incoming: string): string {
+    const cap = (s: string) =>
+        s.length <= LIVE_TRANSCRIPT_BUFFER_MAX_CHARS ? s : s.slice(0, LIVE_TRANSCRIPT_BUFFER_MAX_CHARS);
+
     const a = prev.replace(/\s+/g, ' ').trim();
     const b = incoming.replace(/\s+/g, ' ').trim();
-    if (!b) return a;
-    if (!a) return b;
+    if (!b) return cap(a);
+    if (!a) return cap(b);
 
-    if (b.startsWith(a)) return b;
-    if (a.startsWith(b)) return a;
-    if (a === b) return a;
-    if (a.endsWith(b)) return a;
+    if (b.startsWith(a)) return cap(b);
+    if (a.startsWith(b)) return cap(a);
+    if (a === b) return cap(a);
+    if (a.endsWith(b)) return cap(a);
 
     const stripEnds = (w: string) => w.replace(/^[.,!?;:]+|[.,!?;:]+$/g, '').toLowerCase();
     const aWords = a.split(/\s+/).filter(Boolean);
@@ -66,11 +68,12 @@ function mergeStreamingTranscript(prev: string, incoming: string): string {
         const firstB = stripEnds(bWords[0] ?? '');
         if (lastA && firstB && lastA === firstB) {
             const base = aWords.slice(0, -1).join(' ');
-            return base ? `${base} ${b}`.replace(/\s+/g, ' ').trim() : b;
+            const merged = base ? `${base} ${b}`.replace(/\s+/g, ' ').trim() : b;
+            return cap(merged);
         }
     }
 
-    return `${a} ${b}`.replace(/\s+/g, ' ').trim();
+    return cap(`${a} ${b}`.replace(/\s+/g, ' ').trim());
 }
 
 interface AudioStreamingState {
@@ -891,8 +894,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 const serverContent = message?.serverContent as any;
                 const isStudyCompanionLive = liveOptionsRef.current?.variant === 'studyCompanion';
 
-                if (isStudyCompanionLive && serverContent && DEBUG_GEMINI_LIVE_TRANSCRIPTION) {
-                    const { input, output } = extractServerTranscriptions(serverContent);
+                const extracted =
+                    isStudyCompanionLive && serverContent ? extractServerTranscriptions(serverContent) : null;
+
+                if (DEBUG_GEMINI_LIVE_TRANSCRIPTION && isStudyCompanionLive && serverContent && extracted) {
+                    const { input, output } = extracted;
                     console.log('[GeminiLive transcription]', {
                         serverKeys: Object.keys(serverContent),
                         turnComplete: Boolean(serverContent.turnComplete),
@@ -901,8 +907,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     });
                 }
 
-                if (isStudyCompanionLive) {
-                    const { input, output } = extractServerTranscriptions(serverContent);
+                if (isStudyCompanionLive && extracted) {
+                    const { input, output } = extracted;
                     if (input) {
                         liveUserTranscriptRef.current = mergeStreamingTranscript(liveUserTranscriptRef.current, input.text);
                         if (input.finished) {

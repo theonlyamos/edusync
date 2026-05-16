@@ -61,7 +61,6 @@ export function Composer({
   onVoiceTranscript,
   onVoiceError,
 }: ComposerProps) {
-  const [micAudioData, setMicAudioData] = useState(new Float32Array(0));
   const [vadActive, setVadActive] = useState(false);
   const [ensuringChatForVoice, setEnsuringChatForVoice] = useState(false);
   const userTranscriptRef = useRef('');
@@ -75,12 +74,6 @@ export function Composer({
 
   useEffect(() => {
     voice.setToolCallListener(() => {});
-  }, [voice]);
-
-  useEffect(() => {
-    voice.setOnAudioDataListener((data) => {
-      setMicAudioData(new Float32Array(data));
-    });
   }, [voice]);
 
   useEffect(() => {
@@ -197,7 +190,6 @@ export function Composer({
         <div className="flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
           {voice.isStreaming ? (
             <LiveWaveformStrip
-              audioData={micAudioData}
               analyser={voice.getMicAnalyser?.() ?? null}
               active={waveformActive}
               aiAnalyser={voice.getAnalyser()}

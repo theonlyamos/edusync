@@ -67,10 +67,24 @@ export function StudyCompanionShell() {
   const [outageNotice, setOutageNotice] = useState<OutageNotice | null>(null);
   const [localSendCount, setLocalSendCount] = useState(0);
   const chatIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<StudyMessage[]>([]);
+  const voicePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     chatIdRef.current = currentChatId;
   }, [currentChatId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (voicePersistTimerRef.current) {
+        clearTimeout(voicePersistTimerRef.current);
+      }
+    };
+  }, []);
 
   const lessonVoiceContext = useMemo((): LessonContext | undefined => {
     if (!selectedLesson) return undefined;
@@ -399,23 +413,26 @@ export function StudyCompanionShell() {
   };
 
   const handleVoiceTranscript = (msg: StudyMessage) => {
-    setMessages((prev) => {
-      const next = [...prev, msg];
-      const id = chatIdRef.current;
-      if (id) {
-        void fetch(`/api/students/chats/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: next }),
-        })
-          .then((response) => {
-            if (response.ok) void refreshChatHistory();
-          })
-          .catch(() => {});
-      }
-      return next;
-    });
+    setMessages((prev) => [...prev, msg]);
     setLocalSendCount((current) => current + 1);
+
+    if (!chatIdRef.current) return;
+
+    if (voicePersistTimerRef.current) clearTimeout(voicePersistTimerRef.current);
+    voicePersistTimerRef.current = setTimeout(() => {
+      voicePersistTimerRef.current = null;
+      const id = chatIdRef.current;
+      if (!id) return;
+      void fetch(`/api/students/chats/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messagesRef.current }),
+      })
+        .then((response) => {
+          if (response.ok) void refreshChatHistory();
+        })
+        .catch(() => {});
+    }, 200);
   };
 
   if (!session) {

@@ -3,7 +3,8 @@ import React, { useRef, useEffect, useCallback } from 'react';
 export type AudioVisualizerVariant = 'ai' | 'mic' | 'mic-ai';
 
 interface AudioVisualizerProps {
-  audioData: Float32Array;
+  /** Legacy hook compat; drawing uses analyser FFT only. */
+  audioData?: Float32Array;
   isActive: boolean;
   analyser?: AnalyserNode | null;
   variant?: AudioVisualizerVariant;
@@ -57,7 +58,7 @@ function drawCenterSpreadCapsules(
   }
 }
 
-const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ audioData, isActive, analyser, variant = 'ai' }) => {
+const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ isActive, analyser, variant = 'ai' }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
 
