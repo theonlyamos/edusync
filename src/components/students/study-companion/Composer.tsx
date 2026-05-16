@@ -21,6 +21,8 @@ interface ComposerProps {
   lessonVoiceContext: LessonContext | undefined;
   voiceLiveOptions: UseAudioStreamingLiveOptions;
   voiceSessionReady: boolean;
+  /** When mic would otherwise be unavailable (no chat yet), create one before starting voice. */
+  ensureChatForVoice?: () => Promise<boolean>;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onVoiceTranscript: (message: StudyMessage) => void;
@@ -53,6 +55,7 @@ export function Composer({
   lessonVoiceContext,
   voiceLiveOptions,
   voiceSessionReady,
+  ensureChatForVoice,
   onChange,
   onSubmit,
   onVoiceTranscript,
@@ -60,6 +63,7 @@ export function Composer({
 }: ComposerProps) {
   const [micAudioData, setMicAudioData] = useState(new Float32Array(0));
   const [vadActive, setVadActive] = useState(false);
+  const [ensuringChatForVoice, setEnsuringChatForVoice] = useState(false);
   const userTranscriptRef = useRef('');
   const assistantTranscriptRef = useRef('');
 
@@ -130,14 +134,23 @@ export function Composer({
   }, [voice.error, voice.clearError, onVoiceError]);
 
   const toggleMic = useCallback(async () => {
-    if (!voiceSessionReady) return;
+    let okToVoice = voiceSessionReady;
+    if (!okToVoice && ensureChatForVoice) {
+      setEnsuringChatForVoice(true);
+      try {
+        okToVoice = await ensureChatForVoice();
+      } finally {
+        setEnsuringChatForVoice(false);
+      }
+    }
+    if (!okToVoice) return;
     try {
       if (voice.isStreaming) voice.stopStreaming();
       else await voice.startStreaming();
     } catch (e) {
       onVoiceError?.(e instanceof Error ? e.message : 'Voice connection failed');
     }
-  }, [voice, voiceSessionReady, onVoiceError]);
+  }, [voice, voiceSessionReady, ensureChatForVoice, onVoiceError]);
 
   const handleSend = () => {
     const trimmed = value.trim();
@@ -151,8 +164,9 @@ export function Composer({
   };
 
   const sendDisabled = disabled || isLoading || (!voice.isStreaming && !value.trim());
-  const micBusy = voice.connectionStatus === 'connecting';
+  const micBusy = voice.connectionStatus === 'connecting' || ensuringChatForVoice;
   const waveformActive = voice.isStreaming && (vadActive || voice.isSpeaking || voice.connectionStatus === 'connected');
+  const micLiveConnected = voice.isStreaming && voice.connectionStatus === 'connected';
 
   return (
     <div className="space-y-2">
@@ -172,7 +186,7 @@ export function Composer({
           placeholder={intentCopy[intent]}
           disabled={disabled || isLoading}
           rows={1}
-          className="max-h-[200px] min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-transparent px-3 py-2.5 text-[15px] leading-relaxed shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="max-h-[200px] min-h-[52px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2.5 text-[15px] leading-relaxed shadow-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden focus-visible:ring-0 focus-visible:ring-offset-0"
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
@@ -181,31 +195,35 @@ export function Composer({
           }}
         />
         <div className="flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
+          {voice.isStreaming ? (
+            <LiveWaveformStrip audioData={micAudioData} analyser={voice.getMicAnalyser?.() ?? null} active={waveformActive} />
+          ) : null}
           <Button
             type="button"
             variant={voice.isStreaming ? 'default' : 'outline'}
             size="icon"
-            disabled={disabled || isLoading || !voiceSessionReady || micBusy}
+            disabled={disabled || isLoading || micBusy}
             className={cn(
-              'h-11 w-11 shrink-0 rounded-full border-border/80 shadow-sm transition-transform active:scale-95',
-              voice.isStreaming && 'bg-primary text-primary-foreground',
+              'h-11 w-11 shrink-0 rounded-full border-border/80 shadow-sm transition-[transform,background-color,color] active:scale-95',
+              voice.isStreaming &&
+                !micLiveConnected &&
+                'border-transparent bg-primary text-primary-foreground hover:bg-primary/90',
+              micLiveConnected &&
+                'border-transparent bg-red-600 text-white hover:bg-red-600 hover:text-white dark:bg-red-600 dark:hover:bg-red-700',
             )}
             aria-pressed={voice.isStreaming}
             aria-label={voice.isStreaming ? 'Turn off microphone' : 'Turn on microphone'}
             title={
-              !voiceSessionReady
-                ? 'Start or open a study session to use voice'
-                : voice.isStreaming
-                  ? 'Stop voice'
-                  : 'Start voice'
+              voice.isStreaming
+                ? 'Stop voice'
+                : voiceSessionReady || ensureChatForVoice
+                  ? 'Start voice'
+                  : 'Start or open a study session to use voice'
             }
             onClick={() => void toggleMic()}
           >
             {micBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : voice.isStreaming ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </Button>
-          {voice.isStreaming ? (
-            <LiveWaveformStrip audioData={micAudioData} analyser={voice.getMicAnalyser?.() ?? null} active={waveformActive} />
-          ) : null}
           <Button
             type="button"
             size="icon"

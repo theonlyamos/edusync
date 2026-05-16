@@ -11,7 +11,7 @@ type LiveWaveformStripProps = {
 export function LiveWaveformStrip({ audioData, analyser, active }: LiveWaveformStripProps) {
   return (
     <div
-      className="relative h-11 w-[5.5rem] shrink-0 overflow-hidden rounded-full border border-border/60 bg-background/80 shadow-inner"
+      className="relative h-11 w-[5.5rem] shrink-0 overflow-hidden rounded-full bg-transparent"
       aria-hidden
     >
       <AudioVisualizer audioData={audioData} isActive={active} analyser={analyser} variant="mic" />

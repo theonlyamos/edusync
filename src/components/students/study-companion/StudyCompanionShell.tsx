@@ -191,13 +191,14 @@ export function StudyCompanionShell() {
     }
   };
 
-  const startNewChat = async (lessonId?: string) => {
+  const startNewChat = async (lessonId?: string): Promise<string | null> => {
     const lesson = lessons.find((item) => getLessonId(item) === lessonId);
     const initialMessage = getInitialMessage(lesson?.title, lessonId);
     const title = lesson ? `Study session: ${lesson.title}` : 'General study session';
 
     setSelectedLesson(lessonId || null);
     setCurrentChatId(null);
+    chatIdRef.current = null;
     setMode('companion');
     setIntent('general');
     setOutageNotice(null);
@@ -216,9 +217,11 @@ export function StudyCompanionShell() {
       if (!response.ok) throw new Error('Failed to create study session');
 
       const { chatId } = await response.json();
+      chatIdRef.current = chatId;
       setCurrentChatId(chatId);
       setMessages([initialMessage]);
       updateHistoryTimestamp(chatId, title, lessonId);
+      return chatId;
     } catch (error) {
       console.error('Error creating study session:', error);
       toast({
@@ -226,6 +229,7 @@ export function StudyCompanionShell() {
         description: 'Failed to create a new study session',
         variant: 'destructive',
       });
+      return null;
     }
   };
 
@@ -240,7 +244,9 @@ export function StudyCompanionShell() {
 
       setMessages(loadedMessages);
       setSelectedLesson(chat.lessonId || null);
-      setCurrentChatId(chat._id ?? chat.id ?? null);
+      const loadedChatId = chat._id ?? chat.id ?? null;
+      chatIdRef.current = loadedChatId;
+      setCurrentChatId(loadedChatId);
       setMode(lastAssistant?.mode ?? 'companion');
       setIntent(lastAssistant?.intent ?? 'general');
       setOutageNotice(null);
@@ -264,6 +270,7 @@ export function StudyCompanionShell() {
       if (chatId === currentChatId) {
         setMessages([]);
         setCurrentChatId(null);
+        chatIdRef.current = null;
         setSelectedLesson(null);
         setMode('companion');
         setIntent('general');
@@ -338,6 +345,7 @@ export function StudyCompanionShell() {
       const { message: companionResponse, chatId, aiStatus, errorCode, visualizationStatus } = await response.json();
 
       if (chatId && !currentChatId) {
+        chatIdRef.current = chatId;
         setCurrentChatId(chatId);
         updateHistoryTimestamp(chatId, userMessage.content.slice(0, 50) || 'Study session', selectedLesson || undefined);
       } else if (chatId) {
@@ -566,7 +574,12 @@ export function StudyCompanionShell() {
                 selectedLessonId={selectedLesson}
                 lessonVoiceContext={lessonVoiceContext}
                 voiceLiveOptions={voiceLiveOptions}
-                voiceSessionReady={Boolean(currentChatId && messages.length > 0)}
+                voiceSessionReady={Boolean(currentChatId)}
+                ensureChatForVoice={async () => {
+                  if (chatIdRef.current) return true;
+                  const id = await startNewChat(selectedLesson ?? undefined);
+                  return Boolean(id);
+                }}
                 onChange={setInput}
                 onSubmit={sendMessage}
                 onVoiceTranscript={handleVoiceTranscript}
