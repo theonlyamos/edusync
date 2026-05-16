@@ -149,6 +149,14 @@ export function Composer({
     const trimmed = value.trim();
     if (!trimmed) return;
     if (voice.isStreaming && voice.connectionStatus === 'connected') {
+      onVoiceTranscript({
+        role: 'user',
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+        lessonId: selectedLessonId || undefined,
+        mode,
+        intent,
+      });
       voice.sendText(trimmed);
       onChange('');
       return;
