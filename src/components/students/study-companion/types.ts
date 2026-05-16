@@ -51,6 +51,8 @@ export interface Lesson {
   subject: string;
   gradeLevel?: string;
   gradelevel?: string;
+  objectives?: string | null;
+  content?: string | null;
 }
 
 export const getChatId = (chat: Pick<ChatHistory, '_id' | 'id'>) => chat._id ?? chat.id ?? '';
