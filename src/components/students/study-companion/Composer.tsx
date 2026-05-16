@@ -181,9 +181,6 @@ export function Composer({
           }}
         />
         <div className="flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
-          {voice.isStreaming ? (
-            <LiveWaveformStrip audioData={micAudioData} analyser={voice.getMicAnalyser?.() ?? null} active={waveformActive} />
-          ) : null}
           <Button
             type="button"
             variant={voice.isStreaming ? 'default' : 'outline'}
@@ -206,6 +203,9 @@ export function Composer({
           >
             {micBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : voice.isStreaming ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </Button>
+          {voice.isStreaming ? (
+            <LiveWaveformStrip audioData={micAudioData} analyser={voice.getMicAnalyser?.() ?? null} active={waveformActive} />
+          ) : null}
           <Button
             type="button"
             size="icon"
