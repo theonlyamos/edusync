@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { chatUpdateSchema, mapChat, normalizeMessages, type ChatRow } from '@/lib/study-companion';
 
 export async function GET(
     request: NextRequest,
@@ -16,9 +17,9 @@ export async function GET(
         const { chatId } = await params;
         const { data: chat, error } = await supabase
             .from('chats')
-            .select('*')
+            .select('id, userid, lessonid, title, messages, createdat, updatedat')
             .eq('id', chatId)
-            .eq('userId', session.user.id)
+            .eq('userid', session.user.id)
             .maybeSingle();
         if (error) throw error;
 
@@ -26,7 +27,7 @@ export async function GET(
             return new NextResponse('Chat not found', { status: 404 });
         }
 
-        return NextResponse.json(chat);
+        return NextResponse.json(mapChat(chat as ChatRow));
     } catch (error) {
         console.error('Error fetching chat:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
@@ -45,13 +46,31 @@ export async function PUT(
 
         const supabase = await createSSRUserSupabase();
         const { chatId } = await params;
-        const { messages } = await request.json();
+        const parsedBody = chatUpdateSchema.safeParse(await request.json());
+        if (!parsedBody.success) {
+            return NextResponse.json(
+                { message: 'Invalid chat update request', issues: parsedBody.error.flatten() },
+                { status: 400 }
+            );
+        }
+
+        const updatePayload: Record<string, unknown> = {
+            updatedat: new Date().toISOString(),
+        };
+
+        if (parsedBody.data.messages) {
+            updatePayload.messages = normalizeMessages(parsedBody.data.messages);
+        }
+
+        if (parsedBody.data.title) {
+            updatePayload.title = parsedBody.data.title;
+        }
 
         const { data, error } = await supabase
             .from('chats')
-            .update({ messages, updatedAt: new Date().toISOString() })
+            .update(updatePayload)
             .eq('id', chatId)
-            .eq('userId', session.user.id)
+            .eq('userid', session.user.id)
             .select('id')
             .maybeSingle();
         if (error) throw error;
@@ -83,7 +102,7 @@ export async function DELETE(
             .from('chats')
             .delete()
             .eq('id', chatId)
-            .eq('userId', session.user.id);
+            .eq('userid', session.user.id);
         if (error) throw error;
 
         const { data: check } = await supabase

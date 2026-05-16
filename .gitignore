@@ -44,3 +44,13 @@ next-env.d.ts
 .agent/*
 .agents/*
 opencode.json
+
+*.env
+/agents/live-class-agent/.env
+/agents/live-class-agent/node_modules
+/agents/live-class-agent/dist
+/agents/live-class-agent/build
+/agents/live-class-agent/coverage
+/agents/live-class-agent/logs
+/agents/live-class-agent/tmp
+/agents/live-class-agent/tmp

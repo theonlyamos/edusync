@@ -1,5 +1,80 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity, EndSensitivity } from '@google/genai';
+import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
+import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
+
+export type UseAudioStreamingLiveOptions = {
+    variant?: 'tutor' | 'studyCompanion';
+    gradeLevel?: string | null;
+    studyMode?: StudyMode;
+    studyIntent?: StudyIntent;
+};
+
+export type LiveTranscriptionPayload = {
+    role: 'user' | 'assistant';
+    text: string;
+    finished: boolean;
+};
+
+const DEBUG_GEMINI_LIVE_TRANSCRIPTION =
+    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_DEBUG_GEMINI_LIVE_TRANSCRIPTION === 'true';
+
+function normalizeTranscriptionChunk(raw: unknown): { text: string; finished: boolean } | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const text = typeof o.text === 'string' ? o.text : '';
+    const finished = Boolean(o.finished);
+    if (!text && !finished) return null;
+    return { text, finished };
+}
+
+/** Resolve Live transcription blobs from serverContent (camelCase + snake_case fallbacks). */
+function extractServerTranscriptions(serverContent: unknown): {
+    input: { text: string; finished: boolean } | null;
+    output: { text: string; finished: boolean } | null;
+} {
+    if (!serverContent || typeof serverContent !== 'object') return { input: null, output: null };
+    const sc = serverContent as Record<string, unknown>;
+    const inputRaw = sc.inputTranscription ?? sc.input_audio_transcription;
+    const outputRaw = sc.outputTranscription ?? sc.output_audio_transcription;
+    return {
+        input: normalizeTranscriptionChunk(inputRaw),
+        output: normalizeTranscriptionChunk(outputRaw),
+    };
+}
+
+/** Merge streaming transcription chunks; caps length to limit damage from pathological streams. */
+const LIVE_TRANSCRIPT_BUFFER_MAX_CHARS = 32_000;
+
+function mergeStreamingTranscript(prev: string, incoming: string): string {
+    const cap = (s: string) =>
+        s.length <= LIVE_TRANSCRIPT_BUFFER_MAX_CHARS ? s : s.slice(0, LIVE_TRANSCRIPT_BUFFER_MAX_CHARS);
+
+    const a = prev.replace(/\s+/g, ' ').trim();
+    const b = incoming.replace(/\s+/g, ' ').trim();
+    if (!b) return cap(a);
+    if (!a) return cap(b);
+
+    if (b.startsWith(a)) return cap(b);
+    if (a.startsWith(b)) return cap(a);
+    if (a === b) return cap(a);
+    if (a.endsWith(b)) return cap(a);
+
+    const stripEnds = (w: string) => w.replace(/^[.,!?;:]+|[.,!?;:]+$/g, '').toLowerCase();
+    const aWords = a.split(/\s+/).filter(Boolean);
+    const bWords = b.split(/\s+/).filter(Boolean);
+    if (bWords.length > 0 && aWords.length > 0) {
+        const lastA = stripEnds(aWords[aWords.length - 1] ?? '');
+        const firstB = stripEnds(bWords[0] ?? '');
+        if (lastA && firstB && lastA === firstB) {
+            const base = aWords.slice(0, -1).join(' ');
+            const merged = base ? `${base} ${b}`.replace(/\s+/g, ' ').trim() : b;
+            return cap(merged);
+        }
+    }
+
+    return cap(`${a} ${b}`.replace(/\s+/g, ' ').trim());
+}
 
 interface AudioStreamingState {
     isStreaming: boolean;
@@ -29,6 +104,7 @@ interface AudioStreamingActions {
     submitFeedback: (feedback: any) => Promise<void>;
     setSaveOnlySpeech?: (enabled: boolean) => void;
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
+    setOnTranscription?: (cb: ((payload: LiveTranscriptionPayload) => void) | null) => void;
 }
 
 export interface LessonContext {
@@ -40,53 +116,13 @@ export interface LessonContext {
     content?: string;
 }
 
-const systemPrompt = `### Persona
-You are "Eureka," a patient, enthusiastic AI tutor. You teach through discovery — your primary tool is the visual, not the lecture. Keep spoken explanations brief and let the visuals do the heavy lifting.
+const systemPrompt = EUREKA_TUTOR_SYSTEM_PROMPT;
 
-### Core Principles
-- **Visual-first:** Proactively generate a visual aid every 2–3 turns, especially when introducing something new. Never ask permission — just do it.
-- **Immediate interaction:** Favor interactive demos and visual puzzles over passive diagrams. The learner should always have something to manipulate or respond to.
-- **Adapt as you go:** Read the learner's responses. Ask one short check-in question after each visual to gauge understanding and adjust pace.
-
-### Teaching Loop
-When introducing a new concept, follow this cycle:
-1. **Hook** — Open with a moment of recognition. Connect the concept to something the learner already knows.
-2. **Illustrate** — Generate a clear visual or interactive demo immediately.
-3. **Interact** — Follow with a visual puzzle or hands-on exercise to reinforce the idea.
-4. **Check** — Use a 1–3 question visual quiz to confirm understanding.
-5. **Reflect** — Ask one short question before moving on.
-
-### Setting the Topic
-Call \`set_topic\` at the start of a new main topic or when the learner clearly shifts subjects. Use a concise 3–8 word title-cased phrase with no punctuation. Don't call it for subtopics or tangents.
-- *Example:* \`set_topic("How Photosynthesis Works")\`
-
-### Generating Visuals
-Call \`generate_visualization_description\` any time you would show, draw, or demonstrate something — diagrams, interactive demos, visual quizzes, title cards.
-
-**How to write the description:**
-- Be specific about layout, interactions, labels, and colors.
-- For interactive demos: describe what the learner controls and what changes as a result.
-- For quizzes: default to visual puzzles (click-to-identify, drag-to-match, slider-to-answer, predict-then-reveal). Only fall back to text-based multiple choice when the concept genuinely cannot be expressed visually.
-- For illustrations: describe a stylized, illustrative aesthetic — rounded shapes, soft colors, gentle shadows. Think modern infographic, not technical diagram.
-- Include real image URLs using markdown syntax \`![alt](url)\` when a photograph or reference image would aid understanding (anatomy, geography, history, biology, etc.).
-
-**Example descriptions:**
-- *Interactive demo:* "A slider controlling the angle of a projectile launch. As the angle changes, a dotted arc updates in real time showing the trajectory. Label the peak height and range. Highlight the optimal 45° angle."
-- *Visual quiz:* "A predict-then-reveal puzzle. Show a ramp at an adjustable angle with a ball at the top. The learner drags the angle slider to predict where the ball lands, then animate the actual result."
-- *Illustration:* "A stylized water cycle landscape. A cheerful sun causes evaporation from a deep blue ocean. Rounded clouds form above. Gentle rain falls onto green hills with a winding river. Soft colors, rounded shapes. Clear labeled arrows for each stage."
-- *Title card:* "Title 'The Water Cycle' in large, friendly typography. Subtitle 'From Rain to Rivers'. Gradient blue background with subtle droplet graphics."
-
-### Speaking Style
-You are a real human tutor talking out loud to someone you care about — not reading a script. Follow these rules:
-
-- Short sentences. Contractions. Fragments for emphasis when they land right.
-- Reach for concrete analogies and sensory details instead of abstractions.
-- Share your thought process: "here's what I mean," "think about it this way."
-- Use "we" and "you" to stay close. Occasional "honestly," "look," or "kind of" keeps the tone warm.
-- Let thoughts trail with ellipses when natural. Admit uncertainty honestly.
-- Never sound corporate, stiff, or distant. Avoid: "one might consider," "it is important to note," "in order to," "due to the fact that."`;
-
-export function useAudioStreaming(topic?: string | null, lessonContext?: LessonContext): AudioStreamingState & AudioStreamingActions {
+export function useAudioStreaming(
+    topic?: string | null,
+    lessonContext?: LessonContext,
+    liveOptions?: UseAudioStreamingLiveOptions,
+): AudioStreamingState & AudioStreamingActions {
     const [isStreaming, setIsStreaming] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [error, setError] = useState('');
@@ -112,6 +148,16 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
     const onVadStateListenerRef = useRef<((active: boolean, rms: number) => void) | null>(null);
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
+    const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
+    liveOptionsRef.current = liveOptions;
+    const lessonContextRef = useRef<LessonContext | undefined>(lessonContext);
+    lessonContextRef.current = lessonContext;
+    const topicRef = useRef(topic);
+    topicRef.current = topic;
+    const onTranscriptionListenerRef = useRef<((payload: LiveTranscriptionPayload) => void) | null>(null);
+    /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
+    const liveUserTranscriptRef = useRef('');
+    const liveAssistantTranscriptRef = useRef('');
     // Session resumption
     const sessionResumptionHandleRef = useRef<string | null>(null);
     const isResumingSessionRef = useRef<boolean>(false);
@@ -306,6 +352,9 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
             clearTimeout(speakingTimeoutRef.current);
             speakingTimeoutRef.current = null;
         }
+
+        liveUserTranscriptRef.current = '';
+        liveAssistantTranscriptRef.current = '';
     }, []);
 
     // Function to handle stopping the stream
@@ -453,37 +502,101 @@ export function useAudioStreaming(topic?: string | null, lessonContext?: LessonC
             const responseQueue: LiveServerMessage[] = [];
             const audioParts: string[] = [];
 
-            // Build context addition based on lesson context or topic
+            // Build context addition based on lesson context or topic (read refs — startGeminiLiveSession is []-memoized)
             let contextAddition = '';
+            const lessonCtx = lessonContextRef.current;
+            const topicNow = topicRef.current;
 
-            if (lessonContext?.title) {
+            if (lessonCtx?.title) {
                 contextAddition = `
 
 ### **Lesson Context**
 
 You are helping a student learn material from a specific lesson:
-- **Lesson:** ${lessonContext.title}
-- **Subject:** ${lessonContext.subject || 'Not specified'}
-- **Grade Level:** ${lessonContext.gradeLevel || 'Not specified'}
+- **Lesson:** ${lessonCtx.title}
+- **Subject:** ${lessonCtx.subject || 'Not specified'}
+- **Grade Level:** ${lessonCtx.gradeLevel || 'Not specified'}
 
 **Learning Objectives:**
-${lessonContext.objectives || 'No specific objectives provided.'}
+${lessonCtx.objectives || 'No specific objectives provided.'}
 
 **Lesson Content:**
-${lessonContext.content ? lessonContext.content.substring(0, 2000) + (lessonContext.content.length > 2000 ? '...' : '') : 'No content provided.'}
+${lessonCtx.content ? lessonCtx.content.substring(0, 2000) + (lessonCtx.content.length > 2000 ? '...' : '') : 'No content provided.'}
 
 Focus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes. When the student asks questions, relate answers back to the lesson objectives.
 `;
-            } else if (topic) {
-                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topic}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
+            } else if (topicNow) {
+                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topicNow}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
             }
 
-            const finalSystemPrompt = systemPrompt + contextAddition;
+            const variant = liveOptionsRef.current?.variant ?? 'tutor';
+            const isStudyCompanion = variant === 'studyCompanion';
+
+            let finalSystemPrompt: string;
+            if (isStudyCompanion) {
+                const gl = liveOptionsRef.current?.gradeLevel?.trim() || 'the learner';
+                const sm = liveOptionsRef.current?.studyMode ?? 'companion';
+                const si = liveOptionsRef.current?.studyIntent ?? 'general';
+                const lessonHint =
+                    lessonCtx?.title && lessonCtx.title.trim().length > 0
+                        ? {
+                              title: lessonCtx.title,
+                              subject: lessonCtx.subject || 'general',
+                              objectives: lessonCtx.objectives ?? null,
+                              content: lessonCtx.content ?? null,
+                          }
+                        : undefined;
+                finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
+            } else {
+                finalSystemPrompt = systemPrompt + contextAddition;
+            }
+
+            const visualizationToolDeclaration = {
+                name: 'generate_visualization_description',
+                description:
+                    'Generates an interactive visual or on-screen quiz for the learner. Call when a diagram, simulation, manipulable demo, or interactive/visual quiz would help more than voice alone.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        task_description: {
+                            type: 'string',
+                            description:
+                                'Detailed description: type (illustration, simulation, visual quiz), layout, interactions, feedback, labels. For quizzes, specify prompts, choices, and correct-answer feedback.',
+                        },
+                    },
+                    required: ['task_description'],
+                },
+            };
+
+            const tutorTools = [
+                { googleSearch: {} },
+                {
+                    functionDeclarations: [
+                        visualizationToolDeclaration,
+                        {
+                            name: 'set_topic',
+                            description:
+                                'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
+                            parameters: {
+                                type: 'object',
+                                properties: {
+                                    topic: {
+                                        type: 'string',
+                                        description: 'A concise 3–8 word title describing the current main topic.',
+                                    },
+                                },
+                                required: ['topic'],
+                            },
+                        },
+                    ],
+                },
+            ];
+
+            /** Study Companion Live: function calls only (no Google Search); single viz/quiz tool per product constraint. */
+            const studyCompanionLiveTools = [{ functionDeclarations: [visualizationToolDeclaration] }];
 
             const connectConfig: any = {
                 model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
-                // Configuration is locked server-side via ephemeral token liveConnectConstraints
-                // Session resumption
                 config: {
                     responseModalities: [Modality.AUDIO],
                     proactivity: { proactiveAudio: true },
@@ -506,38 +619,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     sessionResumption: {
                         handle: sessionResumptionHandleRef.current || undefined
                     },
-                    tools: [
-                        { googleSearch: {} },
-                        {
-                            functionDeclarations: [{
-                                name: 'generate_visualization_description',
-                                description: 'Generates a visual aid for the learner. Call whenever you would show, draw, or demonstrate something.',
-                                parameters: {
-                                    type: 'object',
-                                    properties: {
-                                        task_description: {
-                                            type: 'string',
-                                            description: 'A detailed description of the visual to generate. Specify the type (illustration, interactive demo, visual quiz, title card), layout, interactions, labels, and include image URLs in markdown syntax where relevant.'
-                                        }
-                                    },
-                                    required: ['task_description']
-                                }
-                            }, {
-                                name: 'set_topic',
-                                description: 'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
-                                parameters: {
-                                    type: 'object',
-                                    properties: {
-                                        topic: {
-                                            type: 'string',
-                                            description: 'A concise 3–8 word title describing the current main topic.'
-                                        }
-                                    },
-                                    required: ['topic']
-                                }
-                            }]
-                        }
-                    ]
+                    tools: isStudyCompanion ? studyCompanionLiveTools : tutorTools,
+                    ...(isStudyCompanion
+                        ? { inputAudioTranscription: {}, outputAudioTranscription: {} }
+                        : {}),
                 },
                 callbacks: {
                     onopen: () => {
@@ -754,8 +839,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
             } catch { }
 
-            // Session resumption initial message
-            const initialMessage = sessionResumptionHandleRef.current ? 'Continue' : 'Hello';
+            const initialMessage = sessionResumptionHandleRef.current
+                ? 'Continue'
+                : isStudyCompanion
+                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
+                    : 'Hello';
             geminiSession.sendRealtimeInput({ text: initialMessage });
 
         } catch (error: any) {
@@ -771,6 +859,19 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
         const processMessages = () => {
             let messagesProcessed = 0;
+
+            const flushUserTranscript = () => {
+                const t = liveUserTranscriptRef.current.trim();
+                if (!t) return;
+                liveUserTranscriptRef.current = '';
+                onTranscriptionListenerRef.current?.({ role: 'user', text: t, finished: true });
+            };
+            const flushAssistantTranscript = () => {
+                const t = liveAssistantTranscriptRef.current.trim();
+                if (!t) return;
+                liveAssistantTranscriptRef.current = '';
+                onTranscriptionListenerRef.current?.({ role: 'assistant', text: t, finished: true });
+            };
 
             while (responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
                 messagesProcessed++;
@@ -796,6 +897,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                 if (message?.serverContent && (message as any).serverContent.interrupted) {
                     audioParts.length = 0;
+                    liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
                     if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
                         playbackCtxRef.current.close();
@@ -804,6 +906,64 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     analyserRef.current = null;
                     nextPlaybackTimeRef.current = 0;
                     continue;
+                }
+
+                const serverContent = message?.serverContent as any;
+                const isStudyCompanionLive = liveOptionsRef.current?.variant === 'studyCompanion';
+
+                const extracted =
+                    isStudyCompanionLive && serverContent ? extractServerTranscriptions(serverContent) : null;
+
+                if (DEBUG_GEMINI_LIVE_TRANSCRIPTION && isStudyCompanionLive && serverContent && extracted) {
+                    const { input, output } = extracted;
+                    console.log('[GeminiLive transcription]', {
+                        serverKeys: Object.keys(serverContent),
+                        turnComplete: Boolean(serverContent.turnComplete),
+                        input: input ? { textLen: input.text.length, finished: input.finished } : null,
+                        output: output ? { textLen: output.text.length, finished: output.finished } : null,
+                    });
+                }
+
+                if (isStudyCompanionLive && extracted) {
+                    const { input, output } = extracted;
+                    if (input) {
+                        liveUserTranscriptRef.current = mergeStreamingTranscript(liveUserTranscriptRef.current, input.text);
+                        if (input.finished) {
+                            flushUserTranscript();
+                        }
+                    }
+                    if (output) {
+                        if (liveUserTranscriptRef.current.trim()) {
+                            flushUserTranscript();
+                        }
+                        liveAssistantTranscriptRef.current = mergeStreamingTranscript(
+                            liveAssistantTranscriptRef.current,
+                            output.text,
+                        );
+                        if (output.finished) {
+                            flushAssistantTranscript();
+                        }
+                    }
+                    if (serverContent?.turnComplete) {
+                        flushAssistantTranscript();
+                    }
+                } else {
+                    if (serverContent?.inputTranscription) {
+                        const tr = serverContent.inputTranscription;
+                        onTranscriptionListenerRef.current?.({
+                            role: 'user',
+                            text: tr.text ?? '',
+                            finished: Boolean(tr.finished),
+                        });
+                    }
+                    if (serverContent?.outputTranscription) {
+                        const tr = serverContent.outputTranscription;
+                        onTranscriptionListenerRef.current?.({
+                            role: 'assistant',
+                            text: tr.text ?? '',
+                            finished: Boolean(tr.finished),
+                        });
+                    }
                 }
 
                 // Handle tool calls
@@ -862,16 +1022,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     // Play audio chunks from Gemini
     const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
         try {
-            const pcmData = rawData.map(data => {
-                const binaryString = atob(data);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                return bytes;
-            });
-
-            const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
+            // Single decode path via convertToWav (avoid duplicate base64→PCM work per chunk).
             const wavBuffer = convertToWav(rawData, 24000);
 
             let ctx = playbackCtxRef.current;
@@ -1130,6 +1281,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         saveOnlySpeechRef.current = enabled;
     }, []);
 
+    const setOnTranscription = useCallback((cb: ((payload: LiveTranscriptionPayload) => void) | null) => {
+        onTranscriptionListenerRef.current = cb;
+    }, []);
+
     const setOnVadStateListener = useCallback((cb: (active: boolean, rms: number) => void) => {
         onVadStateListenerRef.current = cb;
     }, []);
@@ -1167,6 +1322,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         closeFeedbackForm,
         submitFeedback,
         setSaveOnlySpeech,
-        setOnVadStateListener
+        setOnVadStateListener,
+        setOnTranscription,
     };
 }

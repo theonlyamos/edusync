@@ -101,15 +101,15 @@ export default function StudentDashboard() {
             </CardFooter>
           </Card>
 
-          {/* AI Tutor Card */}
+          {/* Study Companion Card */}
           <Card className="dashboard-card border-t-4 border-t-accent">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-accent">
                 <MessagesSquare className="h-5 w-5" />
-                AI Tutor
+                Study Companion
               </CardTitle>
               <CardDescription>
-                Get personalized help and explanations.
+                Plan, practice, review, and get tutor help on demand.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -130,7 +130,7 @@ export default function StudentDashboard() {
                 className="w-full"
                 onClick={() => router.push('/students/tutor')}
               >
-                Ask AI Tutor
+                Open Study Companion
               </Button>
             </CardFooter>
           </Card>
@@ -164,7 +164,7 @@ export default function StudentDashboard() {
                   <MessagesSquare className="h-4 w-4 text-accent" />
                 </div>
                 <div>
-                  <p className="font-medium">AI Tutor Session: Understanding Derivatives</p>
+                  <p className="font-medium">Study Companion Session: Understanding Derivatives</p>
                   <p className="text-sm text-muted-foreground">2 days ago</p>
                 </div>
               </div>

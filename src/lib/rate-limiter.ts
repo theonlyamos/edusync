@@ -78,6 +78,9 @@ const rateLimiters = {
     // Moderate limit for API endpoints
     api: new RateLimiter(100, 60, 60), // 100 requests per minute
 
+    // Cost-sensitive limit for AI tutoring calls
+    tutor: new RateLimiter(20, 60, 60), // 20 requests per minute
+
     // Strict limit for file uploads
     upload: new RateLimiter(10, 3600, 3600), // 10 requests per hour
 

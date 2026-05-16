@@ -25,11 +25,13 @@ export async function GET(request: NextRequest) {
             .order('created_at', { ascending: true })
 
         if (error) {
+            console.error(error)
             return NextResponse.json({ error: 'Failed to fetch visualizations' }, { status: 500 })
         }
 
         return NextResponse.json({ items: data ?? [] })
     } catch (error: any) {
+        console.error(error)
         return NextResponse.json({ error: 'Failed to fetch visualizations', details: error.message }, { status: 500 })
     }
 }

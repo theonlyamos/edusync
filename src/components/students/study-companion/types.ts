@@ -1,0 +1,68 @@
+export type StudyMode = 'companion' | 'tutor';
+
+export type StudyIntent = 'general' | 'plan' | 'hint' | 'explain' | 'quiz' | 'review' | 'walkthrough';
+
+export type InteractiveLibrary = 'p5' | 'three' | 'react';
+
+export interface InteractiveElement {
+  id: string;
+  type: 'visualization';
+  library: InteractiveLibrary;
+  code: string;
+  explanation?: string;
+  taskDescription: string;
+  status: 'ready';
+}
+
+export interface SuggestedAction {
+  label: string;
+  intent: StudyIntent;
+  prompt: string;
+}
+
+export interface StudyMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  lessonId?: string;
+  followUpQuestions?: string[];
+  suggestedActions?: SuggestedAction[];
+  mode?: StudyMode;
+  intent?: StudyIntent;
+  confidence?: 'shaky' | 'okay' | 'confident' | 'mastered';
+  interactiveElements?: InteractiveElement[];
+  /** Client-only: voice viz placeholder row before `/api/genai/visualize` completes */
+  voiceVizPlaceholderId?: string;
+}
+
+/** Voice-driven interactive generation lifecycle for Study Companion Shell */
+export type VoiceInteractiveGenEvent =
+  | { type: 'placeholder'; placeholderId: string; message: StudyMessage }
+  | { type: 'success'; replaceId: string; message: StudyMessage }
+  | { type: 'error'; replaceId: string; description?: string };
+
+export interface ChatHistory {
+  _id?: string;
+  id?: string;
+  title: string;
+  messages?: StudyMessage[];
+  userId: string;
+  lessonId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Lesson {
+  _id?: string;
+  id?: string;
+  title: string;
+  subject: string;
+  gradeLevel?: string;
+  gradelevel?: string;
+  objectives?: string | null;
+  content?: string | null;
+}
+
+export const getChatId = (chat: Pick<ChatHistory, '_id' | 'id'>) => chat._id ?? chat.id ?? '';
+
+export const getLessonId = (lesson: Pick<Lesson, '_id' | 'id'>) => lesson._id ?? lesson.id ?? '';

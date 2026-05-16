@@ -28,7 +28,8 @@ import {
   ChevronRight,
   Building2,
   Users2,
-  Sparkles
+  Sparkles,
+  Video,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -120,6 +121,11 @@ const teacherLinks: SidebarLink[] = [
     href: '/teachers/resources'
   },
   {
+    label: 'Live classes',
+    icon: <Video className="h-5 w-5" />,
+    href: '/teachers/live'
+  },
+  {
     label: 'Time Table',
     icon: <Calendar className="h-5 w-5" />,
     href: '/teachers/timetable'
@@ -165,7 +171,7 @@ const studentLinks: SidebarLink[] = [
     href: '/students/timetable'
   },
   {
-    label: 'AI Tutor',
+    label: 'Study Companion',
     icon: <MessagesSquare className="h-5 w-5" />,
     href: '/students/tutor'
   },
@@ -173,6 +179,11 @@ const studentLinks: SidebarLink[] = [
     label: 'Learn with AI',
     icon: <Sparkles className="h-5 w-5" />,
     href: '/students/learn'
+  },
+  {
+    label: 'Live classes',
+    icon: <Video className="h-5 w-5" />,
+    href: '/students/live'
   },
   {
     label: 'Collaborator',
