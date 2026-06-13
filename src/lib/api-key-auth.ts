@@ -77,21 +77,24 @@ export async function validateApiKey(
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
   const domain = extractDomain(origin);
 
-  if (apiKeyData.allowed_domains && apiKeyData.allowed_domains.length > 0) {
-    const domainAllowed = apiKeyData.allowed_domains.some((allowedDomain: string) => {
-      if (allowedDomain.startsWith('*.')) {
-        const baseDomain = allowedDomain.slice(2);
-        return domain.endsWith(baseDomain);
-      }
-      return domain === allowedDomain;
-    });
+  if (!isDomainAllowed(domain, apiKeyData.allowed_domains)) {
+    return {
+      valid: false,
+      error: `Domain ${domain} is not whitelisted for this API key`,
+    };
+  }
 
-    if (!domainAllowed) {
-      return {
-        valid: false,
-        error: `Domain ${domain} is not whitelisted for this API key`,
-      };
-    }
+  const rateLimit = await enforceApiKeyRateLimit(
+    supabase,
+    apiKeyData.id,
+    apiKeyData.rate_limit_per_hour,
+    apiKeyData.rate_limit_per_day
+  );
+  if (!rateLimit.allowed) {
+    return {
+      valid: false,
+      error: rateLimit.error || 'Rate limit exceeded for this API key',
+    };
   }
 
   await updateApiKeyUsage(supabase, apiKeyData.id);
@@ -130,14 +133,77 @@ function extractDomain(url: string): string {
   }
 }
 
+// Pure helper, exported for tests. NULL/empty whitelist = all domains allowed.
+export function isDomainAllowed(domain: string, allowedDomains: string[] | null | undefined): boolean {
+  if (!allowedDomains || allowedDomains.length === 0) {
+    return true;
+  }
+  return allowedDomains.some((allowedDomain: string) => {
+    if (allowedDomain.startsWith('*.')) {
+      const baseDomain = allowedDomain.slice(2);
+      return domain === baseDomain || domain.endsWith('.' + baseDomain);
+    }
+    return domain === allowedDomain;
+  });
+}
+
 async function updateApiKeyUsage(supabase: any, apiKeyId: string) {
-  await supabase
-    .from('embed_api_keys')
-    .update({
-      last_used_at: new Date().toISOString(),
-      total_requests: supabase.rpc('increment', { row_id: apiKeyId }),
-    })
-    .eq('id', apiKeyId);
+  const { error } = await supabase.rpc('record_api_key_usage', {
+    p_api_key_id: apiKeyId,
+  });
+  if (error) {
+    console.error('Failed to record API key usage:', error);
+  }
+}
+
+async function countUsageSince(
+  supabase: any,
+  apiKeyId: string,
+  since: Date
+): Promise<number | null> {
+  const { count, error } = await supabase
+    .from('embed_api_key_usage')
+    .select('*', { count: 'exact', head: true })
+    .eq('api_key_id', apiKeyId)
+    .gte('created_at', since.toISOString());
+
+  if (error) {
+    console.error('Failed to count API key usage:', error);
+    return null;
+  }
+  return count ?? 0;
+}
+
+// Exported for tests.
+export async function enforceApiKeyRateLimit(
+  supabase: any,
+  apiKeyId: string,
+  perHour: number | null,
+  perDay: number | null
+): Promise<{ allowed: boolean; error?: string }> {
+  const now = Date.now();
+
+  if (perHour && perHour > 0) {
+    const hourCount = await countUsageSince(supabase, apiKeyId, new Date(now - 60 * 60 * 1000));
+    if (hourCount !== null && hourCount >= perHour) {
+      return {
+        allowed: false,
+        error: `Hourly rate limit of ${perHour} requests exceeded for this API key`,
+      };
+    }
+  }
+
+  if (perDay && perDay > 0) {
+    const dayCount = await countUsageSince(supabase, apiKeyId, new Date(now - 24 * 60 * 60 * 1000));
+    if (dayCount !== null && dayCount >= perDay) {
+      return {
+        allowed: false,
+        error: `Daily rate limit of ${perDay} requests exceeded for this API key`,
+      };
+    }
+  }
+
+  return { allowed: true };
 }
 
 export async function checkApiKeyRateLimit(
@@ -150,7 +216,7 @@ export async function checkApiKeyRateLimit(
 
   const { data } = await supabase
     .from('embed_api_keys')
-    .select('rate_limit_per_hour, rate_limit_per_day, last_used_at')
+    .select('rate_limit_per_hour, rate_limit_per_day')
     .eq('id', apiKeyId)
     .single();
 
@@ -158,7 +224,7 @@ export async function checkApiKeyRateLimit(
     return { allowed: false, error: 'API key not found' };
   }
 
-  return { allowed: true };
+  return enforceApiKeyRateLimit(supabase, apiKeyId, data.rate_limit_per_hour, data.rate_limit_per_day);
 }
 
 export async function deductCreditsFromApiKey(
@@ -171,43 +237,40 @@ export async function deductCreditsFromApiKey(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { data: currentCredits, error: fetchError } = await supabase
-    .from('user_credits')
-    .select('credits')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // Canonical balance is users.credits (the previously-referenced `user_credits`
+  // table never existed). Atomic deduction via migration 0032; NULL = insufficient.
+  const { data: newAmount, error: deductError } = await supabase.rpc('deduct_user_credits', {
+    p_user_id: userId,
+    p_amount: creditsToDeduct,
+    p_description: `Used ${creditsToDeduct} credit(s) via embed API key`,
+    p_session_id: null,
+  });
 
-  if (fetchError) {
-    return { success: false, error: 'Failed to fetch credits' };
+  if (deductError) {
+    console.error('deduct_user_credits failed for API key flow:', deductError);
+    return { success: false, error: 'Failed to deduct credits' };
   }
 
-  const currentAmount = currentCredits?.credits || 0;
-
-  if (currentAmount < creditsToDeduct) {
+  if (newAmount === null || newAmount === undefined) {
+    const { data: userData } = await supabase
+      .from('users')
+      .select('credits')
+      .eq('id', userId)
+      .maybeSingle();
     return {
       success: false,
-      remainingCredits: currentAmount,
+      remainingCredits: userData?.credits ?? 0,
       error: 'Insufficient credits',
     };
   }
 
-  const newAmount = currentAmount - creditsToDeduct;
-
-  const { error: updateError } = await supabase
-    .from('user_credits')
-    .update({ credits: newAmount })
-    .eq('user_id', userId);
-
-  if (updateError) {
-    return { success: false, error: 'Failed to deduct credits' };
+  const { error: minutesError } = await supabase.rpc('increment_api_key_minutes', {
+    p_api_key_id: apiKeyId,
+    p_minutes: creditsToDeduct,
+  });
+  if (minutesError) {
+    console.error('Failed to increment API key minutes used:', minutesError);
   }
-
-  await supabase
-    .from('embed_api_keys')
-    .update({
-      total_minutes_used: supabase.rpc('increment', { row_id: apiKeyId }),
-    })
-    .eq('id', apiKeyId);
 
   return {
     success: true,

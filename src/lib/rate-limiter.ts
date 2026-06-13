@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-// Simple in-memory rate limiter
-// In production, use Redis or a database for distributed rate limiting
+// Hybrid rate limiter:
+// - Strict, low-volume buckets (auth/upload/admin) use a durable fixed-window
+//   counter in Postgres (hit_rate_limit, migration 0032) so limits hold across
+//   serverless instances and cold starts.
+// - High-volume buckets (api/tutor) stay in-memory as a best-effort guard to
+//   avoid a DB round-trip on every request.
 
 interface RateLimitEntry {
     count: number;
@@ -14,13 +19,22 @@ class RateLimiter {
     private readonly duration: number; // in seconds
     private readonly blockDuration: number; // in seconds
 
+    private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
     constructor(points: number, duration: number, blockDuration: number) {
         this.points = points;
         this.duration = duration * 1000; // Convert to milliseconds
         this.blockDuration = blockDuration * 1000; // Convert to milliseconds
+    }
 
-        // Clean up old entries every minute
-        setInterval(() => this.cleanup(), 60000);
+    // Lazily started so importing this module (e.g. in tests) doesn't leak timers.
+    private ensureCleanup() {
+        if (this.cleanupTimer) return;
+        this.cleanupTimer = setInterval(() => this.cleanup(), 60000);
+        // Don't keep the process alive just for cleanup (no-op in edge runtimes).
+        if (typeof this.cleanupTimer === 'object' && 'unref' in this.cleanupTimer) {
+            this.cleanupTimer.unref();
+        }
     }
 
     private cleanup() {
@@ -37,6 +51,7 @@ class RateLimiter {
     }
 
     async consume(key: string): Promise<{ allowed: boolean; msBeforeNext?: number; remainingPoints?: number }> {
+        this.ensureCleanup();
         const now = Date.now();
         const entry = this.store.get(key);
 
@@ -90,6 +105,41 @@ const rateLimiters = {
 
 export type RateLimitType = keyof typeof rateLimiters;
 
+// Buckets enforced durably in the database. window/max mirror the in-memory config above.
+const DURABLE_BUCKETS: Partial<Record<RateLimitType, { max: number; windowSeconds: number }>> = {
+    auth: { max: 5, windowSeconds: 900 },
+    upload: { max: 10, windowSeconds: 3600 },
+    admin: { max: 50, windowSeconds: 60 },
+};
+
+async function consumeDurable(
+    type: RateLimitType,
+    ip: string
+): Promise<{ allowed: boolean; msBeforeNext?: number; remainingPoints?: number } | null> {
+    const bucket = DURABLE_BUCKETS[type];
+    if (!bucket) return null;
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !serviceRole) return null; // fall back to in-memory
+
+    const supabase = createClient(url, serviceRole);
+    const { data: allowed, error } = await supabase.rpc('hit_rate_limit', {
+        p_key: `${type}:${ip}`,
+        p_max: bucket.max,
+        p_window_seconds: bucket.windowSeconds,
+    });
+
+    if (error || typeof allowed !== 'boolean') {
+        if (error) console.error('hit_rate_limit failed, falling back to in-memory:', error.message);
+        return null; // fall back to in-memory
+    }
+
+    return allowed
+        ? { allowed: true }
+        : { allowed: false, msBeforeNext: bucket.windowSeconds * 1000, remainingPoints: 0 };
+}
+
 export async function rateLimit(
     request: NextRequest,
     type: RateLimitType = 'api'
@@ -100,7 +150,7 @@ export async function rateLimit(
             request.headers.get('x-forwarded-for')?.split(',')[0] ||
             'unknown';
 
-        const result = await limiter.consume(ip);
+        const result = (await consumeDurable(type, ip)) ?? (await limiter.consume(ip));
 
         if (!result.allowed) {
             // Too many requests

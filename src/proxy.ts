@@ -63,6 +63,18 @@ export async function proxy(request: NextRequest) {
           );
         }
 
+        // Defense-in-depth: admin APIs require an admin session even if a route
+        // handler forgets its own role check. API keys carry no role and are
+        // never valid here.
+        if (pathname.startsWith('/api/admin/')) {
+          if (authContext.authType !== 'session' || authContext.userRole !== 'admin') {
+            return NextResponse.json(
+              { error: 'Forbidden' },
+              { status: 403 }
+            );
+          }
+        }
+
         response = setAuthHeaders(response, authContext);
       }
     }

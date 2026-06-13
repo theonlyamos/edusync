@@ -15,9 +15,12 @@ import React, { useState, useEffect, useRef } from 'react';
  * - All dependencies (React, Recharts, React-Leaflet) loaded from CDN
  * - Simplified UI components provided inline (no external dependencies)
  * 
- * NOTE: Uses 'allow-same-origin' in sandbox for ES module compatibility.
- * With srcdoc, the iframe has a unique origin, so this doesn't allow
- * access to the parent window, but is needed for ES modules to load.
+ * NOTE: The sandbox deliberately does NOT include 'allow-same-origin'.
+ * With srcdoc, adding it would make the iframe same-origin with the app,
+ * letting generated code read the parent's storage/session. The opaque
+ * origin this creates is fine for our deps: all ES modules load from
+ * esm.sh, which serves CORS '*'. Storage APIs throw in opaque origins,
+ * so a small in-memory shim is injected for generated code that uses them.
  */
 
 interface ReactRendererProps {
@@ -101,6 +104,33 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
+  <script nonce="${nonce}">
+    // Opaque-origin storage shim: sandboxed (non-same-origin) frames throw on
+    // localStorage/sessionStorage access. Provide in-memory replacements so
+    // generated code that uses them still runs (data is per-render, not persisted).
+    (function () {
+      function memoryStorage() {
+        var data = {};
+        return {
+          get length() { return Object.keys(data).length; },
+          key: function (i) { return Object.keys(data)[i] ?? null; },
+          getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+          setItem: function (k, v) { data[String(k)] = String(v); },
+          removeItem: function (k) { delete data[k]; },
+          clear: function () { data = {}; }
+        };
+      }
+      ['localStorage', 'sessionStorage'].forEach(function (name) {
+        var broken = false;
+        try { void window[name]; } catch (e) { broken = true; }
+        if (broken) {
+          try {
+            Object.defineProperty(window, name, { value: memoryStorage(), configurable: true });
+          } catch (e) { /* best effort */ }
+        }
+      });
+    })();
+  </script>
   <!-- Tailwind CSS Play CDN for runtime styling -->
   <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
   <script nonce="${nonce}">
@@ -703,7 +733,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         ref={iframeRef}
         title="React Component Preview"
         className="w-full h-full border-0 rounded-lg bg-white"
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts"
         style={{ display: isLoading || error ? 'none' : 'block' }}
       />
     </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { addCredits } from '@/lib/credits'
+import { createServerSupabase } from '@/lib/supabase.server'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: '2025-08-27.basil',
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Minimal logging; avoid leaking signature
-        console.log('Stripe webhook received', { bodyLength: body.length })
+        console.warn('Stripe webhook received', { bodyLength: body.length })
     } catch (error) {
         console.error('Error parsing webhook request:', error)
         return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
@@ -71,11 +72,10 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (creditsToAdd > 0) {
-                    // Idempotency: avoid processing the same event twice
-                    // Use the Stripe event id as unique key
-                    const eventId = event.id
-                    const processed = await hasProcessedEvent(eventId)
-                    if (processed) {
+                    // Idempotency: claim the event id in the DB before granting credits.
+                    // A unique-violation means another delivery already handled it.
+                    const claimed = await claimEvent(event.id, event.type)
+                    if (!claimed) {
                         return NextResponse.json({ received: true, duplicate: true })
                     }
                     const result = await addCredits(
@@ -88,10 +88,11 @@ export async function POST(request: NextRequest) {
 
                     if (!result.success) {
                         console.error('Failed to add credits:', result.error)
+                        // Release the claim so Stripe's retry can re-attempt the grant.
+                        await releaseEvent(event.id)
                         return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 })
                     }
-                    await markEventProcessed(eventId)
-                    console.log(`Processed Stripe checkout: added ${creditsToAdd} credits to user ${userId}`)
+                    console.warn(`Processed Stripe checkout: added ${creditsToAdd} credits to user ${userId}`)
                 }
             }
         }
@@ -103,11 +104,28 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Naive in-memory idempotency store; replace with Redis/DB in production
-const processedEvents = new Set<string>()
-async function hasProcessedEvent(id: string) {
-    return processedEvents.has(id)
+// Durable idempotency backed by stripe_webhook_events (migration 0032).
+// Returns true if this delivery won the claim; false if already processed.
+async function claimEvent(id: string, type: string): Promise<boolean> {
+    const supabase = createServerSupabase()
+    const { error } = await supabase
+        .from('stripe_webhook_events')
+        .insert({ event_id: id, event_type: type })
+    if (!error) return true
+    // 23505 = unique violation: event already claimed by a previous delivery.
+    if (error.code === '23505') return false
+    // Unexpected DB error: fail closed (treat as duplicate) and let Stripe retry.
+    console.error('Failed to claim Stripe event for idempotency:', error)
+    return false
 }
-async function markEventProcessed(id: string) {
-    processedEvents.add(id)
+
+async function releaseEvent(id: string): Promise<void> {
+    const supabase = createServerSupabase()
+    const { error } = await supabase
+        .from('stripe_webhook_events')
+        .delete()
+        .eq('event_id', id)
+    if (error) {
+        console.error('Failed to release Stripe event claim:', error)
+    }
 }

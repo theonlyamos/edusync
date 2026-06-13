@@ -6,10 +6,23 @@ import { Loader2 } from 'lucide-react'
 export default function DemoPage() {
   const [iframeUrl, setIframeUrl] = useState('')
 
+  const demoApiKey = process.env.NEXT_PUBLIC_DEMO_EMBED_API_KEY
+
   useEffect(() => {
     // This only runs on the client side
-    setIframeUrl(`${window.location.origin}/embed/new?apiKey=isk_472ad9c8113b2dd06f7c225fc134b0d17ff39615a9b0b71a54830e6aeac29b9f&getFeedback=true`)
-  }, [])
+    if (demoApiKey) {
+      setIframeUrl(`${window.location.origin}/embed/new?apiKey=${demoApiKey}&getFeedback=true`)
+    }
+  }, [demoApiKey])
+
+  if (!demoApiKey) {
+    return (
+      <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <p className="text-lg font-medium text-indigo-700">Demo is not configured.</p>
+        <p className="mt-2 text-sm text-indigo-500">Set NEXT_PUBLIC_DEMO_EMBED_API_KEY to enable this page.</p>
+      </div>
+    );
+  }
 
   if (!iframeUrl) {
     return (

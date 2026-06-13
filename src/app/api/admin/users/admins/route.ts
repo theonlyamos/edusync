@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server'
 export async function GET() {
     const supabase = createServerSupabase();
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const { data, error } = await supabase
             .from('users')
             .select('id, email, name, image, isactive, lastlogin, created_at, updated_at')
@@ -22,6 +28,11 @@ export async function GET() {
 export async function POST(request: Request) {
     const supabase = createServerSupabase();
     try {
+        const session = await getServerSession();
+        if (!session || session.user?.role !== 'admin') {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
+
         const body = await request.json();
         const { email, password, name } = body;
 

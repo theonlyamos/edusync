@@ -25,45 +25,28 @@ export async function deductCreditsForMinute(
     const supabase = createServerSupabase()
 
     try {
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('credits, total_credits_used')
-            .eq('id', userId)
-            .single()
+        // Atomic deduction: balance check, decrement, and ledger row happen in a
+        // single DB transaction (see migration 0032). NULL result = insufficient.
+        const { data: newCredits, error } = await supabase.rpc('deduct_user_credits', {
+            p_user_id: userId,
+            p_amount: 1,
+            p_description: 'Used 1 credit for 1 minute of AI session',
+            p_session_id: sessionId
+        })
 
-        if (userError || !userData) {
-            return { success: false, remainingCredits: 0, error: 'User not found' }
+        if (error) {
+            console.error('deduct_user_credits failed:', error)
+            return { success: false, remainingCredits: 0, error: 'Failed to update credits' }
         }
 
-        if (userData.credits < 1) {
+        if (newCredits === null || newCredits === undefined) {
+            const remaining = await getUserCredits(userId)
             return {
                 success: false,
-                remainingCredits: userData.credits,
+                remainingCredits: remaining,
                 error: 'Insufficient credits'
             }
         }
-
-        const newCredits = userData.credits - 1
-        const { error: updateError } = await supabase
-            .from('users')
-            .update({
-                credits: newCredits,
-                total_credits_used: (userData.total_credits_used || 0) + 1
-            })
-            .eq('id', userId)
-
-        if (updateError) {
-            return { success: false, remainingCredits: userData.credits, error: 'Failed to update credits' }
-        }
-
-        // Log transaction
-        await supabase.from('credit_transactions').insert({
-            user_id: userId,
-            transaction_type: 'usage',
-            credits: -1,
-            description: 'Used 1 credit for 1 minute of AI session',
-            session_id: sessionId
-        })
 
         return { success: true, remainingCredits: newCredits }
     } catch (error: any) {
@@ -81,41 +64,23 @@ export async function addCredits(
     const supabase = createServerSupabase()
 
     try {
-        const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('credits, total_credits_purchased')
-            .eq('id', userId)
-            .single()
+        // Atomic addition with the ledger row in the same DB transaction (migration 0032).
+        const { data: newTotal, error } = await supabase.rpc('add_user_credits', {
+            p_user_id: userId,
+            p_amount: credits,
+            p_description: description,
+            p_type: type,
+            p_payment_intent_id: paymentIntentId ?? null
+        })
 
-        if (userError || !userData) {
+        if (error) {
+            console.error('add_user_credits failed:', error)
+            return { success: false, newTotal: 0, error: 'Failed to update credits' }
+        }
+
+        if (newTotal === null || newTotal === undefined) {
             return { success: false, newTotal: 0, error: 'User not found' }
         }
-
-        const newTotal = userData.credits + credits
-        const updateData: any = { credits: newTotal }
-
-        if (type === 'purchase') {
-            updateData.total_credits_purchased = (userData.total_credits_purchased || 0) + credits
-        }
-
-        const { error: updateError } = await supabase
-            .from('users')
-            .update(updateData)
-            .eq('id', userId)
-
-        if (updateError) {
-            console.error('Error updating credits:', updateError)
-            return { success: false, newTotal: userData.credits, error: 'Failed to update credits' }
-        }
-
-        // Log transaction
-        await supabase.from('credit_transactions').insert({
-            user_id: userId,
-            transaction_type: type,
-            credits: credits,
-            description,
-            stripe_payment_intent_id: paymentIntentId
-        })
 
         return { success: true, newTotal }
     } catch (error: any) {
