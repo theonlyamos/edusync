@@ -1,4 +1,5 @@
 import { AccessToken, AgentDispatchClient, RoomAgentDispatch, RoomServiceClient } from 'livekit-server-sdk'
+import type { LiveClassRoomLessonMetadata } from '@edusync/shared/live-class'
 
 export async function mintLiveKitParticipantToken(params: {
   roomName: string
@@ -46,13 +47,7 @@ export function getLiveKitHttpHost(): string {
 }
 
 /** Serialized into LiveKit room metadata for the live-class agent (lesson context). */
-export type LiveClassRoomLessonMetadata = {
-  title: string
-  subject: string
-  gradeLevel: string
-  objectives: string[]
-  content: string
-}
+export type { LiveClassRoomLessonMetadata }
 
 /**
  * Ensure the LiveKit room exists with metadata the agent reads (`learning_session_id`, optional `lesson`).

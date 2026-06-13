@@ -8,6 +8,7 @@
     "download-files": "tsx src/agent.ts download-files"
   },
   "dependencies": {
+    "@edusync/shared": "workspace:*",
     "@livekit/agents": "^1.4.2",
     "@livekit/agents-plugin-google": "^1.4.2",
     "@livekit/rtc-node": "^0.13.28",

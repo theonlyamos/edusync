@@ -3,18 +3,14 @@ import { type JobContext, cli, defineAgent, getJobContext, llm, voice, ServerOpt
 import * as google from '@livekit/agents-plugin-google'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import { EUREKA_TUTOR_SYSTEM_PROMPT } from '../eureka-prompt.js'
+import {
+  EUREKA_TUTOR_SYSTEM_PROMPT,
+  LIVE_CLASS_AGENT_SECRET_HEADER,
+  type LiveClassRoomLessonMetadata as RoomMetaLesson,
+} from '@edusync/shared'
 
 const appBase = (process.env.LIVE_CLASS_APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
 const agentSecret = process.env.LIVE_CLASS_AGENT_SECRET || ''
-
-type RoomMetaLesson = {
-  title: string
-  subject: string
-  gradeLevel: string
-  objectives: string[]
-  content: string
-}
 
 function parseMeta(meta: string | undefined): { learning_session_id: string; lesson?: RoomMetaLesson } {
   if (!meta) return { learning_session_id: '' }
@@ -80,7 +76,7 @@ function requireSessionContext(): SessionContext {
 
 const agentHeaders = {
   'Content-Type': 'application/json',
-  'x-live-class-agent-secret': agentSecret,
+  [LIVE_CLASS_AGENT_SECRET_HEADER]: agentSecret,
 } as const
 
 function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): void {

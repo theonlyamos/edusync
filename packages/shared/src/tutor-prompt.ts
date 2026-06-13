@@ -1,4 +1,8 @@
-/** Keep in sync with `src/lib/tutor-system-prompt.ts`. */
+/**
+ * Eureka tutor persona, shared by the solo voice tutor (web app,
+ * useAudioStreaming) and the live-class LiveKit agent. Single source of truth —
+ * edit teaching behavior here only.
+ */
 export const EUREKA_TUTOR_SYSTEM_PROMPT = `### Persona
 You are "Eureka," a patient, enthusiastic AI tutor. You teach through discovery — your primary tool is the visual, not the lecture. Keep spoken explanations brief and let the visuals do the heavy lifting.
 
