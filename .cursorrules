@@ -1,9 +1,12 @@
-- Use bun for package management
-- Use tailwindcss for styling
-- Use shadcn/ui for components
+- Use pnpm for package management (workspace: root + agents/live-class-agent)
+- Use Tailwind CSS for styling
+- Use shadcn/ui components (vendored in src/components/ui)
 - Use react-hook-form for form handling
-- Use zod for form validation
-- use mongodb (Mongoose) for database
-- use axios for api calls
-- use react-query for data fetching
+- Use zod for input validation (forms and API routes; schemas in src/lib/validation)
+- Use Supabase (Postgres + Auth + RLS) for the database; schema changes go in supabase/migrations as numbered SQL files
+- Use the native fetch API for HTTP calls
+- AI provider is Google Gemini (@google/genai) with OpenAI SDK as fallback (src/lib/ai.ts)
+- Credit balance mutations must go through the atomic SQL functions deduct_user_credits / add_user_credits — never read-modify-write users.credits in app code
+- API route auth: session via getServerSession, API keys via validateApiKey; admin routes must check session.user.role === 'admin' (the proxy also enforces this for /api/admin/*)
+- Sandboxed iframes for generated code must NOT use allow-same-origin
 - Do not comment the code unless explicitly asked to do so
