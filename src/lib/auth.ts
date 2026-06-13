@@ -32,7 +32,7 @@ export async function getServerSession(adapter?: CookieAdapter): Promise<null | 
                             cookiesToSet.forEach(({ name, value, options }) =>
                                 (cookieStore as any).set({ name, value, ...options })
                             );
-                        } catch { }
+                        } catch { /* best-effort cleanup; failure is non-fatal */ }
                     },
                 },
         },

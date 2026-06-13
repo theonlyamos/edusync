@@ -80,7 +80,7 @@ function HomeComponent() {
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
-      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { }
+      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { /* best-effort cleanup; failure is non-fatal */ }
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
@@ -101,7 +101,7 @@ function HomeComponent() {
     }
 
     if (currentSessionId) {
-      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { }
+      try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { /* best-effort cleanup; failure is non-fatal */ }
       setCurrentSessionId(null);
     }
     setVoiceActive(false);
@@ -166,8 +166,6 @@ function HomeComponent() {
       if (!response.ok) {
         throw new Error('Failed to submit feedback');
       }
-
-      console.log('Feedback submitted successfully');
     } catch (error) {
       console.error('Failed to submit feedback:', error);
     }
@@ -184,7 +182,7 @@ function HomeComponent() {
       if (!sid) return;
       const { data } = await axios.get(`/api/learning/sessions/${sid}/recordings`);
       setReplay({ conversationUrl: data.conversationUrl, userUrl: data.userUrl, aiUrl: data.aiUrl, userParts: data.userParts, aiParts: data.aiParts, durationMs: data.durationMs ?? durationMs });
-    } catch { }
+    } catch (err) { console.error('Failed to load session recordings', err) }
   }, [currentSessionId, sessionIdFromUrl]);
 
   const handleStartSession = async () => {
@@ -338,7 +336,7 @@ function HomeComponent() {
               description: args.task_description,
               data: null,
             });
-          } catch { }
+          } catch (err) { console.error('Failed to persist visualization', err) }
         }
       } catch (e: any) {
         setError(e.message || 'Unknown error');
@@ -349,14 +347,13 @@ function HomeComponent() {
     if (name === 'set_topic') {
       try {
         const t = typeof args?.topic === 'string' ? args.topic.trim() : '';
-        console.log('set_topic', t, currentSessionId);
         if (t) {
           setTopic(t);
           if (currentSessionId) {
-            try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t }); } catch { }
+            try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t }); } catch (err) { console.error('Failed to persist session topic', err) }
           }
         }
-      } catch { }
+      } catch (err) { console.error('Failed to handle set_topic tool call', err) }
     }
   };
 
@@ -410,7 +407,7 @@ function HomeComponent() {
         try {
           const res = await axios.post('/api/learning/sessions', { session_id: null, session_handle: null, topic });
           setCurrentSessionId(res.data.id as string);
-        } catch { }
+        } catch (err) { console.error('Failed to create learning session', err) }
       })();
     }
   }, [connectionStatus, voiceActive, currentSessionId, topic]);
@@ -463,14 +460,14 @@ function HomeComponent() {
           if (row.explanation) msgs.push({ role: 'assistant', content: row.explanation });
         });
         if (msgs.length > 0) setMessages(msgs);
-      } catch { }
+      } catch (err) { console.error('Failed to load session visualizations', err) }
     })();
   }, [mode, sessionIdFromUrl, currentSessionId]);
 
   useEffect(() => {
     if (connectionStatus === 'disconnected' && currentSessionId) {
       (async () => {
-        try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'disconnected', ended: true }); } catch { }
+        try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'disconnected', ended: true }); } catch { /* best-effort cleanup; failure is non-fatal */ }
         setCurrentSessionId(null);
       })();
     }
@@ -832,7 +829,7 @@ function HomeComponent() {
                                     explanation: vizData.explanation ?? null,
                                     panel_dimensions: panelDimensions
                                   });
-                                } catch { }
+                                } catch (err) { console.error('Failed to update visualization', err) }
                               }
                             } catch (e: any) {
                               setError(e.message || 'Failed to regenerate visualization');

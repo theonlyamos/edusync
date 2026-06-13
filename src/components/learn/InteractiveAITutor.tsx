@@ -79,7 +79,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         );
         lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
-      } catch { }
+      } catch (err) { console.error('Failed to persist session end on countdown', err) }
     }
     setVoiceActive(false);
     vizDispatch({ type: 'RESET' }); // Batch reset: code, library, visualizations, currentVizIndex
@@ -100,7 +100,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
           { status: 'ended', ended: true },
           { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
         );
-      } catch { }
+      } catch (err) { console.error('Failed to persist session end on voice stop', err) }
       lastEndedSessionIdRef.current = currentSessionId;
       setCurrentSessionId(null);
     }
@@ -160,7 +160,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         throw new Error('Failed to submit feedback');
       }
 
-      console.log('Feedback submitted successfully');
     } catch (error) {
       console.error('Failed to submit feedback:', error);
     }
@@ -220,7 +219,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
           },
             { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
           );
-        } catch { }
+        } catch (err) { console.error('Failed to persist regenerated visualization', err) }
       }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
@@ -239,8 +238,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       console.error('Max regeneration attempts reached:', errMsg);
       return;
     }
-
-    console.log(`Regeneration attempt ${regenerationAttemptsRef.current}/${MAX_REGENERATION_ATTEMPTS} due to error:`, errMsg);
 
     try {
       // Don't show the intermediate error during auto-regeneration
@@ -332,7 +329,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
             },
               { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
             );
-          } catch { }
+          } catch (err) { console.error('Failed to persist generated visualization', err) }
         }
       } catch (e: any) {
         setError(e.message || 'Unknown error');
@@ -343,7 +340,6 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
     if (name === 'set_topic') {
       try {
         const t = typeof args?.topic === 'string' ? args.topic.trim() : '';
-        console.log('set_topic', t, currentSessionId);
         if (t) {
           setTopic(t);
           if (currentSessionId) {
@@ -352,10 +348,10 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
                 { topic: t },
                 { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
               );
-            } catch { }
+            } catch (err) { console.error('Failed to persist session topic', err) }
           }
         }
-      } catch { }
+      } catch (err) { console.error('Failed to handle set_topic tool call', err) }
     }
   };
 
@@ -467,7 +463,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
             { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
           );
           setCurrentSessionId(res.data.id as string);
-        } catch { }
+        } catch (err) { console.error('Failed to create learning session', err) }
       })();
     }
   }, [connectionStatus, voiceActive, currentSessionId, topic]);
@@ -491,7 +487,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
         }));
         // Use LOAD_VISUALIZATIONS to atomically set visualizations, currentVizIndex, code, and library
         vizDispatch({ type: 'LOAD_VISUALIZATIONS', payload: mapped });
-      } catch { }
+      } catch (err) { console.error('Failed to load session visualizations', err) }
     })();
   }, [currentSessionId]);
 
@@ -503,7 +499,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
             { status: 'disconnected', ended: true },
             { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} }
           );
-        } catch { }
+        } catch (err) { console.error('Failed to mark session disconnected', err) }
         lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
       })();

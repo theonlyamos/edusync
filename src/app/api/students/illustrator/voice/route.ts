@@ -61,7 +61,6 @@ async function handleStartSession(sessionId: string) {
             model,
             callbacks: {
                 onopen: function () {
-                    console.debug('Voice session opened for:', sessionId);
                 },
                 onmessage: function (message: LiveServerMessage) {
                     responseQueue.push(message);
@@ -70,7 +69,6 @@ async function handleStartSession(sessionId: string) {
                     console.error('Voice session error:', e.message);
                 },
                 onclose: function (e: CloseEvent) {
-                    console.debug('Voice session closed:', e.reason);
                     activeSessions.delete(sessionId);
                 },
             },

@@ -12,7 +12,7 @@ async function ensureBucket() {
         if (error || !data) {
             await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 1024 * 1024 * 200 })
         }
-    } catch { }
+    } catch { /* best-effort cleanup; failure is non-fatal */ }
 }
 
 async function assertSessionOwnership(userId: string, sessionId: string) {
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 const meta = JSON.parse(text)
                 durationMs = Number(meta.durationMs || 0)
             }
-        } catch { }
+        } catch (err) { console.error('Failed to read recording meta.json', err) }
 
         return NextResponse.json({ userUrl, aiUrl, conversationUrl, userParts, aiParts, durationMs })
     } catch (e: any) {

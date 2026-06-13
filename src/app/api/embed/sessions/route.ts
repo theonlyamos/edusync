@@ -28,8 +28,6 @@ export async function POST(request: NextRequest) {
 
     const credits = user?.credits;
 
-    console.log('credits', userId, credits);
-
     if (!credits || credits.credits < 1) {
       return NextResponse.json(
         {

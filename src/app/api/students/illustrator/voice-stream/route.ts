@@ -149,11 +149,11 @@ function initWebSocketServer() {
             try {
                 const session = await getServerSession()
                 if (!session?.user?.id) {
-                    try { ws.close(1008, 'Unauthorized') } catch { }
+                    try { ws.close(1008, 'Unauthorized') } catch { /* best-effort cleanup; failure is non-fatal */ }
                     return
                 }
             } catch {
-                try { ws.close(1011, 'Auth check failed') } catch { }
+                try { ws.close(1011, 'Auth check failed') } catch { /* best-effort cleanup; failure is non-fatal */ }
                 return
             }
         })()
@@ -194,7 +194,7 @@ function initWebSocketServer() {
         ws.on('error', (error) => console.error('WebSocket error:', error));
     });
 
-    console.log('WebSocket server initialized on port 3001');
+    console.warn('WebSocket server initialized on port 3001');
     return wss;
 }
 
@@ -416,7 +416,7 @@ function processResponseQueue(sessionId: string) {
             audioParts.length = 0;
             try {
                 ws.send(JSON.stringify({ type: 'playback-interrupted', sessionId }));
-            } catch { }
+            } catch { /* best-effort cleanup; failure is non-fatal */ }
             continue;
         }
         // Log any tool calls (function calling)

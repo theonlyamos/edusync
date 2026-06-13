@@ -109,7 +109,6 @@ export async function convertImageUrlsToBase64(code: string): Promise<string> {
                 const arrayBuffer = await response.arrayBuffer();
                 const base64 = Buffer.from(arrayBuffer).toString('base64');
 
-                console.log(`[imageUtils.server] Successfully converted: ${url.substring(0, 60)}...`);
                 return { url, base64: `data:${contentType};base64,${base64}` };
             } catch (err) {
                 clearTimeout(timeoutId);

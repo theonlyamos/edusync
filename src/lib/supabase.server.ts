@@ -43,7 +43,7 @@ export async function createSSRUserSupabase(adapter?: CookieAdapter) {
                             cookiesToSet.forEach(({ name, value, options }: any) =>
                                 (cookieStore as any).set({ name, value, ...options })
                             )
-                        } catch { }
+                        } catch { /* best-effort cleanup; failure is non-fatal */ }
                     },
                 },
         }

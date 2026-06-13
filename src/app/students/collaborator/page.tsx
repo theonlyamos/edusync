@@ -178,17 +178,11 @@ export default function CollaboratorPage() {
           
           // Handle loading and drawing of the image
           img.onload = () => {
-            console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
             // Set the base layer image and clear existing shapes.
             setBaseLayerImage(img);
             setShapes([]); // Clear existing user-drawn shapes
           };
 
-          // Console log the image data (first few characters)
-          console.log('Image data received, length:', 
-            data.imageData ? data.imageData.length : 0,
-            'Preview:', data.imageData ? data.imageData.substring(0, 50) + '...' : 'empty');
-          
           // Set the source of the image to the data URL for drawing on canvas
           img.src = dataUrl;
         } catch (err) {
@@ -350,7 +344,6 @@ export default function CollaboratorPage() {
 
       // 4. Highlight selected shape (visual part implemented later)
       if (shape.id === selectedShapeId) {
-         console.log("Selected shape:", shape.id); 
          // TODO: Implement visual highlighting (e.g., bounding box)
       }
     });

@@ -12,7 +12,7 @@ async function ensureBucket() {
         if (error || !data) {
             await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 1024 * 1024 * 200 })
         }
-    } catch { }
+    } catch (err) { console.error('Failed to ensure storage bucket exists', err) }
 }
 
 async function assertSessionOwnership(userId: string, sessionId: string) {

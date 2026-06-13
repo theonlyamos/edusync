@@ -16,9 +16,6 @@ export type LiveTranscriptionPayload = {
     finished: boolean;
 };
 
-const DEBUG_GEMINI_LIVE_TRANSCRIPTION =
-    typeof process !== 'undefined' && process.env.NEXT_PUBLIC_DEBUG_GEMINI_LIVE_TRANSCRIPTION === 'true';
-
 function normalizeTranscriptionChunk(raw: unknown): { text: string; finished: boolean } | null {
     if (!raw || typeof raw !== 'object') return null;
     const o = raw as Record<string, unknown>;
@@ -227,7 +224,7 @@ export function useAudioStreaming(
 
             await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/parts?type=${encodeURIComponent(kind)}&index=${encodeURIComponent(padIndex(idx))}`,
                 { method: 'POST', body: form, headers });
-        } catch { }
+        } catch (err) { console.error('Failed to upload recording segment', err); }
         finally {
             isUploadingRef.current[kind] = false;
             // Drain next if any
@@ -307,7 +304,7 @@ export function useAudioStreaming(
         }
         // Clean up mic analyser
         if (micAnalyserRef.current) {
-            try { micAnalyserRef.current.disconnect(); } catch (e) { }
+            try { micAnalyserRef.current.disconnect(); } catch (e) { /* best-effort cleanup; failure is non-fatal */ }
             micAnalyserRef.current = null;
         }
 
@@ -418,7 +415,7 @@ export function useAudioStreaming(
                     }
                     await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST', headers });
                 }
-            } catch { }
+            } catch (err) { console.error('Failed to finalize session recordings', err); }
 
             onRecordingsReadyRef.current?.({ user: userBlob, ai: aiBlob, durationMs });
         };
@@ -652,7 +649,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             // Delay resumption slightly to avoid immediate reconnection
                             setConnectionStatus('connecting');
                             reconnectTimeoutRef.current = setTimeout(() => {
-                                console.log('Attempting to resume session with handle:', sessionResumptionHandleRef.current);
                                 isResumingSessionRef.current = true;
                                 startGeminiLiveSession(streamRef.current!, 16000);
                             }, 1000);
@@ -678,11 +674,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 micAnalyserRef.current.fftSize = 256;
                 micAnalyserRef.current.smoothingTimeConstant = 0.8;
                 source.connect(micAnalyserRef.current);
-            } catch { }
+            } catch { /* best-effort cleanup; failure is non-fatal */ }
 
             // Ensure we are not double-sending by disconnecting any previous processor
             if (processorRef.current) {
-                try { processorRef.current.disconnect(); } catch { }
+                try { processorRef.current.disconnect(); } catch { /* best-effort cleanup; failure is non-fatal */ }
                 processorRef.current = null;
             }
 
@@ -741,8 +737,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             // mark that speech happened in this interval
                             vadSpeechSinceLastChunkRef.current = true;
                         }
-                        try { onVadStateListenerRef.current?.(vadSpeechActiveRef.current, rms); } catch { }
-                    } catch { }
+                        try { onVadStateListenerRef.current?.(vadSpeechActiveRef.current, rms); } catch { /* best-effort cleanup; failure is non-fatal */ }
+                    } catch { /* best-effort cleanup; failure is non-fatal */ }
 
                     // Batch audio frames to reduce main thread processing frequency
                     audioBatchRef.current.push(float32Chunk);
@@ -795,7 +791,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             source.connect(workletNode);
             try {
                 workletNode.connect(audioContext.destination);
-            } catch { }
+            } catch { /* best-effort cleanup; failure is non-fatal */ }
             processorRef.current = workletNode;
 
             // Initialize MediaRecorder AFTER AudioWorklet is connected
@@ -837,7 +833,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     userRecorderRef.current.start(1000);
                     lastUserSegmentStartRef.current = Date.now();
                 }
-            } catch { }
+            } catch { /* best-effort cleanup; failure is non-fatal */ }
 
             const initialMessage = sessionResumptionHandleRef.current
                 ? 'Continue'
@@ -881,7 +877,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 if ((message as any)?.sessionResumptionUpdate) {
                     const update = (message as any).sessionResumptionUpdate;
                     if (update.resumable && update.newHandle) {
-                        console.log('Received new session resumption handle:', update.newHandle);
                         sessionResumptionHandleRef.current = update.newHandle;
                     }
                     continue;
@@ -889,8 +884,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                 // Handle GoAway messages
                 if ((message as any)?.goAway) {
-                    const goAway = (message as any).goAway;
-                    console.log('Received GoAway message, time left:', goAway.timeLeft);
                     // The connection will be terminated soon, but we have the resumption handle
                     continue;
                 }
@@ -913,16 +906,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                 const extracted =
                     isStudyCompanionLive && serverContent ? extractServerTranscriptions(serverContent) : null;
-
-                if (DEBUG_GEMINI_LIVE_TRANSCRIPTION && isStudyCompanionLive && serverContent && extracted) {
-                    const { input, output } = extracted;
-                    console.log('[GeminiLive transcription]', {
-                        serverKeys: Object.keys(serverContent),
-                        turnComplete: Boolean(serverContent.turnComplete),
-                        input: input ? { textLen: input.text.length, finished: input.finished } : null,
-                        output: output ? { textLen: output.text.length, finished: output.finished } : null,
-                    });
-                }
 
                 if (isStudyCompanionLive && extracted) {
                     const { input, output } = extracted;
@@ -1035,7 +1018,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             if (!playbackDestinationRef.current) {
                 try {
                     playbackDestinationRef.current = ctx.createMediaStreamDestination();
-                } catch { }
+                } catch { /* best-effort cleanup; failure is non-fatal */ }
             }
 
             const ensureAiRecorder = () => {
@@ -1068,7 +1051,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     };
                     aiRecorderRef.current.start(1000);
                     lastAiSegmentStartRef.current = Date.now();
-                } catch { }
+                } catch { /* best-effort cleanup; failure is non-fatal */ }
             };
             ensureAiRecorder();
 
@@ -1099,7 +1082,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     source.connect(ctx.destination);
                 }
                 if (playbackDestinationRef.current) {
-                    try { source.connect(playbackDestinationRef.current); } catch { }
+                    try { source.connect(playbackDestinationRef.current); } catch { /* best-effort cleanup; failure is non-fatal */ }
                 }
             } catch (e) {
                 console.error('Failed to connect audio source:', e);

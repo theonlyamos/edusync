@@ -130,7 +130,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         );
         lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
-      } catch { }
+      } catch (err) { console.error('Failed to persist session end on countdown', err) }
     }
     setVoiceActive(false);
     vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
@@ -144,7 +144,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
           { status: 'ended', ended: true }
         );
-      } catch { }
+      } catch (err) { console.error('Failed to persist session end on voice stop', err) }
       lastEndedSessionIdRef.current = currentSessionId;
       setCurrentSessionId(null);
     }
@@ -236,7 +236,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
             explanation: vizData.explanation ?? null,
             panel_dimensions: panelDimensions
           });
-        } catch { }
+        } catch (err) { console.error('Failed to persist regenerated visualization', err) }
       }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
@@ -336,7 +336,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
               description: args.task_description,
               data: null,
             });
-          } catch { }
+          } catch (err) { console.error('Failed to persist generated visualization', err) }
         }
       } catch (e: any) {
         setError(e.message || 'Unknown error');
@@ -352,10 +352,10 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           if (currentSessionId) {
             try {
               await axios.patch(`/api/learning/sessions/${currentSessionId}`, { topic: t });
-            } catch { }
+            } catch (err) { console.error('Failed to persist session topic', err) }
           }
         }
-      } catch { }
+      } catch { /* best-effort cleanup; failure is non-fatal */ }
     }
   };
 
@@ -467,7 +467,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
             lessonId: lessonContext?.lessonId || null
           });
           setCurrentSessionId(res.data.id as string);
-        } catch { }
+        } catch (err) { console.error('Failed to create learning session', err) }
       })();
     }
   }, [connectionStatus, voiceActive, currentSessionId, topic, lessonContext]);
@@ -490,7 +490,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
         }));
         // Use LOAD_VISUALIZATIONS to atomically set visualizations, currentVizIndex, code, and library
         vizDispatch({ type: 'LOAD_VISUALIZATIONS', payload: mapped });
-      } catch { }
+      } catch (err) { console.error('Failed to load session visualizations', err) }
     })();
   }, [currentSessionId]);
 
@@ -502,7 +502,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           await axios.patch(`/api/learning/sessions/${currentSessionId}`,
             { status: 'disconnected', ended: true }
           );
-        } catch { }
+        } catch (err) { console.error('Failed to persist session disconnect', err) }
         lastEndedSessionIdRef.current = currentSessionId;
         setCurrentSessionId(null);
       })();

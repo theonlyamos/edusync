@@ -75,7 +75,7 @@ export async function createTeacher(params: CreateTeacherParams) {
                 const supabase = createServerSupabase();
                 await supabase.from('users').delete().eq('id', maybeUserId);
             }
-        } catch { }
+        } catch { /* best-effort cleanup; failure is non-fatal */ }
         throw error;
     }
 }
