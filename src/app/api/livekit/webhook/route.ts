@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { WebhookReceiver } from 'livekit-server-sdk'
+import { env } from '@/lib/env'
 
 /**
  * Optional: verify LiveKit Cloud webhooks. Extend to persist attendance / event status.
  * Configure LIVEKIT_API_KEY as the webhook signing key from LiveKit dashboard if different.
  */
 export async function POST(request: NextRequest) {
-  const secret = process.env.LIVEKIT_WEBHOOK_SECRET || process.env.LIVEKIT_API_SECRET
+  const { LIVEKIT_WEBHOOK_SECRET, LIVEKIT_API_SECRET, LIVEKIT_API_KEY } = env()
+  const secret = LIVEKIT_WEBHOOK_SECRET || LIVEKIT_API_SECRET
   if (!secret) {
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 501 })
   }
 
   const body = await request.text()
   const authHeader = request.headers.get('authorization') ?? undefined
-  const apiKey = process.env.LIVEKIT_API_KEY || ''
+  const apiKey = LIVEKIT_API_KEY || ''
 
   try {
     const receiver = new WebhookReceiver(apiKey, secret)

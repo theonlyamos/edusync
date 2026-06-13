@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 // Hybrid rate limiter:
 // - Strict, low-volume buckets (auth/upload/admin) use a durable fixed-window
@@ -119,21 +119,27 @@ async function consumeDurable(
     const bucket = DURABLE_BUCKETS[type];
     if (!bucket) return null;
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !serviceRole) return null; // fall back to in-memory
-
-    const supabase = createClient(url, serviceRole);
-    const { data: allowed, error } = await supabase.rpc('hit_rate_limit', {
-        p_key: `${type}:${ip}`,
-        p_max: bucket.max,
-        p_window_seconds: bucket.windowSeconds,
-    });
-
-    if (error || typeof allowed !== 'boolean') {
-        if (error) console.error('hit_rate_limit failed, falling back to in-memory:', error.message);
-        return null; // fall back to in-memory
+    let allowed: unknown;
+    try {
+        // createServerSupabase() throws if Supabase env is missing; treat that
+        // (and any RPC error) as "fall back to the in-memory limiter".
+        const supabase = createServerSupabase();
+        const res = await supabase.rpc('hit_rate_limit', {
+            p_key: `${type}:${ip}`,
+            p_max: bucket.max,
+            p_window_seconds: bucket.windowSeconds,
+        });
+        if (res.error) {
+            console.error('hit_rate_limit failed, falling back to in-memory:', res.error.message);
+            return null;
+        }
+        allowed = res.data;
+    } catch (err) {
+        console.error('Durable rate limiter unavailable, falling back to in-memory:', err);
+        return null;
     }
+
+    if (typeof allowed !== 'boolean') return null; // fall back to in-memory
 
     return allowed
         ? { allowed: true }

@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase.server'
 import { RoomServiceClient } from 'livekit-server-sdk'
 import { getLiveKitHttpHost } from '@/lib/livekit-token'
 import { liveClassRoomName } from '@/lib/live-class'
+import { env } from '@/lib/env'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -40,8 +41,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     )
   }
 
-  const apiKey = process.env.LIVEKIT_API_KEY
-  const apiSecret = process.env.LIVEKIT_API_SECRET
+  const { LIVEKIT_API_KEY: apiKey, LIVEKIT_API_SECRET: apiSecret } = env()
   if (!apiKey || !apiSecret) {
     return NextResponse.json({ error: 'LiveKit not configured' }, { status: 500 })
   }

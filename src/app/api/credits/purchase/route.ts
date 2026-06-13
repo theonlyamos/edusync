@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from '@/lib/auth'
 import Stripe from 'stripe'
+import { env, requireEnv } from '@/lib/env'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-08-27.basil',
-})
+// Lazy: constructed per request so importing this route at build time never
+// triggers env validation.
+function getStripe(): Stripe {
+    return new Stripe(requireEnv('STRIPE_SECRET_KEY'), {
+        apiVersion: '2025-08-27.basil',
+    })
+}
+
+function appBaseUrl(): string {
+    return env().NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -23,21 +32,21 @@ export async function POST(request: NextRequest) {
         const priceInCents = credits * 10 // 10 cents per credit
 
         // Create Stripe checkout session
-        const checkoutSession = await stripe.checkout.sessions.create({
+        const checkoutSession = await getStripe().checkout.sessions.create({
             customer_email: session.user.email,
             line_items: [
                 {
                     price_data: {
                         currency: 'usd',
-                        product: process.env.STRIPE_CREDIT_PRODUCT_ID!,
+                        product: requireEnv('STRIPE_CREDIT_PRODUCT_ID'),
                         unit_amount: priceInCents,
                     },
                     quantity: 1,
                 },
             ],
             mode: 'payment',
-            success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/learn/credits/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/learn/credits`,
+            success_url: `${appBaseUrl()}/learn/credits/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${appBaseUrl()}/learn/credits`,
             metadata: {
                 userId: session.user.id,
                 credits: credits.toString(),
@@ -62,17 +71,17 @@ export async function PUT(request: NextRequest) {
         const { quantity = 1 } = await request.json()
 
         // Create Stripe checkout session using your predefined price ID
-        const checkoutSession = await stripe.checkout.sessions.create({
+        const checkoutSession = await getStripe().checkout.sessions.create({
             customer_email: session.user.email,
             line_items: [
                 {
-                    price: process.env.STRIPE_CREDIT_PRICE_ID!,
+                    price: requireEnv('STRIPE_CREDIT_PRICE_ID'),
                     quantity: quantity,
                 },
             ],
             mode: 'payment',
-            success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/learn/credits/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/learn/credits`,
+            success_url: `${appBaseUrl()}/learn/credits/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${appBaseUrl()}/learn/credits`,
             metadata: {
                 userId: session.user.id,
                 quantity: quantity.toString(),

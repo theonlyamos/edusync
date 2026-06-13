@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
-import { createClient } from '@supabase/supabase-js'
+import { createServerSupabase } from '@/lib/supabase.server'
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -11,10 +11,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const { id } = await params
         const payload = await request.json()
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createServerSupabase();
 
         const { data: viz, error: vizErr } = await supabase
             .from('learning_visualizations')

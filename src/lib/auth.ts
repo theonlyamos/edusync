@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+import { env } from '@/lib/env';
 
 export const authOptions = {} as any;
 
@@ -10,9 +11,10 @@ export interface CookieAdapter {
 
 export async function getServerSession(adapter?: CookieAdapter): Promise<null | { user: { id: string; email: string; name: string | null; role: string | null; image: string | null } }> {
     const cookieStore = adapter ? null : await cookies();
+    const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } = env();
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        NEXT_PUBLIC_SUPABASE_URL,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY,
         {
             cookies: adapter
                 ? {

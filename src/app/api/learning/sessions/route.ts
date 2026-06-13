@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hasEnoughCredits } from '@/lib/credits'
 import { getAuthContext } from '@/lib/get-auth-context'
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,10 +20,7 @@ export async function POST(request: NextRequest) {
 
 
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createServerSupabase();
 
     const { data: user } = await supabase
       .from('users')

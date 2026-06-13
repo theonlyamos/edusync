@@ -2,28 +2,21 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { CookieAdapter } from '@/lib/auth'
+import { env } from '@/lib/env'
 
 export function createServerSupabase() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY as string
-    if (!url || !serviceRole) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
-    }
-    return createClient(url, serviceRole)
+    const { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = env()
+    return createClient(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 }
 
 export async function createSSRUserSupabase(adapter?: CookieAdapter) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-    if (!url || !anonKey) {
-        throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
-    }
+    const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } = env()
 
     const cookieStore = adapter ? null : await cookies()
 
     return createServerClient(
-        url,
-        anonKey,
+        NEXT_PUBLIC_SUPABASE_URL,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY,
         {
             cookies: adapter
                 ? {

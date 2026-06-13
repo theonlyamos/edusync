@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { LIVE_CLASS_AGENT_SECRET_HEADER } from '@edusync/shared/live-class'
+import { env } from '@/lib/env'
 
 export const AGENT_SECRET_HEADER = LIVE_CLASS_AGENT_SECRET_HEADER
 
@@ -21,7 +22,7 @@ function agentSecretOk(received: string | null, expected: string): boolean {
  */
 export function validateAgentSecret(request: NextRequest): NextResponse | null {
   const secret = request.headers.get(AGENT_SECRET_HEADER)
-  const expected = process.env.LIVE_CLASS_AGENT_SECRET
+  const expected = env().LIVE_CLASS_AGENT_SECRET
   if (!expected || !agentSecretOk(secret, expected)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

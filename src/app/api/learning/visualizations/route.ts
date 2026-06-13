@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSSRUserSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase, createServerSupabase } from '@/lib/supabase.server'
 import { getAuthContext } from '@/lib/get-auth-context'
-import { createClient } from '@supabase/supabase-js'
 
 export async function GET(request: NextRequest) {
     try {
@@ -47,10 +46,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createServerSupabase();
 
         // Verify ownership of session
         const { data: sess, error: sessErr } = await supabase

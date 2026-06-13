@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export interface ApiKeyValidationResult {
   valid: boolean;
@@ -42,10 +42,7 @@ export async function validateApiKey(
     };
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = createServerSupabase();
 
   const { data: apiKeyData, error } = await supabase
     .from('embed_api_keys')
@@ -209,10 +206,7 @@ export async function enforceApiKeyRateLimit(
 export async function checkApiKeyRateLimit(
   apiKeyId: string
 ): Promise<{ allowed: boolean; error?: string }> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = createServerSupabase();
 
   const { data } = await supabase
     .from('embed_api_keys')
@@ -232,10 +226,7 @@ export async function deductCreditsFromApiKey(
   userId: string,
   creditsToDeduct: number = 1
 ): Promise<{ success: boolean; remainingCredits?: number; error?: string }> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = createServerSupabase();
 
   // Canonical balance is users.credits (the previously-referenced `user_credits`
   // table never existed). Atomic deduction via migration 0032; NULL = insufficient.

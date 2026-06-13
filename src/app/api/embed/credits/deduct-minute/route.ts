@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
 import { deductCreditsFromApiKey } from '@/lib/api-key-auth';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server';
 import { deductCreditsForMinute } from '@/lib/credits';
 
 export async function POST(request: NextRequest) {
@@ -27,10 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createServerSupabase();
 
     const { data: session } = await supabase
       .from('learning_sessions')

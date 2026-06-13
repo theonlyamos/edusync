@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isWithinLiveClassJoinWindow, parseLobbyMinutes } from '@/lib/live-class-window'
+import { env } from '@/lib/env'
 
 /** Stable LiveKit room name for a scheduled class. */
 export function liveClassRoomName(eventId: string, storedName?: string | null): string {
@@ -7,7 +8,10 @@ export function liveClassRoomName(eventId: string, storedName?: string | null): 
   return `live_class_${eventId.replace(/-/g, '')}`
 }
 
-const serverLobbyMinutes = () => parseLobbyMinutes(process.env.LIVE_CLASS_LOBBY_MINUTES)
+const serverLobbyMinutes = () => {
+  const minutes = env().LIVE_CLASS_LOBBY_MINUTES
+  return parseLobbyMinutes(minutes != null ? String(minutes) : undefined)
+}
 
 export function isWithinLiveClassWindow(
   start: string,

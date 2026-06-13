@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { feedbackSchema } from '@/lib/validation/api';
 import { rateLimit } from '@/lib/rate-limiter';
 import { getAuthContext } from '@/lib/get-auth-context';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 // Type is now inferred from the Zod schema
 type FeedbackData = typeof feedbackSchema._output;
@@ -33,10 +33,7 @@ export async function POST(request: NextRequest) {
         const feedback = validation.data;
 
         // Create Supabase client
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createServerSupabase();
 
         // Prepare data for database insertion
         const dbData = {

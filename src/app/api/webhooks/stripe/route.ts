@@ -3,10 +3,15 @@ import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { addCredits } from '@/lib/credits'
 import { createServerSupabase } from '@/lib/supabase.server'
+import { requireEnv } from '@/lib/env'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-08-27.basil',
-})
+// Lazy: constructed per request so importing this route at build time never
+// triggers env validation (STRIPE_SECRET_KEY may be unset in some environments).
+function getStripe(): Stripe {
+    return new Stripe(requireEnv('STRIPE_SECRET_KEY'), {
+        apiVersion: '2025-08-27.basil',
+    })
+}
 
 // Disable body parsing for webhook signature verification
 // export const config = {
@@ -43,10 +48,10 @@ export async function POST(request: NextRequest) {
     let event: Stripe.Event
 
     try {
-        event = stripe.webhooks.constructEvent(
+        event = getStripe().webhooks.constructEvent(
             body,
             signature,
-            process.env.STRIPE_WEBHOOK_SECRET!
+            requireEnv('STRIPE_WEBHOOK_SECRET')
         )
     } catch (err: any) {
         console.error(`Webhook signature verification failed: ${err.message}`)

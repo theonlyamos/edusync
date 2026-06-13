@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,10 +15,7 @@ export async function POST(request: NextRequest) {
 
     const { userId, apiKeyId } = authContext;
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createServerSupabase();
 
     const { data: user } = await supabase
       .from('users')
@@ -91,10 +88,7 @@ export async function GET(request: NextRequest) {
 
     const { apiKeyId } = authContext;
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createServerSupabase();
 
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50;

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSSRUserSupabase } from '@/lib/supabase.server'
+import { createSSRUserSupabase, createServerSupabase } from '@/lib/supabase.server'
 import { getAuthContext } from '@/lib/get-auth-context'
-import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,10 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // createClient vs createServerClient unions break `.from()` inference; normalize to one client type.
         const supabase = (
             authContext.authType === 'apiKey'
-                ? createClient(
-                      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                      process.env.SUPABASE_SERVICE_ROLE_KEY!
-                  )
+                ? createServerSupabase()
                 : await createSSRUserSupabase()
         ) as SupabaseClient
 

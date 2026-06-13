@@ -1,5 +1,6 @@
 import { AccessToken, AgentDispatchClient, RoomAgentDispatch, RoomServiceClient } from 'livekit-server-sdk'
 import type { LiveClassRoomLessonMetadata } from '@edusync/shared/live-class'
+import { env } from '@/lib/env'
 
 export async function mintLiveKitParticipantToken(params: {
   roomName: string
@@ -7,8 +8,7 @@ export async function mintLiveKitParticipantToken(params: {
   participantName?: string
   ttlSeconds?: number
 }): Promise<string> {
-  const apiKey = process.env.LIVEKIT_API_KEY
-  const apiSecret = process.env.LIVEKIT_API_SECRET
+  const { LIVEKIT_API_KEY: apiKey, LIVEKIT_API_SECRET: apiSecret } = env()
   if (!apiKey || !apiSecret) {
     throw new Error('Missing LIVEKIT_API_KEY or LIVEKIT_API_SECRET')
   }
@@ -33,7 +33,8 @@ export async function mintLiveKitParticipantToken(params: {
 }
 
 export function getLiveKitWsUrl(): string {
-  const url = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL
+  const { LIVEKIT_URL, NEXT_PUBLIC_LIVEKIT_URL } = env()
+  const url = LIVEKIT_URL || NEXT_PUBLIC_LIVEKIT_URL
   if (!url) throw new Error('Missing LIVEKIT_URL or NEXT_PUBLIC_LIVEKIT_URL')
   return url
 }
@@ -58,8 +59,7 @@ export async function ensureLiveKitRoomSessionMetadata(
   learningSessionId: string,
   lesson?: LiveClassRoomLessonMetadata,
 ): Promise<void> {
-  const apiKey = process.env.LIVEKIT_API_KEY
-  const apiSecret = process.env.LIVEKIT_API_SECRET
+  const { LIVEKIT_API_KEY: apiKey, LIVEKIT_API_SECRET: apiSecret, LIVEKIT_AGENT_NAME } = env()
   if (!apiKey || !apiSecret) return
 
   const host = getLiveKitHttpHost()
@@ -69,7 +69,7 @@ export async function ensureLiveKitRoomSessionMetadata(
     ...(lesson ? { lesson } : {}),
   })
 
-  const agentName = (process.env.LIVEKIT_AGENT_NAME || '').trim()
+  const agentName = (LIVEKIT_AGENT_NAME || '').trim()
   const agentDispatches =
     agentName.length > 0
       ? [new RoomAgentDispatch({ agentName, metadata: '' })]
