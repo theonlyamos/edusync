@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity, EndSensitivity } from '@google/genai';
 import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
+import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
+import { convertToWav } from '@/lib/audio/wav';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion';
@@ -15,63 +17,6 @@ export type LiveTranscriptionPayload = {
     text: string;
     finished: boolean;
 };
-
-function normalizeTranscriptionChunk(raw: unknown): { text: string; finished: boolean } | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const o = raw as Record<string, unknown>;
-    const text = typeof o.text === 'string' ? o.text : '';
-    const finished = Boolean(o.finished);
-    if (!text && !finished) return null;
-    return { text, finished };
-}
-
-/** Resolve Live transcription blobs from serverContent (camelCase + snake_case fallbacks). */
-function extractServerTranscriptions(serverContent: unknown): {
-    input: { text: string; finished: boolean } | null;
-    output: { text: string; finished: boolean } | null;
-} {
-    if (!serverContent || typeof serverContent !== 'object') return { input: null, output: null };
-    const sc = serverContent as Record<string, unknown>;
-    const inputRaw = sc.inputTranscription ?? sc.input_audio_transcription;
-    const outputRaw = sc.outputTranscription ?? sc.output_audio_transcription;
-    return {
-        input: normalizeTranscriptionChunk(inputRaw),
-        output: normalizeTranscriptionChunk(outputRaw),
-    };
-}
-
-/** Merge streaming transcription chunks; caps length to limit damage from pathological streams. */
-const LIVE_TRANSCRIPT_BUFFER_MAX_CHARS = 32_000;
-
-function mergeStreamingTranscript(prev: string, incoming: string): string {
-    const cap = (s: string) =>
-        s.length <= LIVE_TRANSCRIPT_BUFFER_MAX_CHARS ? s : s.slice(0, LIVE_TRANSCRIPT_BUFFER_MAX_CHARS);
-
-    const a = prev.replace(/\s+/g, ' ').trim();
-    const b = incoming.replace(/\s+/g, ' ').trim();
-    if (!b) return cap(a);
-    if (!a) return cap(b);
-
-    if (b.startsWith(a)) return cap(b);
-    if (a.startsWith(b)) return cap(a);
-    if (a === b) return cap(a);
-    if (a.endsWith(b)) return cap(a);
-
-    const stripEnds = (w: string) => w.replace(/^[.,!?;:]+|[.,!?;:]+$/g, '').toLowerCase();
-    const aWords = a.split(/\s+/).filter(Boolean);
-    const bWords = b.split(/\s+/).filter(Boolean);
-    if (bWords.length > 0 && aWords.length > 0) {
-        const lastA = stripEnds(aWords[aWords.length - 1] ?? '');
-        const firstB = stripEnds(bWords[0] ?? '');
-        if (lastA && firstB && lastA === firstB) {
-            const base = aWords.slice(0, -1).join(' ');
-            const merged = base ? `${base} ${b}`.replace(/\s+/g, ' ').trim() : b;
-            return cap(merged);
-        }
-    }
-
-    return cap(`${a} ${b}`.replace(/\s+/g, ' ').trim());
-}
 
 interface AudioStreamingState {
     isStreaming: boolean;
@@ -1118,49 +1063,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         }
     }, []);
 
-    // Helper function to convert PCM to WAV (reused from existing implementation)
-    const convertToWav = useCallback((rawData: string[], sampleRate: number): Buffer => {
-        const pcmData = rawData.map(data => {
-            const binaryString = atob(data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return Buffer.from(bytes);
-        });
-        const totalDataLength = pcmData.reduce((acc, buffer) => acc + buffer.length, 0);
-
-        const options = {
-            numChannels: 1,
-            sampleRate: sampleRate,
-            bitsPerSample: 16,
-        };
-        const wavHeader = createWavHeader(totalDataLength, options);
-        return Buffer.concat([wavHeader, ...pcmData]);
-    }, []);
-
-    const createWavHeader = useCallback((dataLength: number, options: { numChannels: number; sampleRate: number; bitsPerSample: number }): Buffer => {
-        const { numChannels, sampleRate, bitsPerSample } = options;
-        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-        const blockAlign = numChannels * (bitsPerSample / 8);
-        const buffer = Buffer.alloc(44);
-
-        buffer.write('RIFF', 0);
-        buffer.writeUInt32LE(36 + dataLength, 4);
-        buffer.write('WAVE', 8);
-        buffer.write('fmt ', 12);
-        buffer.writeUInt32LE(16, 16);
-        buffer.writeUInt16LE(1, 20);
-        buffer.writeUInt16LE(numChannels, 22);
-        buffer.writeUInt32LE(sampleRate, 24);
-        buffer.writeUInt32LE(byteRate, 28);
-        buffer.writeUInt16LE(blockAlign, 32);
-        buffer.writeUInt16LE(bitsPerSample, 34);
-        buffer.write('data', 36);
-        buffer.writeUInt32LE(dataLength, 40);
-
-        return buffer;
-    }, []);
+    // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
     const setToolCallListener = useCallback((cb: (name: string, args: any) => void) => {
         toolCallListenerRef.current = cb;
