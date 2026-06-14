@@ -45,6 +45,7 @@ next-env.d.ts
 .agent/*
 .agents/*
 opencode.json
+.claude/
 
 *.env
 /agents/live-class-agent/.env
