@@ -1168,8 +1168,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     const sendMedia = useCallback((base64Data: string, mimeType: string) => {
         try {
             if (geminiLiveSessionRef.current) {
+                // Image frames (e.g. viz screenshots) must go via `video`. The old
+                // `media` field maps to the deprecated realtime_input.media_chunks,
+                // which Gemini Live rejects by closing the socket with code 1007.
                 geminiLiveSessionRef.current.sendRealtimeInput({
-                    media: { data: base64Data, mimeType }
+                    video: { data: base64Data, mimeType }
                 });
             }
         } catch (e) {
