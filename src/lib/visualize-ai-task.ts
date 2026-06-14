@@ -159,6 +159,76 @@ function normalizeVizResult(explanation: unknown, code: unknown, library: unknow
   return { explanation: exp, code: c, library: lib }
 }
 
+/** The tool/function name the model must call. It must never appear in the generated code body. */
+const VISUAL_AID_TOOL_NAME = 'display_visual_aid'
+const MAX_VIZ_GENERATION_ATTEMPTS = 3
+const toolNameRef = new RegExp(`\\b${VISUAL_AID_TOOL_NAME}\\b`)
+
+/**
+ * The model occasionally leaks the tool name into the code — usually a stray trailing
+ * `display_visual_aid(App)` invocation — which throws "display_visual_aid is not defined" in the
+ * sandbox. Detect that so the caller can strip or regenerate.
+ */
+function codeLeaksToolName(code: string): boolean {
+  return toolNameRef.test(code)
+}
+
+/** Remove standalone `display_visual_aid(...)` call statements the model sometimes appends. */
+function stripLeakedToolCalls(code: string): string {
+  return code
+    .replace(new RegExp(`^[^\\S\\r\\n]*${VISUAL_AID_TOOL_NAME}\\s*\\([\\s\\S]*?\\)\\s*;?[^\\S\\r\\n]*$`, 'gm'), '')
+    .trim()
+}
+
+async function generateVisualizationOnce(
+  systemPrompt: string,
+  taskDescription: string,
+): Promise<VisualizeGenerationResult> {
+  const completion = await getOpenAI().chat.completions.create({
+    model: PROVIDER_MODEL as string,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: taskDescription },
+    ],
+    tools: [displayVisualAidFunctionDeclaration],
+    temperature: 0.7,
+    max_tokens: 16384,
+  })
+
+  const message = completion.choices?.[0]?.message as {
+    tool_calls?: Array<{ type: string; function?: { name?: string; arguments?: string } }>
+    content?: string | null
+  }
+
+  if (message?.tool_calls && message.tool_calls.length > 0) {
+    const toolCall =
+      message.tool_calls.find((t) => t.type === 'function' && t.function?.name === VISUAL_AID_TOOL_NAME) ??
+      message.tool_calls.find((t) => t.type === 'function') ??
+      message.tool_calls[0]
+    let args: Record<string, unknown> = {}
+    try {
+      args = JSON.parse(toolCall?.function?.arguments || '{}') as Record<string, unknown>
+    } catch {
+      throw new Error('Invalid tool arguments from model')
+    }
+    if (args.code) {
+      args.code = await convertImageUrlsToBase64(args.code as string)
+    }
+    return normalizeVizResult(args.explanation, args.code, args.library)
+  }
+
+  let result: Record<string, unknown> = {}
+  try {
+    result = JSON.parse(message?.content || '{}') as Record<string, unknown>
+  } catch {
+    throw new Error('Model returned non-JSON content')
+  }
+  if (result.code) {
+    result.code = await convertImageUrlsToBase64(result.code as string)
+  }
+  return normalizeVizResult(result.explanation, result.code, result.library)
+}
+
 export async function runVisualizeGeneration(input: VisualizeGenerationInput): Promise<VisualizeGenerationResult> {
   const { task_description, panel_dimensions, theme, theme_colors } = input
 
@@ -198,47 +268,30 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
 
   const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo
 
-  const completion = await getOpenAI().chat.completions.create({
-    model: PROVIDER_MODEL as string,
-    messages: [
-      { role: 'system', content: systemPromptWithDimensions },
-      { role: 'user', content: task_description },
-    ],
-    tools: [displayVisualAidFunctionDeclaration],
-    temperature: 0.7,
-    max_tokens: 16384,
-  })
+  let lastError: unknown
 
-  const message = completion.choices?.[0]?.message as {
-    tool_calls?: Array<{ type: string; function?: { name?: string; arguments?: string } }>
-    content?: string | null
-  }
-
-  if (message?.tool_calls && message.tool_calls.length > 0) {
-    const toolCall =
-      message.tool_calls.find((t) => t.type === 'function' && t.function?.name === 'display_visual_aid') ??
-      message.tool_calls.find((t) => t.type === 'function') ??
-      message.tool_calls[0]
-    let args: Record<string, unknown> = {}
+  for (let attempt = 1; attempt <= MAX_VIZ_GENERATION_ATTEMPTS; attempt++) {
     try {
-      args = JSON.parse(toolCall?.function?.arguments || '{}') as Record<string, unknown>
-    } catch {
-      throw new Error('Invalid tool arguments from model')
+      const result = await generateVisualizationOnce(systemPromptWithDimensions, task_description)
+      // Strip stray `display_visual_aid(...)` calls the model sometimes appends. If a reference
+      // still survives (e.g. the whole component was wrapped in the call) or nothing is left, the
+      // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.
+      const code = stripLeakedToolCalls(result.code)
+      if (code.trim() && !codeLeaksToolName(code)) {
+        return { ...result, code }
+      }
+      console.warn(
+        `Visualization code leaked "${VISUAL_AID_TOOL_NAME}" (attempt ${attempt}/${MAX_VIZ_GENERATION_ATTEMPTS}); regenerating.`,
+      )
+    } catch (err) {
+      lastError = err
+      console.warn(`Visualization generation attempt ${attempt}/${MAX_VIZ_GENERATION_ATTEMPTS} failed:`, err)
     }
-    if (args.code) {
-      args.code = await convertImageUrlsToBase64(args.code as string)
-    }
-    return normalizeVizResult(args.explanation, args.code, args.library)
   }
 
-  let result: Record<string, unknown> = {}
-  try {
-    result = JSON.parse(message?.content || '{}') as Record<string, unknown>
-  } catch {
-    throw new Error('Model returned non-JSON content')
-  }
-  if (result.code) {
-    result.code = await convertImageUrlsToBase64(result.code as string)
-  }
-  return normalizeVizResult(result.explanation, result.code, result.library)
+  // Never return code that still leaks the tool name: it would crash in the sandbox and be persisted
+  // and rendered as a broken preview. Surface an error so callers show their retry/error path.
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Visualization generation produced unrenderable code')
 }

@@ -1,20 +1,19 @@
 'use client';
 
 import type { MouseEvent } from 'react';
-import { History, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { ChatHistory, Lesson } from './types';
 import { getChatId, getLessonId } from './types';
 
+const SESSIONS_PAGE_SIZE = 5;
+
 interface ChatHistoryPanelProps {
   chats: ChatHistory[];
   lessons: Lesson[];
-  showHistory: boolean;
-  disabled?: boolean;
-  onToggleHistory: () => void;
-  onNewChat: () => void;
   onLoadChat: (chatId: string) => void;
   onDeleteChat: (chatId: string, event: MouseEvent) => void;
 }
@@ -22,34 +21,19 @@ interface ChatHistoryPanelProps {
 export function ChatHistoryPanel({
   chats,
   lessons,
-  showHistory,
-  disabled,
-  onToggleHistory,
-  onNewChat,
   onLoadChat,
   onDeleteChat,
 }: ChatHistoryPanelProps) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold">Quick Actions</h3>
-        <div className="mt-3 space-y-2">
-          <Button variant="outline" className="w-full justify-start" onClick={onToggleHistory} disabled={disabled}>
-            <History className="mr-2 h-4 w-4" />
-            {showHistory ? 'Hide Chat History' : 'View Chat History'}
-          </Button>
-          <Button variant="outline" className="w-full justify-start" onClick={onNewChat} disabled={disabled}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Study Session
-          </Button>
-        </div>
-      </div>
+  const [visibleCount, setVisibleCount] = useState(SESSIONS_PAGE_SIZE);
+  const visibleChats = chats.slice(0, visibleCount);
+  const hasMore = chats.length > visibleCount;
 
-      {showHistory && chats.length > 0 && (
-        <div className="border-t pt-4">
-          <h3 className="mb-4 font-semibold">Recent Sessions</h3>
-          <div className="space-y-2">
-            {chats.map((chat) => {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col border-t p-4">
+      <h3 className="mb-4 shrink-0 font-semibold">Session History</h3>
+      {chats.length > 0 ? (
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {visibleChats.map((chat) => {
               const chatId = getChatId(chat);
               const lessonTitle = lessons.find((lesson) => getLessonId(lesson) === chat.lessonId)?.title;
 
@@ -86,8 +70,19 @@ export function ChatHistoryPanel({
                 </Card>
               );
             })}
-          </div>
+          {hasMore && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted-foreground"
+              onClick={() => setVisibleCount((current) => current + SESSIONS_PAGE_SIZE)}
+            >
+              Show more
+            </Button>
+          )}
         </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No study sessions yet.</p>
       )}
     </div>
   );

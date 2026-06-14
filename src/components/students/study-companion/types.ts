@@ -20,6 +20,13 @@ export interface SuggestedAction {
   prompt: string;
 }
 
+/** Payload emitted when an interactive element is regenerated in place. */
+export interface InteractiveElementUpdate {
+  code: string;
+  library: InteractiveLibrary;
+  explanation?: string;
+}
+
 export interface StudyMessage {
   role: 'user' | 'assistant';
   content: string;

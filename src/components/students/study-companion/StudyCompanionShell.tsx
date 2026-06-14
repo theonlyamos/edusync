@@ -1,21 +1,28 @@
 'use client';
 
 import type { MouseEvent } from 'react';
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, BookOpen, ChevronLeft, ChevronRight, GraduationCap, Loader2, Plus, Sparkles } from 'lucide-react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import type { LessonContext } from '@/hooks/useAudioStreaming';
+import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
+import {
+  MAX_EXPLANATION_LENGTH,
+  MAX_INTERACTIVE_CODE_LENGTH,
+  MAX_STORED_MESSAGES,
+  buildVisualizationTaskDescription,
+} from '@/lib/study-companion';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatThread } from './ChatThread';
 import { Composer } from './Composer';
 import { LessonContextPanel } from './LessonContextPanel';
 import { QuickActions } from './QuickActions';
 import { quickActions, type QuickAction } from './study-actions';
-import type { ChatHistory, Lesson, StudyIntent, StudyMessage, StudyMode, SuggestedAction, VoiceInteractiveGenEvent } from './types';
+import type { ChatHistory, InteractiveElement, InteractiveElementUpdate, Lesson, StudyIntent, StudyMessage, StudyMode, SuggestedAction, VoiceInteractiveGenEvent } from './types';
 import { getChatId, getLessonId } from './types';
 
 const starterPrompts = [
@@ -55,7 +62,6 @@ export function StudyCompanionShell() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [gradeLevel, setGradeLevel] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<string | null>(null);
@@ -63,12 +69,15 @@ export function StudyCompanionShell() {
   const [mode, setMode] = useState<StudyMode>('companion');
   const [intent, setIntent] = useState<StudyIntent>('general');
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(true);
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(false);
   const [outageNotice, setOutageNotice] = useState<OutageNotice | null>(null);
   const [localSendCount, setLocalSendCount] = useState(0);
   const chatIdRef = useRef<string | null>(null);
   const messagesRef = useRef<StudyMessage[]>([]);
   const voicePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openPanelButtonRef = useRef<HTMLButtonElement>(null);
+  const closePanelButtonRef = useRef<HTMLButtonElement>(null);
+  const contextPanelToggledRef = useRef(false);
 
   useEffect(() => {
     chatIdRef.current = currentChatId;
@@ -77,6 +86,20 @@ export function StudyCompanionShell() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Keep keyboard focus with the toggle: after the panel opens/closes, move focus to whichever
+  // control replaced the one the user just activated (it unmounts on toggle). Skip the initial mount.
+  useEffect(() => {
+    if (!contextPanelToggledRef.current) {
+      contextPanelToggledRef.current = true;
+      return;
+    }
+    if (isContextPanelOpen) {
+      closePanelButtonRef.current?.focus();
+    } else {
+      openPanelButtonRef.current?.focus();
+    }
+  }, [isContextPanelOpen]);
 
   useEffect(() => {
     return () => {
@@ -108,11 +131,6 @@ export function StudyCompanionShell() {
       studyIntent: intent,
     }),
     [gradeLevel, mode, intent],
-  );
-
-  const selectedLessonTitle = useMemo(
-    () => lessons.find((lesson) => getLessonId(lesson) === selectedLesson)?.title,
-    [lessons, selectedLesson],
   );
 
   useEffect(() => {
@@ -194,7 +212,7 @@ export function StudyCompanionShell() {
     });
   };
 
-  const refreshChatHistory = async () => {
+  const refreshChatHistory = useCallback(async () => {
     try {
       const response = await fetch('/api/students/chats');
       if (!response.ok) return;
@@ -203,7 +221,92 @@ export function StudyCompanionShell() {
     } catch (error) {
       console.warn('Unable to refresh study session history:', error);
     }
-  };
+  }, []);
+
+  const persistChatMessages = useCallback(
+    (msgs: StudyMessage[]) => {
+      const id = chatIdRef.current;
+      if (!id) return;
+      // The server stores only the last MAX_STORED_MESSAGES and the update schema rejects more, so
+      // send that same window to avoid a 400 and keep client/server in sync.
+      const trimmed = msgs.length > MAX_STORED_MESSAGES ? msgs.slice(-MAX_STORED_MESSAGES) : msgs;
+      void fetch(`/api/students/chats/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: trimmed }),
+      })
+        .then((response) => {
+          if (response.ok) void refreshChatHistory();
+        })
+        .catch(() => {});
+    },
+    [refreshChatHistory],
+  );
+
+  // Regenerate a visualization in place. The shell owns this (not the card) because it has the
+  // grade/lesson context to rebuild the same grounded prompt the original used. The state merge uses
+  // a functional update + persists the merged result, so a concurrent message append can't clobber
+  // it and the saved copy always matches what's shown.
+  const handleRegenerateElement = useCallback(
+    async (element: InteractiveElement): Promise<InteractiveElementUpdate> => {
+      const msgs = messagesRef.current;
+      const hostIndex = msgs.findIndex((message) =>
+        message.interactiveElements?.some((el) => el.id === element.id),
+      );
+      const hostLessonId =
+        (hostIndex >= 0 ? msgs[hostIndex]?.lessonId : undefined) ?? selectedLesson ?? undefined;
+      const lesson = hostLessonId ? lessons.find((item) => getLessonId(item) === hostLessonId) : undefined;
+      let latestUserContent = '';
+      for (let i = hostIndex - 1; i >= 0; i--) {
+        if (msgs[i]?.role === 'user') {
+          latestUserContent = msgs[i].content;
+          break;
+        }
+      }
+
+      const taskDescription = buildVisualizationTaskDescription({
+        request: { kind: 'visualization', taskDescription: element.taskDescription },
+        gradeLevel: gradeLevel ?? "the student's current level",
+        lesson: lesson
+          ? {
+              id: hostLessonId as string,
+              title: lesson.title,
+              subject: lesson.subject,
+              objectives: lesson.objectives ?? null,
+              gradelevel: lesson.gradeLevel ?? lesson.gradelevel ?? null,
+            }
+          : undefined,
+        latestUserContent,
+      });
+
+      const result = await requestVisualizationFromGenAi({ taskDescription });
+      const update: InteractiveElementUpdate = {
+        code: result.code.slice(0, MAX_INTERACTIVE_CODE_LENGTH),
+        library: result.library,
+        explanation: result.explanation
+          ? result.explanation.trim().slice(0, MAX_EXPLANATION_LENGTH)
+          : undefined,
+      };
+
+      setMessages((current) => {
+        const next = current.map((message) =>
+          message.interactiveElements?.some((el) => el.id === element.id)
+            ? {
+                ...message,
+                interactiveElements: message.interactiveElements.map((el) =>
+                  el.id === element.id ? { ...el, ...update } : el,
+                ),
+              }
+            : message,
+        );
+        persistChatMessages(next);
+        return next;
+      });
+
+      return update;
+    },
+    [gradeLevel, lessons, selectedLesson, persistChatMessages],
+  );
 
   const scheduleVoiceChatPersist = () => {
     if (!chatIdRef.current) return;
@@ -211,17 +314,7 @@ export function StudyCompanionShell() {
     if (voicePersistTimerRef.current) clearTimeout(voicePersistTimerRef.current);
     voicePersistTimerRef.current = setTimeout(() => {
       voicePersistTimerRef.current = null;
-      const id = chatIdRef.current;
-      if (!id) return;
-      void fetch(`/api/students/chats/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messagesRef.current }),
-      })
-        .then((response) => {
-          if (response.ok) void refreshChatHistory();
-        })
-        .catch(() => {});
+      persistChatMessages(messagesRef.current);
     }, 200);
   };
 
@@ -323,13 +416,13 @@ export function StudyCompanionShell() {
     }
   };
 
-  const selectAction = (action: QuickAction | SuggestedAction) => {
+  const selectAction = useCallback((action: QuickAction | SuggestedAction) => {
     const nextMode = 'mode' in action ? action.mode : action.intent === 'explain' || action.intent === 'walkthrough' ? 'tutor' : 'companion';
     setMode(nextMode);
     setIntent(action.intent);
     setInput(action.prompt);
     setOutageNotice(null);
-  };
+  }, []);
 
   const sendMessage = async (options?: { retryContent?: string; retryMode?: StudyMode; retryIntent?: StudyIntent }) => {
     const messageContent = (options?.retryContent ?? input).trim();
@@ -486,49 +579,23 @@ export function StudyCompanionShell() {
 
   return (
     <DashboardLayout fullBleed>
-      <div className="flex h-[100vh]">
+      <div className="relative flex h-[100vh]">
+        {/* Hanging open button: floats over the top-right of the page when the context panel is
+            closed, so it never shifts the chat layout. */}
+        {!isContextPanelOpen && (
+          <Button
+            ref={openPanelButtonRef}
+            variant="outline"
+            size="sm"
+            className="absolute right-4 top-4 z-20 h-9 w-9 p-0 shadow-md"
+            aria-label="Show study context panel"
+            title="Show study context"
+            onClick={() => setIsContextPanelOpen(true)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b p-4">
-            <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <h1 className="text-lg font-semibold">Study Companion</h1>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  {gradeLevel && (
-                    <span className="inline-flex items-center gap-1">
-                      <GraduationCap className="h-4 w-4" />
-                      Grade {gradeLevel}
-                    </span>
-                  )}
-                  {selectedLessonTitle && (
-                    <span className="inline-flex items-center gap-1">
-                      <BookOpen className="h-4 w-4" />
-                      {selectedLessonTitle}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => startNewChat()} disabled={isLoading}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Session
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 w-9 p-0"
-                  aria-label={isContextPanelOpen ? 'Hide study context panel' : 'Show study context panel'}
-                  title={isContextPanelOpen ? 'Hide study context' : 'Show study context'}
-                  onClick={() => setIsContextPanelOpen((current) => !current)}
-                >
-                  {isContextPanelOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          </div>
-
           <div className="flex-1 overflow-y-auto p-6">
             {messages.length > 0 ? (
               <ChatThread
@@ -536,6 +603,7 @@ export function StudyCompanionShell() {
                 isLoading={isLoading}
                 forceScrollKey={localSendCount}
                 onSuggestedAction={selectAction}
+                onRegenerate={handleRegenerateElement}
               />
             ) : (
               <div className="mx-auto grid max-w-3xl gap-6">
@@ -648,26 +716,44 @@ export function StudyCompanionShell() {
           }`}
         >
           {isContextPanelOpen && (
-            <div className="h-full w-80 overflow-y-auto p-4">
-              <LessonContextPanel
-                gradeLevel={gradeLevel}
-                lessons={lessons}
-                selectedLesson={selectedLesson}
-                disabled={isLoading}
-                onLessonChange={startNewChat}
-              />
-              <div className="mt-6 border-t pt-4">
-                <ChatHistoryPanel
-                  chats={chatHistory}
+            <div className="flex h-full w-80 flex-col">
+              <div className="flex items-center justify-between gap-2 border-b p-2">
+                <Button
+                  ref={closePanelButtonRef}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label="Hide study context panel"
+                  title="Hide study context"
+                  onClick={() => setIsContextPanelOpen(false)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => startNewChat()}
+                  disabled={isLoading}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Study Session
+                </Button>
+              </div>
+              <div className="shrink-0 p-4">
+                <LessonContextPanel
+                  gradeLevel={gradeLevel}
                   lessons={lessons}
-                  showHistory={showHistory}
-                  disabled={false}
-                  onToggleHistory={() => setShowHistory((current) => !current)}
-                  onNewChat={() => startNewChat()}
-                  onLoadChat={loadChat}
-                  onDeleteChat={deleteChat}
+                  selectedLesson={selectedLesson}
+                  disabled={isLoading}
+                  onLessonChange={startNewChat}
                 />
               </div>
+              <ChatHistoryPanel
+                chats={chatHistory}
+                lessons={lessons}
+                onLoadChat={loadChat}
+                onDeleteChat={deleteChat}
+              />
             </div>
           )}
         </aside>

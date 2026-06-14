@@ -5,22 +5,27 @@ import ReactMarkdown from 'react-markdown';
 import { Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import type { StudyMessage, SuggestedAction } from './types';
+import type { InteractiveElement, InteractiveElementUpdate, StudyMessage, SuggestedAction } from './types';
 import { InteractiveElementCard } from './InteractiveElementCard';
+
+type RegenerateHandler = (element: InteractiveElement) => Promise<InteractiveElementUpdate>;
 
 interface ChatThreadProps {
   messages: StudyMessage[];
   isLoading?: boolean;
   forceScrollKey?: number;
   onSuggestedAction: (action: SuggestedAction) => void;
+  onRegenerate?: RegenerateHandler;
 }
 
 const MessageBubble = memo(function MessageBubble({
   message,
   onSuggestedAction,
+  onRegenerate,
 }: {
   message: StudyMessage;
   onSuggestedAction: (action: SuggestedAction) => void;
+  onRegenerate?: RegenerateHandler;
 }) {
   const isUser = message.role === 'user';
 
@@ -44,7 +49,7 @@ const MessageBubble = memo(function MessageBubble({
         {!isUser && message.interactiveElements?.length ? (
           <div className="mt-4 space-y-4">
             {message.interactiveElements.map((el) => (
-              <InteractiveElementCard key={el.id} element={el} />
+              <InteractiveElementCard key={el.id} element={el} onRegenerate={onRegenerate} />
             ))}
           </div>
         ) : null}
@@ -83,7 +88,7 @@ const MessageBubble = memo(function MessageBubble({
   );
 });
 
-export function ChatThread({ messages, isLoading, forceScrollKey, onSuggestedAction }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, forceScrollKey, onSuggestedAction, onRegenerate }: ChatThreadProps) {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
@@ -119,7 +124,12 @@ export function ChatThread({ messages, isLoading, forceScrollKey, onSuggestedAct
   return (
     <div ref={threadRef} className="mx-auto max-w-3xl space-y-6">
       {messages.map((message, index) => (
-        <MessageBubble key={`${message.timestamp}-${index}`} message={message} onSuggestedAction={onSuggestedAction} />
+        <MessageBubble
+          key={`${message.timestamp}-${index}`}
+          message={message}
+          onSuggestedAction={onSuggestedAction}
+          onRegenerate={onRegenerate}
+        />
       ))}
       {isLoading && (
         <div className="flex justify-start">

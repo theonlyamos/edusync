@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { VisualizationSkeleton } from './VisualizationSkeleton';
 
 interface SafeCodeRunnerProps {
   code: string;
@@ -153,30 +154,8 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   }, [code, library]);
 
   return (
-    <div className="relative w-full">
-      {isLoading && (
-        <div
-          className="absolute inset-0 flex min-h-[50vh] flex-col gap-4 rounded border border-gray-100 bg-gray-50 p-6"
-          role="status"
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <span className="sr-only">Loading your interactive preview. This usually takes a few seconds.</span>
-          <div className="h-7 w-2/3 max-w-sm rounded-md bg-gray-200 animate-pulse" />
-          <div className="flex min-h-[200px] flex-1 flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
-            <div className="h-4 w-full rounded bg-gray-100 animate-pulse" />
-            <div className="h-4 w-11/12 rounded bg-gray-100 animate-pulse" />
-            <div className="mt-2 flex flex-1 gap-3">
-              <div className="h-full min-h-[120px] flex-1 rounded-lg bg-gray-100 animate-pulse" />
-              <div className="flex w-28 flex-col justify-center gap-2">
-                <div className="h-3 w-full rounded bg-gray-100 animate-pulse" />
-                <div className="h-8 w-full rounded-md bg-gray-200 animate-pulse" />
-              </div>
-            </div>
-          </div>
-          <p className="text-center text-sm text-gray-500">Loading your interactive preview…</p>
-        </div>
-      )}
+    <div className="relative h-full w-full">
+      {isLoading && <VisualizationSkeleton />}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-red-50 rounded">
           <div className="text-sm text-red-600">{error}</div>
@@ -185,7 +164,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       <iframe
         ref={iframeRef}
         title="Code Preview"
-        className="w-full h-screen border border-gray-200 rounded bg-white"
+        className="w-full h-full border border-gray-200 rounded bg-white"
         sandbox="allow-scripts"
         allow={library === 'p5' ? 'accelerometer; gyroscope; magnetometer' : undefined}
         style={{ display: isLoading || error ? 'none' : 'block' }}
