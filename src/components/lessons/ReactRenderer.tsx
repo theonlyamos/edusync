@@ -711,7 +711,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       <iframe
         ref={iframeRef}
         title="React Component Preview"
-        className="w-full h-full border-0 rounded-lg bg-white"
+        className="w-full h-full border-0 rounded-lg bg-transparent"
         sandbox="allow-scripts"
         style={{ display: isLoading || error ? 'none' : 'block' }}
       />

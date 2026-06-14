@@ -43,11 +43,11 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${sensorPermissionsMeta}
   <style>
-    body { 
-      margin: 0; 
-      padding: 0; 
-      overflow: hidden; 
-      background: #fff; 
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
       font-family: Arial, sans-serif;
       width: 100vw;
       height: 100vh;
@@ -164,7 +164,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       <iframe
         ref={iframeRef}
         title="Code Preview"
-        className="w-full h-full border border-gray-200 rounded bg-white"
+        className="w-full h-full border border-gray-200 rounded bg-transparent"
         sandbox="allow-scripts"
         allow={library === 'p5' ? 'accelerometer; gyroscope; magnetometer' : undefined}
         style={{ display: isLoading || error ? 'none' : 'block' }}
