@@ -22,8 +22,9 @@ const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  // ── AI providers (Gemini primary, OpenAI fallback) ──
-  AI_PROVIDER: z.enum(['GEMINI', 'OPENAI']).default('GEMINI'),
+  // ── AI providers (Gemini primary, OpenAI/others as fallback) ──
+  // Free-form: providers vary by deployment (GEMINI, OPENAI, CEREBRAS, ...).
+  AI_PROVIDER: z.string().default('GEMINI'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_BASE_URL: z.string().url().optional(),
   OPENAI_API_KEY: z.string().optional(),
