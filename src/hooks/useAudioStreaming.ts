@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity } from '@google/genai';
+import { GoogleGenAI, Modality, LiveServerMessage, FunctionResponseScheduling, StartSensitivity } from '@google/genai';
 import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
@@ -91,12 +91,22 @@ export function useAudioStreaming(
     const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
     const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
-    liveOptionsRef.current = liveOptions;
     const lessonContextRef = useRef<LessonContext | undefined>(lessonContext);
-    lessonContextRef.current = lessonContext;
     const topicRef = useRef(topic);
-    topicRef.current = topic;
+    // Sync latest props into refs from an effect (not during render) so the async Gemini
+    // callbacks read current values without the compiler's no-ref-write-during-render error.
+    useEffect(() => {
+        liveOptionsRef.current = liveOptions;
+        lessonContextRef.current = lessonContext;
+        topicRef.current = topic;
+    }, [liveOptions, lessonContext, topic]);
     const onTranscriptionListenerRef = useRef<((payload: LiveTranscriptionPayload) => void) | null>(null);
+    // Indirection refs: these callbacks are declared further down but referenced by
+    // earlier-declared callbacks. Calling through a ref avoids the temporal-dead-zone
+    // forward reference the bundler rejects, and keeps the existing xRef.current?.(...) idiom.
+    const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number) => Promise<void>) | null>(null);
+    const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], audioParts: string[]) => void) | null>(null);
+    const playGeminiAudioChunksRef = useRef<((rawData: string[]) => void) | null>(null);
     /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
     const liveUserTranscriptRef = useRef('');
     const liveAssistantTranscriptRef = useRef('');
@@ -412,7 +422,7 @@ export function useAudioStreaming(
             tempContext.close();
 
             // --- Step 2 & 3: Use browser-based Gemini Live connection ---
-            await startGeminiLiveSession(stream, sampleRate);
+            await startGeminiLiveSessionRef.current?.(stream, sampleRate);
 
         } catch (err: any) {
             console.error('Failed to start streaming:', err);
@@ -490,11 +500,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 const lessonHint =
                     lessonCtx?.title && lessonCtx.title.trim().length > 0
                         ? {
-                              title: lessonCtx.title,
-                              subject: lessonCtx.subject || 'general',
-                              objectives: lessonCtx.objectives ?? null,
-                              content: lessonCtx.content ?? null,
-                          }
+                            title: lessonCtx.title,
+                            subject: lessonCtx.subject || 'general',
+                            objectives: lessonCtx.objectives ?? null,
+                            content: lessonCtx.content ?? null,
+                        }
                         : undefined;
                 finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
             } else {
@@ -553,13 +563,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     realtimeInputConfig: {
                         automaticActivityDetection: {
                             disabled: false,
-                            // Detect speech start readily. The previous prefixPaddingMs:20 /
-                            // silenceDurationMs:100 overrides ended each turn after ~100ms of
-                            // silence — shorter than normal inter-word pauses — so Gemini
-                            // chopped utterances into fragments and never committed a usable
-                            // turn (model appeared deaf). Omit the timing overrides to use
-                            // Gemini's conversational defaults; leave end sensitivity at its
-                            // default (LOW = won't cut off eagerly).
                             startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
                         }
                     },
@@ -586,7 +589,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
-                        processGeminiResponseQueue(responseQueue, audioParts);
+                        processGeminiResponseQueueRef.current?.(responseQueue, audioParts);
                     },
                     onerror: (e: ErrorEvent) => {
                         console.error('Gemini Live session error:', e.message);
@@ -661,7 +664,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         reconnectTimeoutRef.current = setTimeout(() => {
                             if (!isStreamingRef.current || isManualDisconnectRef.current) return;
                             isResumingSessionRef.current = true;
-                            startGeminiLiveSession(streamRef.current!, 16000);
+                            startGeminiLiveSessionRef.current?.(streamRef.current!, 16000);
                         }, delay);
                     }
                 }
@@ -811,13 +814,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     'audio/ogg',
                 ];
                 for (const t of candidates) {
-                    // @ts-ignore
                     if (typeof MediaRecorder !== 'undefined' && (MediaRecorder as any).isTypeSupported?.(t)) return t;
                 }
                 return 'audio/webm';
             };
             try {
-                // @ts-ignore
                 if (typeof MediaRecorder !== 'undefined') {
                     const mimeType = pickType();
                     userChunksRef.current = [];
@@ -853,7 +854,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             console.error('Failed to start Gemini Live session:', error);
             throw error;
         }
-    }, []);
+    }, [cleanupAudioResources, maybeUploadSegment]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
@@ -994,7 +995,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     (message?.serverContent?.turnComplete && audioParts.length > 0);
 
                 if (shouldFlush) {
-                    playGeminiAudioChunks(audioParts.slice());
+                    playGeminiAudioChunksRef.current?.(audioParts.slice());
                     audioParts.length = 0;
                 }
             }
@@ -1029,7 +1030,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             }
 
             const ensureAiRecorder = () => {
-                // @ts-ignore
                 if (typeof MediaRecorder === 'undefined') return;
                 if (!playbackDestinationRef.current) return;
                 if (aiRecorderRef.current) return;
@@ -1041,7 +1041,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         'audio/ogg',
                     ];
                     for (const t of candidates) {
-                        // @ts-ignore
                         if ((MediaRecorder as any).isTypeSupported?.(t)) return t;
                     }
                     return 'audio/webm';
@@ -1123,7 +1122,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         } catch (e) {
             console.error('Failed to play Gemini audio chunks:', e);
         }
-    }, []);
+    }, [maybeUploadSegment]);
+
+    // Point the indirection refs at the latest callbacks from an effect (not during render);
+    // they're read only by async Gemini handlers that run after mount.
+    useEffect(() => {
+        startGeminiLiveSessionRef.current = startGeminiLiveSession;
+        processGeminiResponseQueueRef.current = processGeminiResponseQueue;
+        playGeminiAudioChunksRef.current = playGeminiAudioChunks;
+    }, [startGeminiLiveSession, processGeminiResponseQueue, playGeminiAudioChunks]);
 
     // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
