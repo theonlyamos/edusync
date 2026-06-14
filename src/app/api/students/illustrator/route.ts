@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  baseURL: process.env.GEMINI_BASE_URL,
-  apiKey: process.env.GEMINI_API_KEY,
-});
+// Lazy: constructed per request so importing this route during `next build`
+// page-data collection never runs the OpenAI constructor, which throws when no
+// API key is set (e.g. in CI).
+function getOpenAI(): OpenAI {
+  return new OpenAI({
+    baseURL: process.env.GEMINI_BASE_URL,
+    apiKey: process.env.GEMINI_API_KEY,
+  });
+}
 
 const SYSTEM_PROMPT = `You are an expert educator and creative coder. When a student asks a question, you:
 - Decide if p5.js (2D/creative coding), Three.js (3D/geometry/visualization), or React (interactive components/quizzes) is best for the illustration.
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
     const { question } = await req.json();
     if (!question) return NextResponse.json({ error: 'Missing question' }, { status: 400 });
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: 'gemini-2.5-pro-preview-05-06',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },

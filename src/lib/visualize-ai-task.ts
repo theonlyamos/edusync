@@ -31,7 +31,14 @@ if (AI_PROVIDER !== 'GROQ') {
   }
 }
 
-const openai = new OpenAI(openaiConfig)
+// Lazy + memoized: constructed on first use, not at module load, so importing
+// this file during `next build` page-data collection never runs the OpenAI
+// constructor (which throws when no API key is set, e.g. in CI).
+let _openai: OpenAI | null = null
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI(openaiConfig)
+  return _openai
+}
 
 const SYSTEM_PROMPT = `### Persona & Goal
 You are an expert at creating interactive, educational visualizations and quizzes that make concepts tangible through direct manipulation and active recall — the learner should be able to change a parameter, answer a question, and immediately see the effect or get feedback. Prioritize interactivity and insight over decoration.
@@ -191,7 +198,7 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
 
   const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: PROVIDER_MODEL as string,
     messages: [
       { role: 'system', content: systemPromptWithDimensions },
