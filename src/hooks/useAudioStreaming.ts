@@ -105,6 +105,12 @@ export function useAudioStreaming(
     const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Auto-resume loop guards: cap rapid reconnects so a socket that keeps
+    // closing right after connecting (e.g. after a tool turn) can't thrash forever.
+    const sessionOpenedAtRef = useRef<number | null>(null);
+    const resumeAttemptsRef = useRef<number>(0);
+    const MAX_RESUME_ATTEMPTS = 3;
+    const RESUME_STABLE_MS = 15000; // a session open this long is "healthy" → reset the counter
     const sessionStartedAtRef = useRef<number | null>(null);
     const currentSessionIdRef = useRef<string | null>(null);
 
@@ -375,6 +381,8 @@ export function useAudioStreaming(
 
         // Reset manual disconnect flag when starting
         isManualDisconnectRef.current = false;
+        // Fresh manual start → reset the auto-resume loop guard.
+        resumeAttemptsRef.current = 0;
 
         // Reset state
         setError('');
@@ -570,6 +578,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     onopen: () => {
                         setConnectionStatus('connected');
                         isResumingSessionRef.current = false;
+                        sessionOpenedAtRef.current = Date.now();
                     },
                     onmessage: (message: LiveServerMessage) => {
                         responseQueue.push(message);
@@ -587,20 +596,69 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
+                        // Surface the real close reason for diagnostics.
+                        console.warn('[Gemini Live] socket closed', { code: e.code, reason: e.reason });
 
                         // Clear stale session to prevent sends to a closed socket
                         geminiLiveSessionRef.current = null;
-                        if (sessionResumptionHandleRef.current && isStreamingRef.current && !isManualDisconnectRef.current && e.code !== 1000) {
-                            // Delay resumption slightly to avoid immediate reconnection
-                            setConnectionStatus('connecting');
-                            reconnectTimeoutRef.current = setTimeout(() => {
-                                isResumingSessionRef.current = true;
-                                startGeminiLiveSession(streamRef.current!, 16000);
-                            }, 1000);
+
+                        const openedAt = sessionOpenedAtRef.current;
+                        sessionOpenedAtRef.current = null;
+                        // A session that stayed open a healthy while = a genuine mid-session
+                        // drop; reset the rapid-reconnect counter so resumption can work.
+                        if (openedAt && Date.now() - openedAt >= RESUME_STABLE_MS) {
+                            resumeAttemptsRef.current = 0;
                         }
-                        else {
+
+                        // Enter the resume path only when there's a handle (original
+                        // behavior), or when we're already mid-recovery (so the bounded
+                        // retry sequence continues even after we drop a stale handle).
+                        const hasHandleOrRetrying =
+                            !!sessionResumptionHandleRef.current || resumeAttemptsRef.current > 0;
+                        const shouldTryResume =
+                            isStreamingRef.current &&
+                            !isManualDisconnectRef.current &&
+                            e.code !== 1000 &&
+                            hasHandleOrRetrying;
+
+                        if (!shouldTryResume) {
                             setConnectionStatus('disconnected');
+                            return;
                         }
+
+                        // Give up after too many rapid reconnects to avoid an endless
+                        // connect→close→resume loop (the previous behavior).
+                        if (resumeAttemptsRef.current >= MAX_RESUME_ATTEMPTS) {
+                            console.warn(
+                                `[Gemini Live] giving up after ${resumeAttemptsRef.current} rapid reconnect attempts`,
+                            );
+                            sessionResumptionHandleRef.current = null;
+                            resumeAttemptsRef.current = 0;
+                            isManualDisconnectRef.current = true;
+                            setError('Live session ended: the connection kept dropping. Please try again.');
+                            cleanupAudioResources();
+                            setIsStreaming(false);
+                            isStreamingRef.current = false;
+                            setIsSpeaking(false);
+                            setConnectionStatus('disconnected');
+                            return;
+                        }
+
+                        resumeAttemptsRef.current += 1;
+                        // After the first rapid failure, drop a possibly-stale resumption
+                        // handle so the next attempt is a clean fresh connect.
+                        if (resumeAttemptsRef.current >= 2) {
+                            sessionResumptionHandleRef.current = null;
+                        }
+
+                        // Exponential backoff: 1s, 2s, 4s … capped at 8s.
+                        const delay = Math.min(1000 * 2 ** (resumeAttemptsRef.current - 1), 8000);
+                        setConnectionStatus('connecting');
+                        reconnectTimeoutRef.current = setTimeout(() => {
+                            if (!isStreamingRef.current || isManualDisconnectRef.current) return;
+                            isResumingSessionRef.current = true;
+                            startGeminiLiveSession(streamRef.current!, 16000);
+                        }, delay);
                     }
                 }
             };
