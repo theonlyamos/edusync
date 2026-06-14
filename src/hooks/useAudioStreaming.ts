@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity, EndSensitivity } from '@google/genai';
+import { GoogleGenAI, MediaResolution, Modality, LiveServerMessage, Type, Behavior, FunctionResponseScheduling, StartSensitivity } from '@google/genai';
 import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
@@ -553,10 +553,14 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     realtimeInputConfig: {
                         automaticActivityDetection: {
                             disabled: false,
-                            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
-                            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
-                            prefixPaddingMs: 20,
-                            silenceDurationMs: 100,
+                            // Detect speech start readily. The previous prefixPaddingMs:20 /
+                            // silenceDurationMs:100 overrides ended each turn after ~100ms of
+                            // silence — shorter than normal inter-word pauses — so Gemini
+                            // chopped utterances into fragments and never committed a usable
+                            // turn (model appeared deaf). Omit the timing overrides to use
+                            // Gemini's conversational defaults; leave end sensitivity at its
+                            // default (LOW = won't cut off eagerly).
+                            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
                         }
                     },
                     systemInstruction: finalSystemPrompt,
