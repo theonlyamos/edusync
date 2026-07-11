@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useContext, useMemo } from 'react';
+import { useState, useEffect, useContext, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,13 +20,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Wand2, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Wand2, X } from "lucide-react";
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
+import { mergeGeneratedLessonDraft } from '@/lib/lesson-artifacts/authoring-ui';
 
 interface Teacher {
   subjects?: string[];
   grades?: string[];
+}
+
+interface Organization {
+  id: string;
+  name: string;
 }
 
 interface Lesson {
@@ -33,7 +40,7 @@ interface Lesson {
   title: string;
   subject: string;
   gradeLevel: string;
-  objectives: string;
+  objectives: string | string[];
   content: string;
 }
 
@@ -43,15 +50,28 @@ interface CreateLessonFormProps {
 }
 
 export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
+  const router = useRouter();
   const session = useContext(SupabaseSessionContext);
   const [title, setTitle] = useState(lesson?.title || '');
   const [subject, setSubject] = useState(lesson?.subject || '');
   const [gradeLevel, setGradeLevel] = useState(lesson?.gradeLevel || '');
-  const [objectives, setObjectives] = useState(lesson?.objectives || '');
+  const [objectives, setObjectives] = useState<string[]>(
+    Array.isArray(lesson?.objectives)
+      ? lesson.objectives
+      : lesson?.objectives
+        ? lesson.objectives.split('\n').filter(Boolean)
+        : [''],
+  );
+  const [teacherBrief, setTeacherBrief] = useState('');
   const [loading, setLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState(lesson?.content || '');
   const [teacherData, setTeacherData] = useState<Teacher | null>(null);
   const [loadingTeacher, setLoadingTeacher] = useState(false);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [organizationId, setOrganizationId] = useState('');
+  const [organizationStatus, setOrganizationStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [organizationError, setOrganizationError] = useState('');
+  const [formError, setFormError] = useState('');
 
   const isEditing = !!lesson;
 
@@ -95,9 +115,31 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
     fetchTeacherData();
   }, [session?.user?.id]);
 
+  const loadOrganizations = useCallback(async () => {
+    if (!session?.user?.id || isEditing) return;
+    setOrganizationStatus('loading');
+    setOrganizationError('');
+    try {
+      const response = await fetch('/api/organizations');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not load your organizations');
+      const next: Organization[] = data.organizations ?? [];
+      setOrganizations(next);
+      setOrganizationId((current) => current || (next.length === 1 ? next[0].id : ''));
+      setOrganizationStatus('ready');
+    } catch (error) {
+      setOrganizations([]);
+      setOrganizationStatus('error');
+      setOrganizationError(error instanceof Error ? error.message : 'Could not load your organizations');
+    }
+  }, [session?.user?.id, isEditing]);
+
+  useEffect(() => { queueMicrotask(() => void loadOrganizations()); }, [loadOrganizations]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setFormError('');
 
     try {
       const url = isEditing ? `/api/lessons/${lesson._id}` : '/api/lessons/create';
@@ -114,25 +156,31 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
           gradeLevel,
           objectives,
           content: generatedContent,
+          organizationId: organizationId || null,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(isEditing ? 'Failed to update lesson' : 'Failed to create lesson');
-      }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || (isEditing ? 'Failed to update lesson' : 'Failed to create lesson'));
 
       onClose();
+      if (!isEditing && result.id) router.push(`/teachers/lessons/${result.id}?tab=studio`);
     } catch (error) {
       console.error(isEditing ? 'Error updating lesson:' : 'Error creating lesson:', error);
+      setFormError(error instanceof Error ? error.message : 'Could not save the lesson');
     } finally {
       setLoading(false);
     }
   };
 
   const generateLessonContent = async () => {
+    const hasExistingGeneratedFields = generatedContent.trim() || objectives.some((objective) => objective.trim());
+    const replaceExisting = Boolean(hasExistingGeneratedFields) && window.confirm('Replace your current objectives and lesson content with a new AI draft? Choose Cancel to preserve them and fill only fields that are still empty. Your title will always be preserved.');
+    if (hasExistingGeneratedFields && !replaceExisting && generatedContent.trim() && objectives.some((objective) => objective.trim())) return;
     setLoading(true);
+    setFormError('');
     try {
-      const response = await fetch('/api/lessons/generate', {
+      const response = await fetch('/api/teachers/lessons/generate-draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,18 +189,23 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
           title,
           subject,
           gradeLevel,
-          objectives,
+          teacherBrief,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate lesson content');
-      }
-
-      const data = await response.json();
-      setGeneratedContent(data.content);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Failed to generate lesson content');
+      const merged = mergeGeneratedLessonDraft({
+        current: { title, objectives, content: generatedContent },
+        generated: { title: data.title, objectives: data.objectives, content: data.content },
+        replaceExisting,
+      });
+      setTitle(merged.title);
+      setObjectives(merged.objectives);
+      setGeneratedContent(merged.content);
     } catch (error) {
       console.error('Error generating lesson content:', error);
+      setFormError(error instanceof Error ? error.message : 'Could not generate the lesson draft');
     } finally {
       setLoading(false);
     }
@@ -171,6 +224,9 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
           <Button
             variant="ghost"
             size="icon"
+            type="button"
+            aria-label="Close lesson form"
+            title="Close"
             onClick={onClose}
           >
             <X className="h-4 w-4" />
@@ -197,7 +253,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
                 value={subject}
                 onValueChange={setSubject}
               >
-                <SelectTrigger>
+                <SelectTrigger id="subject" aria-label="Subject">
                   <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select subject"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -216,7 +272,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
                 value={gradeLevel}
                 onValueChange={setGradeLevel}
               >
-                <SelectTrigger>
+                <SelectTrigger id="gradeLevel" aria-label="Grade level">
                   <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select grade level"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -230,16 +286,62 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
             </div>
           </div>
 
+          {!isEditing && organizationStatus === 'loading' && (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading organization access…</div>
+          )}
+
+          {!isEditing && organizationStatus === 'error' && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <p className="text-destructive">{organizationError}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void loadOrganizations()}>Try again</Button>
+            </div>
+          )}
+
+          {!isEditing && organizationStatus === 'ready' && organizations.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="organization">Organization</Label>
+              <Select value={organizationId} onValueChange={setOrganizationId}>
+                <SelectTrigger id="organization"><SelectValue placeholder="Select organization" /></SelectTrigger>
+                <SelectContent>
+                  {organizations.map((organization) => (
+                    <SelectItem key={organization.id} value={organization.id}>{organization.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="objectives">Learning Objectives</Label>
+            <Label htmlFor="teacherBrief">Teacher brief <span className="font-normal text-muted-foreground">(optional)</span></Label>
             <textarea
-              id="objectives"
+              id="teacherBrief"
               className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Enter the learning objectives for this lesson"
-              value={objectives}
-              onChange={(e) => setObjectives(e.target.value)}
-              required
+              placeholder="What should students understand? Mention standards, misconceptions, or context."
+              value={teacherBrief}
+              onChange={(e) => setTeacherBrief(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Learning Objectives</Label>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setObjectives((items) => [...items, ''])}><Plus className="mr-1 h-3.5 w-3.5" />Add</Button>
+            </div>
+            <div className="space-y-2">
+              {objectives.map((objective, index) => (
+                <div key={index} className="flex gap-2">
+                  <span className="mt-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">{index + 1}</span>
+                  <Input
+                    aria-label={`Learning objective ${index + 1}`}
+                    value={objective}
+                    onChange={(event) => setObjectives((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                    placeholder="Students will be able to…"
+                    required
+                  />
+                  <Button type="button" size="icon" variant="ghost" aria-label={`Remove learning objective ${index + 1}`} title="Remove objective" disabled={objectives.length === 1} onClick={() => setObjectives((items) => items.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+            </div>
           </div>
 
           {generatedContent && (
@@ -252,6 +354,8 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
               </div>
             </div>
           )}
+
+          {formError && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{formError}</div>}
         </CardContent>
 
         <CardFooter className="flex justify-between">
@@ -268,16 +372,16 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
               type="button"
               variant="secondary"
               onClick={generateLessonContent}
-              disabled={loading || !title || !subject || !gradeLevel || !objectives}
+              disabled={loading || !title || !subject || !gradeLevel || (!isEditing && organizationStatus !== 'ready')}
             >
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Wand2 className="mr-2 h-4 w-4" />
               )}
-              {isEditing ? 'Regenerate Content' : 'Generate with AI'}
+              {isEditing ? 'Regenerate Draft' : 'Generate Draft'}
             </Button>
-            <Button type="submit" disabled={loading || !generatedContent}>
+            <Button type="submit" disabled={loading || !generatedContent || objectives.some((objective) => !objective.trim()) || (!isEditing && organizationStatus !== 'ready') || (organizations.length > 1 && !organizationId)}>
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (

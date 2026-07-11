@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { InteractiveElement, InteractiveElementUpdate, StudyMessage, SuggestedAction } from './types';
 import { InteractiveElementCard } from './InteractiveElementCard';
+import { LearningArtifactCard } from './LearningArtifactCard';
 
 type RegenerateHandler = (element: InteractiveElement) => Promise<InteractiveElementUpdate>;
 
@@ -51,6 +52,11 @@ const MessageBubble = memo(function MessageBubble({
             {message.interactiveElements.map((el) => (
               <InteractiveElementCard key={el.id} element={el} onRegenerate={onRegenerate} />
             ))}
+          </div>
+        ) : null}
+        {!isUser && message.learningArtifacts?.length ? (
+          <div className="mt-4 space-y-4">
+            {message.learningArtifacts.map((artifact) => <LearningArtifactCard key={artifact.instanceId} attachment={artifact} />)}
           </div>
         ) : null}
         {(message.followUpQuestions?.length || message.suggestedActions?.length) && !isUser ? (

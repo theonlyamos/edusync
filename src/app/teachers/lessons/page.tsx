@@ -17,6 +17,7 @@ import {
 import { Plus } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
+import { formatLessonDate } from '@/lib/lesson-record';
 
 interface Lesson {
   _id: string;
@@ -24,7 +25,7 @@ interface Lesson {
   subject: string;
   gradeLevel: string;
   objectives: string;
-  createdAt: string;
+  createdAt: string | null;
 }
 
 export default function LessonsPage() {
@@ -89,7 +90,7 @@ export default function LessonsPage() {
                   </CardContent>
                   <CardFooter>
                     <p className="text-sm text-muted-foreground">
-                      Created: {new Date(lesson.createdAt).toLocaleDateString()}
+                      Created: {formatLessonDate(lesson.createdAt)}
                     </p>
                   </CardFooter>
                 </Card>
@@ -113,4 +114,4 @@ export default function LessonsPage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

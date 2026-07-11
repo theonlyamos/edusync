@@ -65,6 +65,9 @@ export function StudyCompanionShell() {
   const [gradeLevel, setGradeLevel] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<string | null>(null);
+  const [learningRunId, setLearningRunId] = useState<string | null>(null);
+  const [learningObjectives, setLearningObjectives] = useState<Array<{ id: string; text: string; position: number }>>([]);
+  const [activeObjectiveId, setActiveObjectiveId] = useState<string | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [mode, setMode] = useState<StudyMode>('companion');
   const [intent, setIntent] = useState<StudyIntent>('general');
@@ -324,6 +327,9 @@ export function StudyCompanionShell() {
     const title = lesson ? `Study session: ${lesson.title}` : 'General study session';
 
     setSelectedLesson(lessonId || null);
+    setLearningRunId(null);
+    setLearningObjectives([]);
+    setActiveObjectiveId(null);
     setCurrentChatId(null);
     chatIdRef.current = null;
     setMode('companion');
@@ -348,6 +354,18 @@ export function StudyCompanionShell() {
       setCurrentChatId(chatId);
       setMessages([initialMessage]);
       updateHistoryTimestamp(chatId, title, lessonId);
+      if (lessonId) {
+        const runResponse = await fetch('/api/learning-runs', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lessonId, mode: 'tutor' }),
+        });
+        if (runResponse.ok) {
+          const runData = await runResponse.json();
+          setLearningRunId(runData.run.id);
+          setLearningObjectives(runData.objectives);
+          setActiveObjectiveId(runData.run.active_objective_id);
+        }
+      }
       return chatId;
     } catch (error) {
       console.error('Error creating study session:', error);
@@ -371,12 +389,27 @@ export function StudyCompanionShell() {
 
       setMessages(loadedMessages);
       setSelectedLesson(chat.lessonId || null);
+      setLearningRunId(null);
+      setLearningObjectives([]);
+      setActiveObjectiveId(null);
       const loadedChatId = chat._id ?? chat.id ?? null;
       chatIdRef.current = loadedChatId;
       setCurrentChatId(loadedChatId);
       setMode(lastAssistant?.mode ?? 'companion');
       setIntent(lastAssistant?.intent ?? 'general');
       setOutageNotice(null);
+      if (chat.lessonId) {
+        const runResponse = await fetch('/api/learning-runs', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lessonId: chat.lessonId, mode: 'tutor' }),
+        });
+        if (runResponse.ok) {
+          const runData = await runResponse.json();
+          setLearningRunId(runData.run.id);
+          setLearningObjectives(runData.objectives);
+          setActiveObjectiveId(runData.run.active_objective_id);
+        }
+      }
     } catch (error) {
       console.error('Error loading study session:', error);
       toast({
@@ -399,6 +432,9 @@ export function StudyCompanionShell() {
         setCurrentChatId(null);
         chatIdRef.current = null;
         setSelectedLesson(null);
+        setLearningRunId(null);
+        setLearningObjectives([]);
+        setActiveObjectiveId(null);
         setMode('companion');
         setIntent('general');
         setOutageNotice(null);
@@ -459,6 +495,7 @@ export function StudyCompanionShell() {
           chatId: currentChatId,
           mode: requestMode,
           intent: requestIntent,
+          learningRunId,
         }),
       });
 
@@ -746,6 +783,15 @@ export function StudyCompanionShell() {
                   selectedLesson={selectedLesson}
                   disabled={isLoading}
                   onLessonChange={startNewChat}
+                  objectives={learningObjectives}
+                  selectedObjectiveId={activeObjectiveId}
+                  onObjectiveChange={async (objectiveId) => {
+                    if (!learningRunId) return;
+                    const response = await fetch(`/api/learning-runs/${learningRunId}/objective`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ objectiveId }),
+                    });
+                    if (response.ok) setActiveObjectiveId(objectiveId);
+                  }}
                 />
               </div>
               <ChatHistoryPanel

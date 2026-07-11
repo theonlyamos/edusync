@@ -170,6 +170,9 @@ importers:
       three:
         specifier: ^0.172.0
         version: 0.172.0
+      tsx:
+        specifier: ^4.22.0
+        version: 4.22.0
       utf-8-validate:
         specifier: ^6.0.6
         version: 6.0.6
@@ -225,9 +228,6 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.19(tsx@4.22.0))
-      tsx:
-        specifier: ^4.22.0
-        version: 4.22.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

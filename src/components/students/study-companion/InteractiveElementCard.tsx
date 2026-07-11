@@ -21,10 +21,12 @@ const SafeCodeRunner = dynamic(() => import('@/components/lessons/SafeCodeRunner
 export function InteractiveElementCard({
   element,
   onRegenerate,
+  onReady,
 }: {
   element: InteractiveElement;
   /** Generates a replacement (grade/lesson-grounded) and persists it; resolves with the new viz. */
   onRegenerate?: (element: InteractiveElement) => Promise<InteractiveElementUpdate>;
+  onReady?: () => void;
 }) {
   const { toast } = useToast();
   const [code, setCode] = useState(element.code);
@@ -122,12 +124,13 @@ export function InteractiveElementCard({
               </Button>
             </div>
           ) : library === 'react' ? (
-            <ReactRenderer key={renderKey} code={code} onError={(msg) => setRenderError(msg)} />
+            <ReactRenderer key={renderKey} code={code} onReady={onReady} onError={(msg) => setRenderError(msg)} />
           ) : (
             <SafeCodeRunner
               key={renderKey}
               code={code}
               library={library}
+              onReady={onReady}
               onError={(msg) => setRenderError(msg)}
             />
           )}

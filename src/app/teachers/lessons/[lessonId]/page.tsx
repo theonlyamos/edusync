@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +25,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
 import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
+import { formatLessonDate } from '@/lib/lesson-record';
 
 interface Resource {
     _id: string;
@@ -48,8 +50,8 @@ interface Lesson {
     objectives: string | string[];
     content: string;
     teacherId: string;
-    createdAt: string;
-    updatedAt: string;
+    createdAt: string | null;
+    updatedAt: string | null;
 }
 
 interface Content {
@@ -71,12 +73,17 @@ interface ContentGenerationFormProps {
 export default function LessonPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { toast } = useToast();
     const [lesson, setLesson] = useState<Lesson | null>(null);
     const [contents, setContents] = useState<Content[]>([]);
     const [resources, setResources] = useState<Resource[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+
+    useEffect(() => {
+        if (searchParams.get('tab') === 'studio') setActiveTab('studio');
+    }, [searchParams]);
 
     useEffect(() => {
         if (params.lessonId) {
@@ -240,6 +247,7 @@ export default function LessonPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
                         <TabsTrigger value="resources">Resources</TabsTrigger>
                     </TabsList>
@@ -264,13 +272,13 @@ export default function LessonPage() {
                                         <div>
                                             <p className="text-sm text-muted-foreground">Created</p>
                                             <p className="font-medium">
-                                                {new Date(lesson.createdAt).toLocaleDateString()}
+                                                {formatLessonDate(lesson.createdAt)}
                                             </p>
                                         </div>
                                         <div>
                                             <p className="text-sm text-muted-foreground">Last Updated</p>
                                             <p className="font-medium">
-                                                {new Date(lesson.updatedAt).toLocaleDateString()}
+                                                {formatLessonDate(lesson.updatedAt)}
                                             </p>
                                         </div>
                                     </div>
@@ -322,6 +330,10 @@ export default function LessonPage() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="studio" className="mt-6">
+                        <ObjectiveAuthoringWorkspace lessonId={params.lessonId as string} />
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">
@@ -481,4 +493,4 @@ export default function LessonPage() {
             </div>
         </DashboardLayout>
     );
-} 
+}

@@ -1,6 +1,17 @@
 import { NextResponse, NextRequest } from "next/server";
+import { z } from 'zod';
 import { getServerSession } from "@/lib/auth";
 import { createSSRUserSupabase } from "@/lib/supabase.server";
+import { mapLessonRecord } from '@/lib/lesson-record';
+
+const updateLessonSchema = z.object({
+    title: z.string().trim().min(1).max(160),
+    subject: z.string().trim().min(1).max(120),
+    gradeLevel: z.string().trim().min(1).max(80),
+    objectives: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
+    content: z.string().max(100_000).nullable().default(null),
+    organizationId: z.string().uuid().nullable().optional(),
+});
 
 export async function GET(
     request: NextRequest,
@@ -31,7 +42,7 @@ export async function GET(
             );
         }
 
-        return NextResponse.json(lesson);
+        return NextResponse.json(mapLessonRecord(lesson));
     } catch (error) {
         console.error("Error fetching lesson:", error);
         return NextResponse.json(
@@ -58,7 +69,7 @@ export async function PUT(
         const { lessonId } = await params;
         const { data: existing, error: findErr } = await supabase
             .from('lessons')
-            .select('id, teacher')
+            .select('id, teacher_id')
             .eq('id', lessonId)
             .maybeSingle();
         if (findErr) throw findErr;
@@ -70,23 +81,40 @@ export async function PUT(
             );
         }
 
-        if (session.user.role === 'teacher' && String(existing.teacher) !== session.user.id) {
-            return NextResponse.json(
-                { error: "Not authorized to update this lesson" },
-                { status: 403 }
-            );
+        if (session.user.role === 'teacher') {
+            const { data: teacher, error: teacherError } = await supabase
+                .from('teachers')
+                .select('user_id')
+                .eq('id', existing.teacher_id)
+                .maybeSingle();
+            if (teacherError) throw teacherError;
+            if (teacher?.user_id !== session.user.id) {
+                return NextResponse.json(
+                    { error: "Not authorized to update this lesson" },
+                    { status: 403 }
+                );
+            }
         }
 
-        const body = await request.json();
+        const body = updateLessonSchema.parse(await request.json());
+        const updateData = {
+            title: body.title,
+            subject: body.subject,
+            gradelevel: body.gradeLevel,
+            objectives: body.objectives,
+            content: body.content,
+            organization_id: body.organizationId ?? null,
+            updated_at: new Date().toISOString(),
+        };
         const { data: updatedLesson, error } = await supabase
             .from('lessons')
-            .update(body)
+            .update(updateData)
             .eq('id', lessonId)
-            .select('*, teacher:users(name)')
+            .select('*')
             .maybeSingle();
         if (error) throw error;
 
-        return NextResponse.json(updatedLesson);
+        return NextResponse.json(mapLessonRecord(updatedLesson));
     } catch (error) {
         console.error("Error updating lesson:", error);
         return NextResponse.json(
@@ -97,7 +125,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ lessonId: string }> }
 ) {
     try {
@@ -113,7 +141,7 @@ export async function DELETE(
         const { lessonId } = await params;
         const { data: lesson, error: findErr } = await supabase
             .from('lessons')
-            .select('id, teacher')
+            .select('id, teacher_id')
             .eq('id', lessonId)
             .maybeSingle();
         if (findErr) throw findErr;
@@ -125,11 +153,19 @@ export async function DELETE(
             );
         }
 
-        if (session.user.role === 'teacher' && String(lesson.teacher) !== session.user.id) {
-            return NextResponse.json(
-                { error: "Not authorized to delete this lesson" },
-                { status: 403 }
-            );
+        if (session.user.role === 'teacher') {
+            const { data: teacher, error: teacherError } = await supabase
+                .from('teachers')
+                .select('user_id')
+                .eq('id', lesson.teacher_id)
+                .maybeSingle();
+            if (teacherError) throw teacherError;
+            if (teacher?.user_id !== session.user.id) {
+                return NextResponse.json(
+                    { error: "Not authorized to delete this lesson" },
+                    { status: 403 }
+                );
+            }
         }
 
         const { error } = await supabase
@@ -146,4 +182,4 @@ export async function DELETE(
             { status: 500 }
         );
     }
-} 
+}

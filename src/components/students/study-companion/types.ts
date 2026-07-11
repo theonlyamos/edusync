@@ -20,6 +20,17 @@ export interface SuggestedAction {
   prompt: string;
 }
 
+export interface LearningArtifactAttachment {
+  instanceId: string;
+  source: 'teacher_approved' | 'session_generated';
+  exhausted: boolean;
+  artifact: {
+    id: string;
+    kind: 'interactive_visualization' | 'generated_image' | 'structured_quiz' | 'visual_quiz' | 'uploaded_media';
+    payload: any;
+  } & Record<string, unknown>;
+}
+
 /** Payload emitted when an interactive element is regenerated in place. */
 export interface InteractiveElementUpdate {
   code: string;
@@ -38,6 +49,7 @@ export interface StudyMessage {
   intent?: StudyIntent;
   confidence?: 'shaky' | 'okay' | 'confident' | 'mastered';
   interactiveElements?: InteractiveElement[];
+  learningArtifacts?: LearningArtifactAttachment[];
   /** Client-only: voice viz placeholder row before `/api/genai/visualize` completes */
   voiceVizPlaceholderId?: string;
 }
