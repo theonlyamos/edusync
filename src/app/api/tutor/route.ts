@@ -23,6 +23,8 @@ import {
 } from '@/lib/study-companion';
 import { randomUUID } from 'crypto';
 import { runVisualizeGeneration } from '@/lib/visualize-ai-task';
+import { resolveNextLearningArtifact, retrieveLearningGrounding } from '@/lib/lesson-artifacts/learning-server';
+import { buildUntrustedGroundingContext } from '@/lib/lesson-artifacts/grounding';
 
 const getSystemPrompt = (
     gradeLevel: string,
@@ -202,8 +204,19 @@ export async function POST(req: NextRequest) {
         }
 
         try {
+            let groundingContext = '';
+            if (parsedBody.data.learningRunId) {
+                try {
+                    const chunks = await retrieveLearningGrounding(parsedBody.data.learningRunId, content);
+                    if (chunks.length) {
+                        groundingContext = buildUntrustedGroundingContext(chunks);
+                    }
+                } catch (groundingError) {
+                    console.error('Lesson grounding retrieval failed:', groundingError);
+                }
+            }
             const assistantRaw = await generateAICompletion(
-                getSystemPrompt(gradeLevel, mode, intent, lesson),
+                [getSystemPrompt(gradeLevel, mode, intent, lesson), groundingContext].filter(Boolean).join('\n\n'),
                 buildTrimmedPrompt(messagesWithUser, mode, intent),
                 undefined,
                 true
@@ -222,7 +235,23 @@ export async function POST(req: NextRequest) {
 
             let visualizationStatus: 'ok' | 'failed' | undefined;
             const vizReq = parsedResponse.interactiveElementRequest;
-            if (vizReq?.kind === 'visualization') {
+            const artifactKind = intent === 'quiz' ? 'quiz' : vizReq?.kind === 'visualization' ? 'visualization' : null;
+            if (parsedBody.data.learningRunId && artifactKind) {
+                try {
+                    const attachment = await resolveNextLearningArtifact({
+                        runId: parsedBody.data.learningRunId,
+                        kind: artifactKind,
+                        requestId: `tutor:${persistedChatId}:${randomUUID()}`,
+                    });
+                    if ('artifact' in attachment) {
+                        tutorMessage.learningArtifacts = [attachment];
+                        visualizationStatus = 'ok';
+                    }
+                } catch (artifactError) {
+                    console.error('Published lesson artifact resolution failed:', artifactError);
+                    visualizationStatus = 'failed';
+                }
+            } else if (vizReq?.kind === 'visualization') {
                 const taskDescription = buildVisualizationTaskDescription({
                     request: vizReq,
                     gradeLevel,

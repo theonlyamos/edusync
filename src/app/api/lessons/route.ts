@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase.server";
+import { mapLessonRecord } from '@/lib/lesson-record';
 
 export async function GET(request: Request) {
     try {
@@ -51,11 +52,9 @@ export async function GET(request: Request) {
         if (error) throw error;
 
         // Transform to include teacher name/email at top level
-        const lessons = (data ?? []).map((lesson: any) => ({
+        const lessons = (data ?? []).map((lesson: any) => mapLessonRecord({
             ...lesson,
-            _id: lesson.id,
             teacherName: lesson.teacher_info?.users?.name || null,
-            gradeLevel: lesson.gradelevel,
         }));
 
         return NextResponse.json(lessons);
@@ -96,4 +95,4 @@ export async function POST(request: Request) {
             { status: 500 }
         );
     }
-} 
+}

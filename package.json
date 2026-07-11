@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "worker:content": "tsx scripts/content-worker.ts"
   },
   "dependencies": {
     "@edusync/shared": "workspace:*",
@@ -67,6 +68,7 @@
     "stripe": "^18.5.0",
     "tailwind-merge": "^2.6.1",
     "three": "^0.172.0",
+    "tsx": "^4.22.0",
     "utf-8-validate": "^6.0.6",
     "uuid": "^11.1.1",
     "ws": "^8.20.1",
@@ -87,7 +89,6 @@
     "postcss": "^8.5.14",
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
-    "tsx": "^4.22.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
   },

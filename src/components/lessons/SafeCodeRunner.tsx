@@ -7,17 +7,22 @@ interface SafeCodeRunnerProps {
   code: string;
   library: 'p5' | 'three' | 'react';
   onError?: (error: string) => void;
+  onReady?: () => void;
 }
 
-export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code, library, onError }) => {
+export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code, library, onError, onReady }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const onErrorRef = useRef(onError);
+  const onReadyRef = useRef(onReady);
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
     if (!iframeRef.current || !code) return;
@@ -85,6 +90,10 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       c.className = 'error';
       c.textContent = 'Error: ' + (e.message || 'Unknown error');
       document.body.replaceChildren(c);
+      window.parent.postMessage({ type: 'lesson-visualization-error', error: e.message || 'Unknown error' }, '*');
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window.parent.postMessage({ type: 'lesson-visualization-error', error: e.reason?.message || String(e.reason || 'Unknown error') }, '*');
     });
     if (!document.getElementById('canvas-container')) {
       var container = document.createElement('div');
@@ -96,6 +105,9 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       if (typeof setup === 'function' && !("setup" in window)) { window.setup = setup; }
       if (typeof draw === 'function' && !("draw" in window)) { window.draw = draw; }
     } catch (e) {}
+    requestAnimationFrame(function () {
+      window.parent.postMessage({ type: 'lesson-visualization-ready' }, '*');
+    });
   </script>`;
       } else if (library === 'three') {
         htmlContent += `
@@ -107,8 +119,15 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       c.className = 'error';
       c.textContent = 'Error: ' + (e.message || 'Unknown error');
       document.body.replaceChildren(c);
+      window.parent.postMessage({ type: 'lesson-visualization-error', error: e.message || 'Unknown error' }, '*');
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window.parent.postMessage({ type: 'lesson-visualization-error', error: e.reason?.message || String(e.reason || 'Unknown error') }, '*');
     });
     ${code}
+    requestAnimationFrame(function () {
+      window.parent.postMessage({ type: 'lesson-visualization-ready' }, '*');
+    });
   </script>`;
       } else if (library === 'react') {
         // For React, we'll render a safe message instead of executing arbitrary code
@@ -129,7 +148,10 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       iframe.srcdoc = htmlContent;
 
       const handleLoad = () => {
-        setIsLoading(false);
+        if (library === 'react') {
+          setIsLoading(false);
+          onReadyRef.current?.();
+        }
       };
 
       const handleError = () => {
@@ -138,10 +160,25 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
         onErrorRef.current?.('Failed to load visualization');
       };
 
+      const handleMessage = (event: MessageEvent) => {
+        if (event.source !== iframe.contentWindow) return;
+        if (event.data?.type === 'lesson-visualization-ready') {
+          setIsLoading(false);
+          onReadyRef.current?.();
+        } else if (event.data?.type === 'lesson-visualization-error') {
+          const message = event.data.error || 'Failed to render visualization';
+          setError(message);
+          setIsLoading(false);
+          onErrorRef.current?.(message);
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
       iframe.addEventListener('load', handleLoad);
       iframe.addEventListener('error', handleError);
 
       return () => {
+        window.removeEventListener('message', handleMessage);
         iframe.removeEventListener('load', handleLoad);
         iframe.removeEventListener('error', handleError);
       };

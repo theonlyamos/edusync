@@ -11,6 +11,9 @@ interface LessonContextPanelProps {
   selectedLesson: string | null;
   disabled?: boolean;
   onLessonChange: (lessonId?: string) => void;
+  objectives?: Array<{ id: string; text: string; position: number }>;
+  selectedObjectiveId?: string | null;
+  onObjectiveChange?: (objectiveId: string) => void;
 }
 
 export function LessonContextPanel({
@@ -19,6 +22,9 @@ export function LessonContextPanel({
   selectedLesson,
   disabled,
   onLessonChange,
+  objectives = [],
+  selectedObjectiveId,
+  onObjectiveChange,
 }: LessonContextPanelProps) {
   const selectedLessonTitle = lessons.find((lesson) => getLessonId(lesson) === selectedLesson)?.title;
 
@@ -59,6 +65,17 @@ export function LessonContextPanel({
           })}
         </SelectContent>
       </Select>
+      {objectives.length > 0 && onObjectiveChange && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active objective</p>
+          <Select value={selectedObjectiveId ?? objectives[0].id} onValueChange={onObjectiveChange} disabled={disabled}>
+            <SelectTrigger><SelectValue placeholder="Select an objective" /></SelectTrigger>
+            <SelectContent>
+              {objectives.map((objective) => <SelectItem key={objective.id} value={objective.id}>{objective.position + 1}. {objective.text}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }

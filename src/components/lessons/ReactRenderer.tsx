@@ -1,7 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import {
+  fetchReactSandboxSources,
+  renderReactSandboxScripts,
+  type ReactSandboxSourceText,
+} from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+
+let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
+const loadReactSandboxSources = () => {
+  reactSandboxSourcesPromise ??= fetchReactSandboxSources();
+  return reactSandboxSourcesPromise;
+};
 
 /**
  * ReactRenderer - Sandboxed React Component Renderer
@@ -27,6 +38,7 @@ import { VisualizationSkeleton } from './VisualizationSkeleton';
 interface ReactRendererProps {
   code: string;
   onError?: (error: string) => void;
+  onReady?: () => void;
 }
 
 // Cached regex patterns - avoid recompilation on every render
@@ -52,20 +64,39 @@ function sanitizeSandboxReactCode(input: string): string {
   return body.join('\n');
 }
 
-export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError }) => {
+export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError, onReady }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [runtimeSources, setRuntimeSources] = useState<ReactSandboxSourceText>();
   const loadTimeoutRef = useRef<number | null>(null);
 
   // Stable reference for onError to prevent unnecessary effect re-runs
   const onErrorRef = useRef(onError);
+  const onReadyRef = useRef(onReady);
   useEffect(() => {
     onErrorRef.current = onError;
   }, [onError]);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
-    if (!iframeRef.current || !code) return;
+    let active = true;
+    loadReactSandboxSources()
+      .then((sources) => { if (active) setRuntimeSources(sources); })
+      .catch((runtimeError) => {
+        if (!active) return;
+        const message = runtimeError instanceof Error ? runtimeError.message : 'Failed to load React runtime assets';
+        setError(message);
+        setIsLoading(false);
+        onErrorRef.current?.(message);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!iframeRef.current || !code || !runtimeSources) return;
 
     setIsLoading(true);
     setError(null);
@@ -96,6 +127,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
       // Generate a nonce for CSP
       const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const reactRuntimeScripts = renderReactSandboxScripts(nonce, runtimeSources);
 
       // Create sandboxed HTML content with all dependencies
       const htmlContent = `<!DOCTYPE html>
@@ -106,6 +138,15 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
   <script nonce="${nonce}">
+    window.__lessonRenderFailed = false;
+    function reportLessonRenderError(error) {
+      window.__lessonRenderFailed = true;
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'react-render-error', error: error?.message || String(error || 'Failed to render component') }, '*');
+      }
+    }
+    window.addEventListener('error', function (event) { reportLessonRenderError(event.error || event.message); });
+    window.addEventListener('unhandledrejection', function (event) { reportLessonRenderError(event.reason); });
     // Opaque-origin storage shim: sandboxed (non-same-origin) frames throw on
     // localStorage/sessionStorage access. Provide in-memory replacements so
     // generated code that uses them still runs (data is per-render, not persisted).
@@ -131,20 +172,6 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         }
       });
     })();
-  </script>
-  <!-- Tailwind CSS Play CDN for runtime styling -->
-  <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
-  <script nonce="${nonce}">
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#3b82f6',
-            secondary: '#6b7280',
-          }
-        }
-      }
-    }
   </script>
   <style>
     * { box-sizing: border-box; }
@@ -180,19 +207,11 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <div id="root"></div>
   
   <!-- React and ReactDOM -->
-  <script nonce="${nonce}" type="module">
-    import React from 'https://esm.sh/react@19';
-    import * as ReactDOMClient from 'https://esm.sh/react-dom@19/client';
-    
-    window.React = React;
-    window.ReactDOM = ReactDOMClient;
-    window.reactLoaded = true;
-    window.reactDOMLoaded = true;
-  </script>
+  ${reactRuntimeScripts}
   
   <!-- Recharts - Load conditionally as ES module -->
   ${needsRecharts ? `<script nonce="${nonce}" type="module">
-    import * as Recharts from 'https://esm.sh/recharts@3.1.2?deps=react@19,react-dom@19';
+    import * as Recharts from 'https://esm.sh/recharts@3.1.2?deps=react@18.3.1,react-dom@18.3.1';
     window.Recharts = Recharts;
     window.rechartsLoaded = true;
   </script>` : `<script nonce="${nonce}">
@@ -202,7 +221,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   
   <!-- React-Leaflet - Load conditionally as ES module -->
   ${needsLeaflet ? `<script nonce="${nonce}" type="module">
-    import * as ReactLeaflet from 'https://esm.sh/react-leaflet@5.0.0-rc.2?deps=react@19,react-dom@19';
+    import * as ReactLeaflet from 'https://esm.sh/react-leaflet@4.2.1?deps=react@18.3.1,react-dom@18.3.1';
     import L from 'https://esm.sh/leaflet@1.9.4';
     
     // Configure Leaflet marker icons
@@ -227,6 +246,27 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     (function() {
       const needsRecharts = ${needsRecharts ? 'true' : 'false'};
       const needsLeaflet = ${needsLeaflet ? 'true' : 'false'};
+      function loadOptionalTailwind() {
+        if (document.querySelector('script[data-lesson-tailwind]')) return;
+        const tailwindScript = document.createElement('script');
+        tailwindScript.src = 'https://cdn.tailwindcss.com';
+        tailwindScript.async = true;
+        tailwindScript.dataset.lessonTailwind = 'true';
+        tailwindScript.addEventListener('load', function () {
+          if (!window.tailwind) return;
+          window.tailwind.config = {
+            theme: {
+              extend: {
+                colors: {
+                  primary: '#3b82f6',
+                  secondary: '#6b7280'
+                }
+              }
+            }
+          };
+        });
+        document.head.appendChild(tailwindScript);
+      }
       // Wait for React and ReactDOM to load
       function waitForReact(callback, maxAttempts = 100) {
         if (window.React && window.ReactDOM && window.reactLoaded && window.reactDOMLoaded) {
@@ -600,11 +640,24 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
             MapContainer, TileLayer, Marker, Popup, Polyline, Polygon,
             Circle, Rectangle, useMap, useMapEvent, L
           );
-          const root = ReactDOM.createRoot(document.getElementById('root'));
-          root.render(React.createElement(ComponentFunction));
-          if (window.parent !== window) {
-            window.parent.postMessage({ type: 'react-render-ready' }, '*');
+          class LessonRenderBoundary extends React.Component {
+            componentDidCatch(error) {
+              reportLessonRenderError(error);
+            }
+            render() {
+              return this.props.children;
+            }
           }
+          const root = ReactDOM.createRoot(document.getElementById('root'));
+          ReactDOM.flushSync(function () {
+            root.render(React.createElement(LessonRenderBoundary, null, React.createElement(ComponentFunction)));
+          });
+          setTimeout(function () {
+            if (!window.__lessonRenderFailed && window.parent !== window) {
+              window.parent.postMessage({ type: 'react-render-ready' }, '*');
+              setTimeout(loadOptionalTailwind, 0);
+            }
+          }, 0);
         } catch (err) {
           const errorDiv = document.createElement('div');
           errorDiv.className = 'error';
@@ -628,10 +681,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         }
       };
 
-      const handleLoad = () => {
-        clearLoadTimeout();
-        setIsLoading(false);
-      };
+      const handleLoad = () => undefined;
 
       const handleError = () => {
         clearLoadTimeout();
@@ -643,9 +693,11 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
       // Listen for error/success messages from iframe
       const handleMessage = (event: MessageEvent) => {
+        if (event.source !== iframe.contentWindow) return;
         if (event.data?.type === 'react-render-ready') {
           clearLoadTimeout();
           setIsLoading(false);
+          onReadyRef.current?.();
           return;
         }
         if (event.data?.type === 'react-render-error') {
@@ -670,21 +722,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
       iframe.srcdoc = htmlContent;
 
-      // Fallback: if load event is missed, check readyState
-      const readyCheckId = window.setTimeout(() => {
-        try {
-          if (iframe.contentDocument?.readyState === 'complete') {
-            clearLoadTimeout();
-            setIsLoading(false);
-          }
-        } catch {
-          // Ignore cross-origin access errors
-        }
-      }, 250);
-
       return () => {
         clearLoadTimeout();
-        window.clearTimeout(readyCheckId);
         window.removeEventListener('message', handleMessage);
         iframe.removeEventListener('load', handleLoad);
         iframe.removeEventListener('error', handleError);
@@ -695,7 +734,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       setIsLoading(false);
       onErrorRef.current?.(errorMsg);
     }
-  }, [code]); // Only depend on code - onError is tracked via ref
+  }, [code, runtimeSources]); // onError/onReady are tracked via refs
 
   return (
     <div className="relative w-full h-full">

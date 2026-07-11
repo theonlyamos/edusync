@@ -1,12 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { CookieAdapter } from '@/lib/auth'
 import { env } from '@/lib/env'
+import { createAdminSupabase } from '@/lib/supabase-admin'
 
 export function createServerSupabase() {
-    const { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = env()
-    return createClient(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return createAdminSupabase()
 }
 
 export async function createSSRUserSupabase(adapter?: CookieAdapter) {

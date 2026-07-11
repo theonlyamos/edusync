@@ -30,6 +30,17 @@ export interface InteractiveElementRequest {
     taskDescription: string;
 }
 
+export interface LearningArtifactAttachment {
+    instanceId: string;
+    source: 'teacher_approved' | 'session_generated';
+    exhausted: boolean;
+    artifact: {
+        id: string;
+        kind: 'interactive_visualization' | 'generated_image' | 'structured_quiz' | 'visual_quiz' | 'uploaded_media';
+        payload: Record<string, unknown>;
+    } & Record<string, unknown>;
+}
+
 export interface StudyMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -41,6 +52,7 @@ export interface StudyMessage {
     intent?: StudyIntent;
     confidence?: 'shaky' | 'okay' | 'confident' | 'mastered';
     interactiveElements?: InteractiveElement[];
+    learningArtifacts?: LearningArtifactAttachment[];
 }
 
 export interface ChatRow {
@@ -102,6 +114,17 @@ export const interactiveElementRequestSchema = z.object({
     taskDescription: z.string().trim().min(1).max(MAX_TASK_DESCRIPTION_LENGTH),
 });
 
+export const learningArtifactAttachmentSchema = z.object({
+    instanceId: z.string().uuid(),
+    source: z.enum(['teacher_approved', 'session_generated']),
+    exhausted: z.boolean(),
+    artifact: z.object({
+        id: z.string(),
+        kind: z.enum(['interactive_visualization', 'generated_image', 'structured_quiz', 'visual_quiz', 'uploaded_media']),
+        payload: z.record(z.unknown()),
+    }).passthrough(),
+});
+
 export const studyMessageSchema = z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string().trim().min(1).max(MAX_CONTENT_LENGTH),
@@ -113,14 +136,16 @@ export const studyMessageSchema = z.object({
     intent: studyIntentSchema.optional(),
     confidence: z.enum(['shaky', 'okay', 'confident', 'mastered']).optional(),
     interactiveElements: z.array(interactiveElementSchema).max(MAX_INTERACTIVE_ELEMENTS_PER_MESSAGE).optional(),
+    learningArtifacts: z.array(learningArtifactAttachmentSchema).max(1).optional(),
 });
 
 /** Core fields only; interactive elements validated separately so bad blobs don't drop whole messages */
-export const studyMessageCoreSchema = studyMessageSchema.omit({ interactiveElements: true });
+export const studyMessageCoreSchema = studyMessageSchema.omit({ interactiveElements: true, learningArtifacts: true });
 export const tutorRequestSchema = z.object({
     chatId: z.string().uuid().optional().nullable(),
     content: z.string().trim().min(1).max(MAX_CONTENT_LENGTH),
     lessonId: z.string().uuid().optional().nullable(),
+    learningRunId: z.string().uuid().optional().nullable(),
     mode: studyModeSchema.catch('companion'),
     intent: studyIntentSchema.catch('general'),
 });
@@ -157,7 +182,7 @@ export const normalizeMessages = (messages: unknown, maxMessages = MAX_STORED_ME
         .flatMap((message): StudyMessage[] => {
             if (!message || typeof message !== 'object') return [];
             const raw = message as Record<string, unknown>;
-            const { interactiveElements: rawIe, ...rest } = raw;
+            const { interactiveElements: rawIe, learningArtifacts: rawArtifacts, ...rest } = raw;
             const core = studyMessageCoreSchema.safeParse(rest);
             if (!core.success) return [];
 
@@ -173,6 +198,12 @@ export const normalizeMessages = (messages: unknown, maxMessages = MAX_STORED_ME
                     interactiveElements = parsed;
                 }
             }
+            const parsedArtifacts = Array.isArray(rawArtifacts)
+                ? rawArtifacts.flatMap((artifact) => {
+                    const result = learningArtifactAttachmentSchema.safeParse(artifact);
+                    return result.success ? [result.data as LearningArtifactAttachment] : [];
+                }).slice(0, 1)
+                : [];
 
             return [
                 {
@@ -186,6 +217,7 @@ export const normalizeMessages = (messages: unknown, maxMessages = MAX_STORED_ME
                     intent: core.data.intent,
                     confidence: core.data.confidence,
                     interactiveElements,
+                    learningArtifacts: parsedArtifacts.length ? parsedArtifacts : undefined,
                 },
             ];
         });
