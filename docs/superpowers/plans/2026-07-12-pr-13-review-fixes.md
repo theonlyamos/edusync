@@ -4,7 +4,7 @@
 
 **Goal:** Close the three unresolved PR #13 review findings by making content jobs server-write-only, preserving and authorizing lesson organization ownership, and restoring deletion of non-approved lesson artifacts.
 
-**Architecture:** Put request-shape and organization-transfer decisions in a small, side-effect-free lesson-update module, while the lesson route remains the I/O coordinator. Keep the final lesson mutation on the authenticated Supabase client and use a service-role client only to read membership evidence. Add a forward-only `0035` migration as the atomic database boundary for job privileges, organization reassignment, and artifact immutability, plus a transactional SQL acceptance script for environments where the migration is applied.
+**Architecture:** Put request-shape and organization-transfer decisions in a small, side-effect-free lesson-update module, while the lesson route remains the I/O coordinator. Keep the final lesson mutation on the authenticated Supabase client and use a service-role client only to read membership evidence. Add a forward-only `0035` migration as the atomic database boundary for job privileges, organization reassignment, and artifact immutability, plus split prerequisite, catalog, and rollback-only DML verification driven by a fail-closed PowerShell runner.
 
 **Tech Stack:** Next.js 16, TypeScript 5.9, Zod 3, Supabase/PostgreSQL RLS and trigger functions, Vitest 4, pnpm 10, PowerShell/psql rollout commands.
 
@@ -17,14 +17,16 @@
 - Omitted `organizationId` preserves ownership; explicit `null` and malformed UUIDs are rejected; edit mode must omit the property entirely.
 - A real teacher reassignment requires active `owner` or `admin` membership in the current organization, when present, and the target organization. A global admin is exempt from membership checks.
 - The route may use `createServerSupabase()` only for trusted membership reads. The final lesson update must use `createSSRUserSupabase()` so the database trigger sees the authenticated actor.
+- Authenticated lesson updates have no table-level `UPDATE` grant. Their exact column allowlist is `title`, `subject`, `gradelevel`, `objectives`, `content`, `organization_id`, and `updated_at`; authenticated global admins receive no protected-column exception.
 - Existing job reservations remain attributed to their original organization. No backfill or transfer of queued/running jobs is in scope.
 - Source-contract tests supplement behavioral tests; they are not the sole proof of route or database behavior.
 - Apply each production change only after its focused regression test fails for the expected reason.
+- Both isolated PostgreSQL runner modes (`canonical` and `upgrade`) are mandatory pre-merge gates. Missing database access is a blocked verification result, not permission to merge on source tests alone.
 
 ## Planning Discoveries and Scope Boundaries
 
-- The raw historical migration chain is not replayable: `0021_add_teacherid_to_lessons_assessments.sql` creates `teacher_id` but indexes nonexistent `teacherid` columns. This task must not rewrite that applied file. A clean-environment gate therefore starts from an operator-provided canonical schema baseline at `0034`, then applies `0035`. Repairing historical replay or checking in a new baseline is a separate migration-governance decision.
-- `enable_rls_migration.sql` contains legacy `lessons.teacher`/`admins` update policies. Migration `0035` must replace those lesson manager policies with `can_manage_lesson(id)` policies so normalized teacher/admin updates can reach the new organization trigger.
+- The raw historical migration chain is not replayable: `0021_add_teacherid_to_lessons_assessments.sql` creates `teacher_id` but indexes nonexistent `teacherid` columns. This task must not rewrite that applied file. Database gates therefore start from an operator-provided empty canonical schema baseline at `0034` and a separate representative upgrade-state clone at `0034`, then independently apply `0035`. Repairing historical replay or checking in a new baseline is a separate migration-governance decision.
+- `enable_rls_migration.sql` contains legacy `lessons.teacher`/`admins` manager policies and broad authenticated updates. Migration `0035` must replace those policies with normalized manager policies and replace table-level lesson `UPDATE` with explicit editable-column grants.
 - `claim_content_jobs` claims globally, not by fixture ID. Full DML verification is allowed only on an isolated disposable database with no pre-existing queued/running jobs. Shared staging and production may run catalog-only verification, never the claim/DML matrix.
 
 ---
@@ -39,6 +41,7 @@
 - Produces: `updateLessonSchema` and `LessonUpdateInput`.
 - Produces: `mapLessonUpdate(input, updatedAt)` with conditional `organization_id` ownership.
 - Produces: `requiredOrganizationAdminIds(input)` and `hasRequiredOrganizationAdminMemberships(requiredIds, memberships)`.
+- Produces: `isLessonOrganizationGuardError(error, organizationChangeRequested)` for narrow database-error classification.
 - Consumes: the existing API fields `title`, `subject`, `gradeLevel`, `objectives`, `content`, and optional non-null `organizationId`.
 
 - [ ] **Step 1: Write the failing schema and mapper tests**
@@ -81,6 +84,23 @@ Test these states before implementation:
 | Inactive, `member`, or missing row | unchanged required IDs | rejected |
 
 Use role strings from `DBOrganizationMember` and include owner-success, admin-success, mixed-role success, missing-source, missing-target, inactive, and ordinary-member cases.
+
+Add error-classification cases:
+
+```ts
+expect(isLessonOrganizationGuardError(
+  { code: '42501', message: 'Active owner or admin membership in target organization is required' },
+  true,
+)).toBe(true);
+expect(isLessonOrganizationGuardError(
+  { code: '42501', message: 'permission denied for table lessons' },
+  true,
+)).toBe(false);
+expect(isLessonOrganizationGuardError(
+  { code: '42501', message: 'Active owner or admin membership in target organization is required' },
+  false,
+)).toBe(false);
+```
 
 - [ ] **Step 3: Verify the new test fails**
 
@@ -164,6 +184,24 @@ export function hasRequiredOrganizationAdminMemberships(
     && membership.is_active
     && (membership.role === 'owner' || membership.role === 'admin')
   )));
+}
+
+const LESSON_ORGANIZATION_GUARD_MESSAGES = new Set([
+  'Not authorized to reassign lesson organization',
+  'Lesson organization cannot be cleared',
+  'Active owner or admin membership in current organization is required',
+  'Active owner or admin membership in target organization is required',
+]);
+
+export function isLessonOrganizationGuardError(
+  error: unknown,
+  organizationChangeRequested: boolean,
+): boolean {
+  if (!organizationChangeRequested || typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  return candidate.code === '42501'
+    && typeof candidate.message === 'string'
+    && LESSON_ORGANIZATION_GUARD_MESSAGES.has(candidate.message);
 }
 ```
 
@@ -252,7 +290,9 @@ Add focused tests for:
 6. global admin: membership query is bypassed and update succeeds;
 7. membership query error: `500`, update never called;
 8. explicit `null` or malformed UUID: `400`, update never called;
-9. database guard returns SQLSTATE `42501`: route returns `403` rather than exposing it as `500`.
+9. a real organization change returning SQLSTATE `42501` plus a known guard message: route returns `403`;
+10. a non-transfer `42501`: route returns generic `500` rather than an organization denial;
+11. a real organization change with an unknown `42501` message: route returns generic `500`.
 
 - [ ] **Step 3: Update the supplemental source contract to fail on unsafe wiring**
 
@@ -261,6 +301,7 @@ Replace the assertion that currently requires inline `organization_id: body.orga
 ```ts
 expect(route).not.toContain('organization_id: body.organizationId ?? null');
 expect(route).toContain('mapLessonUpdate(');
+expect(route).toContain('isLessonOrganizationGuardError(');
 expect(route).toContain('createServerSupabase');
 expect(route).toContain('createSSRUserSupabase');
 expect(route).toContain(".select('id, teacher_id, organization_id')");
@@ -299,8 +340,9 @@ const { data: memberships, error: membershipError } = await trustedSupabase
 
 7. return `403` before mutation if any required ID lacks an active owner/admin row;
 8. call `userSupabase.from('lessons').update(mapLessonUpdate(body, new Date().toISOString()))`;
-9. map a returned database error with code `42501` to `403` because it represents the atomic guard rejecting a raced or direct unauthorized transfer;
-10. return a Zod-specific `400` response in the catch block and retain the existing generic database failure behavior otherwise. Use stable client-facing errors: `Not authorized to reassign this lesson organization` for transfer `403`, `Invalid lesson update` for `400`, and the existing generic `Failed to update lesson` for unexpected `500`.
+9. compute `organizationChangeRequested` independently of membership lookup as `Object.hasOwn(body, 'organizationId') && body.organizationId !== existing.organization_id`;
+10. map a returned database error to the transfer-specific `403` only when `isLessonOrganizationGuardError(error, organizationChangeRequested)` is true; throw every other database error into the existing generic `500` path;
+11. return a Zod-specific `400` response in the catch block and retain the existing generic database failure behavior otherwise. Use stable client-facing errors: `Not authorized to reassign this lesson organization` for known transfer rejections, `Invalid lesson update` for `400`, and the existing generic `Failed to update lesson` for unexpected `500`.
 
 - [ ] **Step 6: Verify Task 2**
 
@@ -447,7 +489,7 @@ git commit -m "fix(lessons): preserve edit ownership"
 
 **Interfaces:**
 - Changes: `content_jobs` policies and table privileges.
-- Replaces: legacy lesson manager RLS policies with normalized manager policies and a NEW-row owner check.
+- Replaces: legacy lesson manager RLS policies with normalized manager policies, a NEW-row owner check, and an authenticated editable-column allowlist.
 - Reasserts: service-role-only execution for the three content-job-mutating RPCs.
 - Replaces: `public.prevent_approved_artifact_mutation()` and `lesson_artifacts_approved_immutable`.
 - Produces: `public.prevent_invalid_lesson_organization_reassignment()` and `lessons_organization_reassignment_guard`.
@@ -464,10 +506,14 @@ Read both `0033_objective_artifacts.sql` and `0035_harden_lesson_artifact_writes
   - `claim_content_jobs(text, integer, integer)`;
   - `enqueue_content_jobs_with_usage(uuid, uuid, jsonb, jsonb)`;
   - `create_uploaded_lesson_artifact(uuid, uuid, text, jsonb, jsonb, jsonb)`;
-- enable RLS on `public.lessons`, drop legacy `lessons_teacher_own` and `lessons_admin_all`, then idempotently create `lessons_manager_select`, `lessons_manager_update`, and `lessons_manager_delete`; update `USING` checks old-row management and `WITH CHECK` validates the NEW `teacher_id` through `can_assign_lesson_teacher(teacher_id)`;
+- wrap the complete migration in `BEGIN;` and `COMMIT;` so a failing statement cannot leave partial ACL/RLS hardening;
+- enable RLS on `public.lessons`, dynamically drop every existing `INSERT`, `UPDATE`, `DELETE`, or `ALL` policy that applies to `PUBLIC`, `anon`, or `authenticated`, drop and recreate the normalized manager policies, and leave exactly `lessons_manager_update` plus `lessons_manager_delete` as authenticated write policies; update `USING` checks old-row management and `WITH CHECK` validates the NEW `teacher_id` through `can_assign_lesson_teacher(teacher_id)`;
+- revoke broad lesson UPDATE privileges from `PUBLIC`, `anon`, and `authenticated`, then grant authenticated UPDATE only on `title`, `subject`, `gradelevel`, `objectives`, `content`, `organization_id`, and `updated_at`; legacy `teacher`, normalized `teacher_id`, and `current_publication_id` must remain non-updatable to authenticated clients;
 - artifact trigger function branches on `TG_OP = 'DELETE'`, returning `OLD` for delete and `NEW` for update;
 - both affected triggers are dropped and recreated;
 - organization trigger is `BEFORE UPDATE OF organization_id` and contains service-role bypass, `can_manage_lesson(OLD.id)`, null rejection, global-admin bypass, active owner/admin source/target checks, and SQLSTATE `42501` on every rejection.
+
+Assert the source begins with `BEGIN;` and ends with `COMMIT;`; do not rely on a deployment tool to wrap the migration.
 
 - [ ] **Step 2: Verify the migration test fails**
 
@@ -494,10 +540,30 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.content_jobs TO service_rol
 
 For each exact job-mutating RPC signature, `REVOKE ALL ... FROM PUBLIC, anon, authenticated` and `GRANT EXECUTE ... TO service_role`. Do not alter quota calculations, idempotency behavior, or existing rows.
 
-In the same forward migration, enable RLS, add a hardened NEW-row owner predicate, and replace the legacy lesson manager policies without restoring direct lesson inserts:
+Start the migration with `BEGIN;`. In the same forward migration, enable RLS, add a hardened NEW-row owner predicate, and replace all browser-applicable lesson write policies without restoring direct lesson inserts:
 
 ```sql
 ALTER TABLE public.lessons ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+  policy_row record;
+BEGIN
+  FOR policy_row IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'lessons'
+      AND cmd IN ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+      AND roles && ARRAY['public', 'anon', 'authenticated']::name[]
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON public.lessons',
+      policy_row.policyname
+    );
+  END LOOP;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.can_assign_lesson_teacher(p_teacher_id uuid)
 RETURNS boolean
@@ -542,7 +608,48 @@ CREATE POLICY lessons_manager_delete ON public.lessons
   USING (public.can_manage_lesson(id));
 ```
 
-Keep the existing student and broad teacher read policies. Lesson creation remains service-role-only through `create_lesson_draft`; do not add an authenticated insert policy. The NEW-row predicate must have tests proving a teacher cannot change `teacher_id`, while a global admin can perform an intentional ownership change.
+Keep the existing student and broad teacher read policies. Lesson creation remains service-role-only through `create_lesson_draft`; do not add an authenticated insert policy. The NEW-row predicate remains defense in depth, while column-privilege tests prove neither a teacher nor an authenticated global admin can directly change `teacher_id`; intentional ownership maintenance is service-role-only.
+
+After the policy definitions, establish the column boundary explicitly:
+
+```sql
+REVOKE UPDATE ON TABLE public.lessons FROM PUBLIC, anon, authenticated;
+
+DO $$
+DECLARE
+  lesson_columns text;
+BEGIN
+  SELECT string_agg(quote_ident(attribute.attname), ', ' ORDER BY attribute.attnum)
+  INTO lesson_columns
+  FROM pg_attribute attribute
+  WHERE attribute.attrelid = 'public.lessons'::regclass
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  IF lesson_columns IS NOT NULL THEN
+    EXECUTE format(
+      'REVOKE UPDATE (%s) ON TABLE public.lessons FROM PUBLIC, anon, authenticated',
+      lesson_columns
+    );
+  END IF;
+END;
+$$;
+
+GRANT UPDATE (
+  title,
+  subject,
+  gradelevel,
+  objectives,
+  content,
+  organization_id,
+  updated_at
+) ON public.lessons TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.lessons TO service_role;
+```
+
+Authenticated global admins follow the same editable-column allowlist. Intentional changes to `teacher`, `teacher_id`, or `current_publication_id` use a service-role maintenance path; do not restore broad authenticated UPDATE to support them.
+
+End the migration with `COMMIT;`. Any error before that boundary must roll back the complete migration.
 
 - [ ] **Step 4: Repair approved-artifact trigger returns**
 
@@ -649,85 +756,296 @@ git diff --check
 
 Expected: tests and lint pass; migration status lists only `?? supabase/migrations/0035_harden_lesson_artifact_writes.sql`; whitespace check passes.
 
-- [ ] **Step 7: Commit Task 4**
+- [ ] **Step 7: Leave Task 4 at a verified checkpoint**
 
 ```powershell
-git add supabase/migrations/0035_harden_lesson_artifact_writes.sql src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
-git commit -m "fix(db): harden lesson artifact writes"
+git status --short -- supabase/migrations/0035_harden_lesson_artifact_writes.sql src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
 ```
+
+Expected: both files remain uncommitted. Task 5 must apply the migration and pass the real PostgreSQL gate before either file is committed.
 
 ---
 
 ### Task 5: Add the transactional database acceptance gate
 
 **Files:**
-- Create: `supabase/verification/0035_harden_lesson_artifact_writes.sql`
+- Reference (already checked in with this plan): `docs/superpowers/plans/2026-07-12-pr-13-0035-dml-template.sql`
+- Create: `supabase/verification/0034_prerequisites.sql`
+- Create: `supabase/verification/0035_catalog.sql`
+- Create: `supabase/verification/0035_dml.sql`
+- Create: `scripts/verify-0035.ps1`
+- Create: `src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts`
 - Modify: `src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts`
 
 **Interfaces:**
-- Consumes: `run_dml=false` for catalog-only checks on a migrated environment, or `run_dml=true` plus a direct migration-owner connection to an isolated disposable database that can `SET ROLE authenticated` and `SET ROLE service_role`.
-- Produces: a non-zero `psql` exit on any catalog, privilege, trigger, or DML invariant failure.
-- Leaves: no fixtures, because the script runs inside `BEGIN`/`ROLLBACK`.
+- Consumes: two distinct isolated databases still at migration `0034`: an empty schema-only canonical clone and a representative upgrade-state clone. Each URL is supplied only to `scripts/verify-0035.ps1` with an explicit `-Mode` and `-ConfirmDisposable`.
+- Produces: ordered prerequisite, migration, read-only catalog, and rollback-only DML checks with a non-zero exit on any failure.
+- Leaves: migration `0035` applied to each disposable clone but no fixtures or helper functions because `0035_dml.sql` ends in `ROLLBACK`; shared targets run only `0035_catalog.sql`.
 
-- [ ] **Step 1: Extend the migration test with a failing verifier contract**
+- [ ] **Step 1: Write the failing verifier-wiring test**
 
-Read the verification file and assert it contains:
+Create `src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts` with this complete content:
 
-- `\set ON_ERROR_STOP on`, `BEGIN`, and final `ROLLBACK`;
-- a `run_dml` psql switch that always runs catalog checks and encloses fixtures/role switching/claim behavior in the DML-only branch;
-- `pg_policies`, `has_table_privilege`, `has_function_privilege`, and `pg_trigger` assertions;
-- `pg_class.relrowsecurity = true` for `public.lessons`, absence of `lessons_teacher_own`/`lessons_admin_all`, and presence of normalized manager select/update/delete policies with the NEW-row owner predicate;
-- checks for authenticated select plus denied insert/update/delete;
-- service enqueue, upload, cancel/retry, and worker-state transitions;
-- draft/rejected delete, draft update, approved update/delete rejection, and non-approved cascade;
-- null/source/target transfer rejection, owner/admin success, global-admin success, and service-role maintenance.
-- unchanged original job/usage organization and reservation count after lesson reassignment plus retry.
+```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+const normalize = (value: string) => value.replace(/\r\n/g, '\n').trim();
+
+describe('0035 PostgreSQL verification wiring', () => {
+  it('runs the isolated database gates in fail-closed order', () => {
+    const runner = read('scripts/verify-0035.ps1');
+    const preflight = runner.indexOf("Invoke-CheckedPsql 'supabase/verification/0034_prerequisites.sql'");
+    const migration = runner.indexOf("Invoke-CheckedPsql 'supabase/migrations/0035_harden_lesson_artifact_writes.sql'");
+    const catalog = runner.indexOf("Invoke-CheckedPsql 'supabase/verification/0035_catalog.sql'");
+    const dml = runner.indexOf("Invoke-CheckedPsql 'supabase/verification/0035_dml.sql'");
+    expect(runner).toContain('[switch]$ConfirmDisposable');
+    expect(runner).toContain("[ValidateSet('canonical', 'upgrade')]");
+    expect(runner).toContain('require_empty=');
+    expect(runner).toContain("$ErrorActionPreference = 'Stop'");
+    expect(runner).toContain('if ($LASTEXITCODE -ne 0)');
+    expect(preflight).toBeGreaterThan(-1);
+    expect(migration).toBeGreaterThan(preflight);
+    expect(catalog).toBeGreaterThan(migration);
+    expect(dml).toBeGreaterThan(catalog);
+    expect(runner).not.toContain('SHARED_DATABASE_URL');
+    expect(runner).not.toContain('$env:DATABASE_URL');
+  });
+
+  it('keeps shared verification read-only and isolated DML rollback-only', () => {
+    const prerequisites = read('supabase/verification/0034_prerequisites.sql').toLowerCase();
+    const catalog = read('supabase/verification/0035_catalog.sql').toLowerCase();
+    const dmlSource = read('supabase/verification/0035_dml.sql');
+    const dml = dmlSource.toLowerCase();
+    const dmlTemplate = read(
+      'docs/superpowers/plans/2026-07-12-pr-13-0035-dml-template.sql',
+    );
+    expect(prerequisites).toContain('begin read only');
+    expect(prerequisites).toContain('require_empty must be true or false');
+    expect(prerequisites).toContain('require_empty_valid');
+    expect(prerequisites).toContain('verification fixture namespace is not clean');
+    expect(catalog).toContain('begin read only');
+    expect(catalog).toContain('has_column_privilege');
+    expect(dml).toContain('begin;');
+    expect(dml).toContain('set local role authenticated');
+    expect(dml).toContain('set local role service_role');
+    expect(dml).toContain('_verify_0035_expect_error');
+    expect(dml.trimEnd()).toMatch(/rollback;\s*\\echo '0035 rollback-only dml verification passed\.'$/);
+    expect(normalize(dmlSource)).toBe(normalize(dmlTemplate));
+  });
+});
+```
 
 - [ ] **Step 2: Verify the extended test fails**
 
 Run:
 
 ```powershell
-pnpm exec vitest run src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
+pnpm exec vitest run src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts
 ```
 
-Expected: FAIL because the verification script does not exist.
+Expected: FAIL with `ENOENT` because the verifier files and runner do not exist.
 
-- [ ] **Step 3: Implement a self-contained, rollback-only SQL verifier**
+- [ ] **Step 3: Implement the split, fail-closed database verifier**
 
-The script must:
-
-1. enable `ON_ERROR_STOP`, default `run_dml` to false when omitted, and start a transaction;
-2. always verify the effective policy/privilege/trigger catalog matrix, including normalized lesson manager policies;
-3. when `run_dml=true`, preflight that the connection can assume both roles and that no queued/running content jobs pre-exist;
-4. only inside that DML branch, create deterministic fixtures and run role-switched behavior tests;
-5. use self-asserting `DO` blocks that raise on false catalog predicates, wrong row counts, wrong persisted values, or unexpected SQLSTATEs;
-6. set local JWT claims/roles exactly when exercising authenticated and service-role behavior;
-7. verify all three mutating RPC ACLs and the existing service-only `insert_generated_lesson_artifact(uuid, uuid, integer, text, integer, jsonb, jsonb, jsonb, uuid, uuid, uuid)` worker RPC;
-8. exercise the DML and trigger matrix listed in Step 1;
-9. close the conditional and roll back after successful verification.
-
-Use this psql framing:
+Create `0034_prerequisites.sql` as a read-only gate. The runner must supply `require_empty=true` for the canonical clone and `require_empty=false` for the upgrade clone; omission is an error, not a default. Both modes require a direct migration-owner connection, the normalized canonical `0034` function/policy baseline, absence of `0035`, no globally claimable jobs, and a clean deterministic fixture namespace. Canonical mode additionally requires an empty schema-only database.
 
 ```sql
 \set ON_ERROR_STOP on
-\if :{?run_dml}
+\if :{?require_empty}
 \else
-  \set run_dml false
+  \echo 'require_empty must be true or false'
+  \quit 3
 \endif
 
-BEGIN;
-\if :run_dml
+SELECT :'require_empty' IN ('true', 'false') AS require_empty_valid
+\gset
+\if :require_empty_valid
+\else
+  \echo 'require_empty must be true or false'
+  \quit 3
 \endif
+
+BEGIN READ ONLY;
+
+DO $verify_0034$
+DECLARE
+  manage_definition text;
+BEGIN
+  IF NOT pg_has_role(current_user, 'authenticated', 'MEMBER')
+    OR NOT pg_has_role(current_user, 'service_role', 'MEMBER') THEN
+    RAISE EXCEPTION 'Verification connection must be able to SET ROLE authenticated and service_role';
+  END IF;
+
+  IF to_regprocedure('public.can_manage_lesson(uuid)') IS NULL
+    OR to_regprocedure('public.claim_content_jobs(text,integer,integer)') IS NULL
+    OR to_regprocedure('public.enqueue_content_jobs_with_usage(uuid,uuid,jsonb,jsonb)') IS NULL
+    OR to_regprocedure('public.create_uploaded_lesson_artifact(uuid,uuid,text,jsonb,jsonb,jsonb)') IS NULL
+    OR to_regprocedure('public.prevent_approved_artifact_mutation()') IS NULL THEN
+    RAISE EXCEPTION 'Canonical 0034 prerequisite functions are missing';
+  END IF;
+
+  SELECT lower(pg_get_functiondef('public.can_manage_lesson(uuid)'::regprocedure))
+  INTO manage_definition;
+  IF position('l.teacher_id' IN manage_definition) = 0
+    OR position('t.user_id = auth.uid()' IN manage_definition) = 0 THEN
+    RAISE EXCEPTION 'can_manage_lesson does not match the normalized 0034 ownership baseline';
+  END IF;
+
+  IF to_regprocedure('public.can_assign_lesson_teacher(uuid)') IS NOT NULL
+    OR to_regprocedure('public.prevent_invalid_lesson_organization_reassignment()') IS NOT NULL
+    OR EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgrelid = 'public.lessons'::regclass
+        AND tgname = 'lessons_organization_reassignment_guard'
+        AND NOT tgisinternal
+    ) THEN
+    RAISE EXCEPTION 'Disposable database is already beyond migration 0034';
+  END IF;
+
+  IF (
+    SELECT count(*) FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'content_jobs'
+      AND policyname IN (
+        'content_jobs_select_own',
+        'content_jobs_insert_own',
+        'content_jobs_update_own'
+      )
+  ) <> 3 THEN
+    RAISE EXCEPTION '0034 content_jobs policy baseline is incomplete';
+  END IF;
+END;
+$verify_0034$;
+
+DO $verify_isolation$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.content_jobs WHERE status IN ('queued', 'running')
+  ) THEN
+    RAISE EXCEPTION 'Isolated verification clone contains globally claimable jobs';
+  END IF;
+
+  IF EXISTS (
+      SELECT 1 FROM public.users
+      WHERE id::text LIKE '10000000-0000-4000-8000-00000000000%'
+        OR email LIKE 'verify-%@example.invalid'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.teachers
+      WHERE id::text LIKE '20000000-0000-4000-8000-00000000000%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.organizations
+      WHERE id::text LIKE '30000000-0000-4000-8000-00000000000%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.lessons
+      WHERE id = '40000000-0000-4000-8000-000000000001'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.lesson_objectives
+      WHERE id::text LIKE '50000000-0000-4000-8000-00000000000%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.lesson_publications
+      WHERE id::text LIKE 'b0000000-0000-4000-8000-00000000000%'
+        OR content_hash LIKE 'verify:%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.content_jobs
+      WHERE id::text LIKE '60000000-0000-4000-8000-00000000000%'
+        OR idempotency_key LIKE 'verify:%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.lesson_artifacts
+      WHERE id::text LIKE '80000000-0000-4000-8000-00000000000%'
+        OR series_id::text LIKE 'a0000000-0000-4000-8000-00000000000%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.lesson_assets
+      WHERE id = '90000000-0000-4000-8000-000000000001'
+        OR storage_path LIKE 'verification/%'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.organization_ai_usage
+      WHERE reference_id LIKE 'verify:%'
+    ) THEN
+    RAISE EXCEPTION 'Verification fixture namespace is not clean';
+  END IF;
+END;
+$verify_isolation$;
+
+\if :require_empty
+DO $verify_canonical_empty$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.users)
+    OR EXISTS (SELECT 1 FROM public.organizations)
+    OR EXISTS (SELECT 1 FROM public.lessons)
+    OR EXISTS (SELECT 1 FROM public.content_jobs) THEN
+    RAISE EXCEPTION 'Canonical verification requires an empty schema-only 0034 baseline';
+  END IF;
+END;
+$verify_canonical_empty$;
+\endif
+
 ROLLBACK;
 ```
 
-Place this runnable catalog block immediately after `BEGIN` and before the DML conditional:
+Create `scripts/verify-0035.ps1` with this exact orchestration. The confirmation switch is a deliberate operator assertion that the URL is isolated and disposable; the script itself never reads a shared-database environment variable.
+
+```powershell
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$DisposableDatabaseUrl,
+  [Parameter(Mandatory = $true)]
+  [ValidateSet('canonical', 'upgrade')]
+  [string]$Mode,
+  [Parameter(Mandatory = $true)]
+  [switch]$ConfirmDisposable
+)
+
+$ErrorActionPreference = 'Stop'
+if (-not $ConfirmDisposable) {
+  throw 'Pass -ConfirmDisposable only for an isolated database still at migration 0034.'
+}
+if ([string]::IsNullOrWhiteSpace($DisposableDatabaseUrl)) {
+  throw 'DisposableDatabaseUrl is required.'
+}
+
+$psql = Get-Command psql -ErrorAction Stop
+$root = Split-Path -Parent $PSScriptRoot
+$requireEmpty = if ($Mode -eq 'canonical') { 'true' } else { 'false' }
+
+function Invoke-CheckedPsql([string]$RelativePath, [string[]]$Variables = @()) {
+  $path = Join-Path $root $RelativePath
+  $arguments = @($DisposableDatabaseUrl, '-X', '--set', 'ON_ERROR_STOP=1')
+  foreach ($variable in $Variables) {
+    $arguments += @('--set', $variable)
+  }
+  $arguments += @('--file', $path)
+  & $psql.Source @arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "psql failed for $RelativePath with exit code $LASTEXITCODE"
+  }
+}
+
+Invoke-CheckedPsql 'supabase/verification/0034_prerequisites.sql' @("require_empty=$requireEmpty")
+Invoke-CheckedPsql 'supabase/migrations/0035_harden_lesson_artifact_writes.sql'
+Invoke-CheckedPsql 'supabase/verification/0035_catalog.sql'
+Invoke-CheckedPsql 'supabase/verification/0035_dml.sql'
+Write-Host "0035 isolated PostgreSQL verification passed ($Mode)."
+```
+
+Create `0035_catalog.sql` with `\set ON_ERROR_STOP on`, `BEGIN READ ONLY;`, the following self-asserting catalog block, and `ROLLBACK;`. This file is the only verifier permitted on a shared target.
 
 ```sql
 DO $verify_catalog$
 DECLARE
   function_name text;
+  artifact_definition text;
   job_functions constant text[] := ARRAY[
     'public.claim_content_jobs(text,integer,integer)',
     'public.enqueue_content_jobs_with_usage(uuid,uuid,jsonb,jsonb)',
@@ -772,6 +1090,10 @@ BEGIN
     'authenticated',
     'public.insert_generated_lesson_artifact(uuid,uuid,integer,text,integer,jsonb,jsonb,jsonb,uuid,uuid,uuid)',
     'EXECUTE'
+  ) OR has_function_privilege(
+    'anon',
+    'public.insert_generated_lesson_artifact(uuid,uuid,integer,text,integer,jsonb,jsonb,jsonb,uuid,uuid,uuid)',
+    'EXECUTE'
   ) OR NOT has_function_privilege(
     'service_role',
     'public.insert_generated_lesson_artifact(uuid,uuid,integer,text,integer,jsonb,jsonb,jsonb,uuid,uuid,uuid)',
@@ -791,17 +1113,89 @@ BEGIN
     SELECT count(*) FROM pg_policies
     WHERE schemaname = 'public' AND tablename = 'lessons'
       AND policyname IN ('lessons_manager_select', 'lessons_manager_update', 'lessons_manager_delete')
-  ) <> 3 OR NOT EXISTS (
+  ) <> 3 OR EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'lessons'
+      AND cmd IN ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+      AND roles && ARRAY['public', 'anon', 'authenticated']::name[]
+      AND NOT (
+        policyname = 'lessons_manager_update'
+        AND cmd = 'UPDATE'
+        AND roles = ARRAY['authenticated']::name[]
+        OR policyname = 'lessons_manager_delete'
+        AND cmd = 'DELETE'
+        AND roles = ARRAY['authenticated']::name[]
+      )
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'lessons'
+      AND policyname = 'lessons_manager_select'
+      AND cmd = 'SELECT'
+      AND roles = ARRAY['authenticated']::name[]
+      AND qual LIKE '%can_manage_lesson%'
+      AND with_check IS NULL
+  ) OR NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public' AND tablename = 'lessons'
       AND policyname = 'lessons_manager_update'
+      AND cmd = 'UPDATE'
+      AND roles = ARRAY['authenticated']::name[]
       AND qual LIKE '%can_manage_lesson%'
       AND with_check LIKE '%can_assign_lesson_teacher%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'lessons'
+      AND policyname = 'lessons_manager_delete'
+      AND cmd = 'DELETE'
+      AND roles = ARRAY['authenticated']::name[]
+      AND qual LIKE '%can_manage_lesson%'
+      AND with_check IS NULL
   ) OR to_regprocedure('public.can_assign_lesson_teacher(uuid)') IS NULL
     OR NOT has_function_privilege(
       'authenticated', 'public.can_assign_lesson_teacher(uuid)', 'EXECUTE'
+    ) OR has_function_privilege(
+      'anon', 'public.can_assign_lesson_teacher(uuid)', 'EXECUTE'
+    ) OR NOT has_function_privilege(
+      'service_role', 'public.can_assign_lesson_teacher(uuid)', 'EXECUTE'
     ) THEN
     RAISE EXCEPTION 'lesson manager RLS matrix is incorrect';
+  END IF;
+
+  IF has_table_privilege('authenticated', 'public.lessons', 'UPDATE')
+    OR has_any_column_privilege('anon', 'public.lessons', 'UPDATE')
+    OR NOT has_table_privilege('service_role', 'public.lessons', 'UPDATE')
+    OR EXISTS (
+      SELECT 1
+      FROM unnest(ARRAY[
+        'title', 'subject', 'gradelevel', 'objectives',
+        'content', 'organization_id', 'updated_at'
+      ]) AS allowed(column_name)
+      WHERE NOT has_column_privilege(
+        'authenticated',
+        'public.lessons',
+        allowed.column_name,
+        'UPDATE'
+      )
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_attribute attribute
+      WHERE attribute.attrelid = 'public.lessons'::regclass
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+        AND NOT attribute.attname = ANY (ARRAY[
+          'title', 'subject', 'gradelevel', 'objectives',
+          'content', 'organization_id', 'updated_at'
+        ])
+        AND has_column_privilege(
+          'authenticated',
+          'public.lessons',
+          attribute.attname,
+          'UPDATE'
+        )
+    ) THEN
+    RAISE EXCEPTION 'lesson UPDATE column privilege matrix is incorrect';
   END IF;
 
   IF NOT EXISTS (
@@ -819,11 +1213,24 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'hardening trigger attachment is incorrect';
   END IF;
+
+  SELECT lower(pg_get_functiondef(
+    'public.prevent_approved_artifact_mutation()'::regprocedure
+  )) INTO artifact_definition;
+  IF position('if tg_op = ''delete'' then' IN artifact_definition) = 0
+    OR position('return old' IN artifact_definition) = 0
+    OR position('return new' IN artifact_definition) = 0 THEN
+    RAISE EXCEPTION 'approved-artifact trigger function definition is incorrect';
+  END IF;
 END;
 $verify_catalog$;
 ```
 
-The DML preflight must fail before fixtures if this query returns any row:
+Create `0035_dml.sql` by copying `docs/superpowers/plans/2026-07-12-pr-13-0035-dml-template.sql` exactly. The checked-in template is the authoritative executable body; the matrix and snippets below explain its acceptance intent and are not permission to replace it with a skeletal source-marker script. It starts with `\set ON_ERROR_STOP on` and `BEGIN;`, uses deterministic helper functions, fixtures and assertions, rolls the DML transaction back, verifies that rollback in a separate read-only transaction, and ends exactly with `\echo '0035 rollback-only DML verification passed.'`. Every actor block sets both scalar and JSON Supabase JWT claims before switching roles.
+
+Create rollback-scoped `public._verify_0035_assert(boolean,text)`, `public._verify_0035_expect_error(text,text,text)`, `public._verify_0035_assert_row_count(text,bigint,text)`, and `public._verify_0035_set_actor(uuid,text)` helpers as invoker-security PL/pgSQL functions with `SET search_path = pg_catalog, public`. Revoke `PUBLIC` execution from all four; grant only the three assertion helpers to `authenticated` and `service_role`, while `set_actor` remains executable only by the migration owner before each role switch. `expect_error` must execute its SQL, compare both `RETURNED_SQLSTATE` and `MESSAGE_TEXT`, and fail if the statement succeeds or raises a different error. `assert_row_count` must use `GET DIAGNOSTICS ... ROW_COUNT` and compare the exact affected count. `set_actor` must set both scalar claim GUCs and the JSON claims object. Because the enclosing transaction rolls back, these public helper definitions never persist.
+
+The DML preflight must run before fixtures and repeat the upgrade-safe isolation checks from `0034_prerequisites.sql`: the connection can assume `authenticated` and `service_role`, no queued/running job exists, and no row collides with the reserved verification IDs, `verify-%@example.invalid` emails, `verify:%` idempotency/reference/content-hash keys, `a0000000-...` artifact series IDs, or `verification/%` storage paths. Implement these as `DO` assertions, not visual/manual checks. In particular, this query must return no row:
 
 ```sql
 SELECT id FROM public.content_jobs
@@ -831,171 +1238,60 @@ WHERE status IN ('queued', 'running')
 LIMIT 1;
 ```
 
-Implement that as a `DO` assertion, not a visual/manual check.
-
-Use stable fixture variables so every assertion identifies the same rows:
-
-```sql
-\set teacher_user_id  '10000000-0000-4000-8000-000000000001'
-\set admin_user_id    '10000000-0000-4000-8000-000000000002'
-\set other_teacher_user_id '10000000-0000-4000-8000-000000000003'
-\set teacher_id       '20000000-0000-4000-8000-000000000001'
-\set other_teacher_id '20000000-0000-4000-8000-000000000002'
-\set source_org_id    '30000000-0000-4000-8000-000000000001'
-\set target_org_id    '30000000-0000-4000-8000-000000000002'
-\set lesson_id        '40000000-0000-4000-8000-000000000001'
-\set objective_id     '50000000-0000-4000-8000-000000000001'
-\set job_id           '60000000-0000-4000-8000-000000000001'
-\set upload_job_id    '60000000-0000-4000-8000-000000000002'
-\set batch_id         '70000000-0000-4000-8000-000000000001'
-\set upload_batch_id  '70000000-0000-4000-8000-000000000002'
-\set draft_artifact   '80000000-0000-4000-8000-000000000001'
-\set rejected_artifact '80000000-0000-4000-8000-000000000002'
-\set approved_artifact '80000000-0000-4000-8000-000000000003'
-\set upload_artifact  '80000000-0000-4000-8000-000000000004'
-\set upload_asset     '90000000-0000-4000-8000-000000000001'
-```
+The authoritative template uses literal reserved UUIDs and `verify:` namespaces rather than psql fixture variables. Do not add a second indirection layer: the prerequisite and DML preflights validate those literal namespaces before any insert.
 
 Insert only current-schema columns, using these exact fixture shapes:
 
 - `public.users(id, email, name, role)`: the owning teacher, a second teacher, and one global admin;
-- `public.teachers(id, user_id)`: both teacher profiles;
+- `public.teachers(id, user_id, subjects, grades)`: both teacher profiles with empty array fields;
 - `public.organizations(id, name, owner_id)`: source and target organizations;
 - `public.organization_members(organization_id, user_id, role, is_active)`: normalize the trigger-created teacher rows to the role/state needed by each test, restoring active owner/admin rows between rejection cases;
-- `public.lessons(id, title, subject, gradelevel, objectives, content, teacher_id, organization_id)`: one teacher-owned source-organization lesson;
-- `public.lesson_objectives(id, lesson_id, text, position, revision)`: the active objective;
-- `public.lesson_artifacts(id, lesson_id, objective_id, series_id, version, objective_revision, kind, status, position, payload, source, created_by)`: separate draft, rejected, approved, and cascade fixtures with unique series IDs.
+- `public.lessons(id, title, subject, gradelevel, objectives, content, teacher_id, organization_id)`: one primary teacher-owned source-organization lesson plus one artifact-free manager-delete fixture;
+- `public.lesson_objectives(id, lesson_id, text, position, revision)`: one primary objective and one cascade-only objective at distinct positions;
+- `public.lesson_publications(id, lesson_id, version, manifest, warnings, content_hash, published_by)`: one valid deterministic publication used for `current_publication_id` ACL and service-maintenance assertions;
+- `public.lesson_artifacts(id, lesson_id, objective_id, series_id, version, objective_revision, kind, status, position, payload, source, created_by)`: draft, rejected, and approved fixtures under the primary objective, plus a single non-approved artifact under the cascade-only objective, all with unique series IDs.
+
+After organization setup, explicitly make the owning teacher an active source `owner` and target `admin`; this proves the first successful teacher transfer uses source ownership plus target administration. Before the global-admin bypass case, remove that admin user's organization memberships so the success cannot be attributed to membership. Before deleting the rejected artifact, update it and assert both exact row count one and persisted payload. Worker-completion updates must predicate on the expected `lease_owner` value and `lease_expires_at > now()` before clearing the lease. Exercise source and target membership failures separately for missing, inactive, and ordinary `member` rows, restoring the success state between groups.
+
+Use the real `publication_id` fixture when testing `current_publication_id`: authenticated teacher and global-admin attempts must fail with `42501` before any FK mutation, while service-role maintenance must set the pointer successfully and persist it. Perform any service-role `teacher_id` maintenance after teacher-authorization cases, or restore the original teacher before continuing.
 
 Use `ON CONFLICT` only where setup triggers can legitimately precreate a membership. Any unexpected pre-existing deterministic ID should fail the disposable-environment gate rather than silently reuse unrelated data.
 
-After inserting fixtures, expose those IDs to dollar-quoted assertion blocks:
+The template calls `_verify_0035_set_actor` as the migration owner before every role switch. That helper sets both scalar claim GUCs and the JSON claims object; authenticated and service roles cannot execute it themselves. Assertions use literal reserved IDs, so no temp-table privilege bridge is required.
 
-```sql
-CREATE TEMP TABLE verification_ids (
-  teacher_user_id uuid,
-  admin_user_id uuid,
-  other_teacher_user_id uuid,
-  teacher_id uuid,
-  other_teacher_id uuid,
-  source_org_id uuid,
-  target_org_id uuid,
-  lesson_id uuid,
-  objective_id uuid,
-  job_id uuid,
-  draft_artifact uuid,
-  rejected_artifact uuid,
-  approved_artifact uuid
-) ON COMMIT DROP;
-
-INSERT INTO verification_ids VALUES (
-  :'teacher_user_id', :'admin_user_id', :'other_teacher_user_id',
-  :'teacher_id', :'other_teacher_id',
-  :'source_org_id', :'target_org_id', :'lesson_id', :'objective_id', :'job_id',
-  :'draft_artifact', :'rejected_artifact', :'approved_artifact'
-);
-
-GRANT SELECT ON verification_ids TO authenticated, service_role;
-```
-
-Preflight the connection before inserts:
-
-```sql
-DO $$
-BEGIN
-  IF NOT pg_has_role(current_user, 'authenticated', 'MEMBER')
-    OR NOT pg_has_role(current_user, 'service_role', 'MEMBER') THEN
-    RAISE EXCEPTION 'Verification requires a direct migration-owner connection that can assume authenticated and service_role';
-  END IF;
-END;
-$$;
-SET LOCAL ROLE authenticated;
-RESET ROLE;
-SET LOCAL ROLE service_role;
-RESET ROLE;
-```
-
-For every authenticated block, set both scalar and JSON Supabase claim GUCs before assuming the role; repeat with `service_role` for trusted RPC blocks:
-
-```sql
-SELECT set_config('request.jwt.claim.sub', :'teacher_user_id', true);
-SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub', :'teacher_user_id', 'role', 'authenticated')::text,
-  true
-);
-SET LOCAL ROLE authenticated;
-SELECT id FROM public.content_jobs
-WHERE id = :'job_id' AND requested_by = :'teacher_user_id';
-RESET ROLE;
-```
-
-For service RPC blocks, replace the role in both claim GUCs and assume `service_role`:
-
-```sql
-SELECT set_config('request.jwt.claim.sub', :'teacher_user_id', true);
-SELECT set_config('request.jwt.claim.role', 'service_role', true);
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub', :'teacher_user_id', 'role', 'service_role')::text,
-  true
-);
-SET LOCAL ROLE service_role;
-SELECT auth.role();
-RESET ROLE;
-```
-
-Because psql does not substitute `:variables` inside dollar-quoted `DO` bodies, persist fixture IDs in a `pg_temp.verification_ids` row before exception blocks. PL/pgSQL blocks must select IDs from that temp row rather than embedding psql variables inside `$$ ... $$`. The explicit grant above is required because changing roles does not inherit the migration owner's temp-table privileges.
-
-Each expected failure belongs in a nested PL/pgSQL exception block. ACL and organization-guard failures must match SQLSTATE `42501` and the guard's stable message. Approved artifact update/delete must instead match SQLSTATE `P0001` and `Approved lesson artifacts are immutable; create a new version`. If the statement unexpectedly succeeds, or a different code/message is raised, re-raise and fail the script.
-
-Use the same fail-closed shape for every expected error:
-
-```sql
-DO $$
-DECLARE
-  ids pg_temp.verification_ids%ROWTYPE;
-  raised_message text;
-BEGIN
-  SELECT * INTO STRICT ids FROM pg_temp.verification_ids;
-  BEGIN
-    UPDATE public.lessons SET organization_id = NULL WHERE id = ids.lesson_id;
-    RAISE EXCEPTION 'Expected organization clear to fail' USING ERRCODE = 'ZX001';
-  EXCEPTION WHEN SQLSTATE '42501' THEN
-    GET STACKED DIAGNOSTICS raised_message = MESSAGE_TEXT;
-    IF raised_message <> 'Lesson organization cannot be cleared' THEN
-      RAISE EXCEPTION 'Wrong organization-clear error: %', raised_message;
-    END IF;
-  END;
-END;
-$$;
-```
+Every expected failure goes through `_verify_0035_expect_error`, which fails closed when the statement succeeds or the SQLSTATE differs. ACL failures require `42501`; organization-guard failures additionally require the exact stable guard message. Approved artifact update/delete requires `P0001` plus `Approved lesson artifacts are immutable; create a new version`.
 
 Implement this complete behavior matrix; do not replace a row with a source-string assertion:
 
 | Actor/setup | Operation | Required assertion |
 |---|---|---|
 | authenticated teacher, own job | `SELECT` | fixture job returned |
+| another authenticated teacher | `SELECT` the owner's job | zero rows returned |
 | authenticated teacher | direct job `INSERT`, `UPDATE`, `DELETE` | each raises `42501`; fixture unchanged |
 | service role | enqueue with usage | one queued job and one source-org usage row |
-| service role, isolated queue | `claim_content_jobs` | only fixture job becomes running with lease/attempt increment |
-| service role | cancel queued fixture | one row becomes cancelled |
-| service role | retry failed/cancelled fixture | one row returns to queued without new usage |
-| service role | worker success transition | one owned running row becomes succeeded and releases lease |
+| service role, isolated queue | claim quota job, then worker failure | only the quota job runs; owned unexpired lease transition makes it failed and releases the lease |
+| service role | enqueue separate no-usage lifecycle job, then cancel while queued | one row becomes cancelled and no usage row is added |
+| service role | retry, claim, and complete lifecycle job | it returns to queued, becomes running with lease/attempt increment, then succeeds through the owned unexpired lease |
+| service role, after a real lesson reassignment | retry, claim, and complete original quota job | succeeds without new usage or organization change |
 | service role | upload RPC | returned and persisted asset/artifact/job IDs match fixtures |
-| service role, draft/rejected | update/delete | exact row count one and persisted/absent state matches |
+| service role, draft/rejected | update/delete | each update affects one and persists; combined delete affects two and both rows are absent |
 | service role, approved | update/delete | `P0001` plus exact immutability message; row unchanged |
-| service role, non-approved parent | cascade delete | child artifact no longer exists |
+| service role, cascade-only objective | delete objective | its sole non-approved artifact disappears; primary draft/rejected/approved fixtures remain |
 | teacher active owner/admin in source and target | lesson reassignment | one row updated to target |
 | teacher missing/inactive/member in source | lesson reassignment | `42501` plus current-organization message; row unchanged |
 | teacher missing/inactive/member in target | lesson reassignment | `42501` plus target-organization message; row unchanged |
 | teacher | explicit organization `NULL` | `42501` plus clear message; row unchanged |
-| teacher | change `teacher_id` to another teacher | RLS rejects; owner remains unchanged |
+| authenticated teacher, manageable lesson | update allowlisted content fields | succeeds and persists |
+| authenticated teacher | direct lesson `INSERT` | raises `42501`; no row persists |
+| authenticated owner / non-owner | delete disposable managed lesson / delete another teacher's lesson | owner affects one row; non-owner affects zero |
+| authenticated teacher, another teacher's lesson | update an allowlisted field | row count is zero and row remains unchanged |
+| authenticated teacher | change normalized `teacher_id` or `current_publication_id` | each raises `42501`; protected values remain unchanged |
+| authenticated teacher, when legacy `teacher` exists | change legacy `teacher` | raises `42501`; value remains unchanged; skip only when catalog proves the column is absent |
 | global admin user | source-to-target reassignment | succeeds without memberships |
-| global admin user | intentional `teacher_id` change | succeeds through NEW-row owner predicate |
-| service role | reassignment or null maintenance | succeeds as explicit maintenance bypass |
+| authenticated global admin | change `teacher_id` or `current_publication_id`, plus legacy `teacher` when present | each raises `42501`; protected values remain unchanged |
+| service role | protected-field maintenance, organization reassignment, or null maintenance | succeeds through the explicit trusted bypass |
 
-Execute the DML rows in this order so each precondition is deterministic: isolation/role preflight; fixture inserts; service enqueue with usage; authenticated read/write denial; service claim; cancel/retry/worker transitions; upload RPC; artifact update/delete/cascade; teacher/admin/service organization cases; original-org quota assertions; `RESET ROLE`; `\endif`; `ROLLBACK`.
+Execute the authoritative template in this order so each precondition is deterministic: isolation/role preflight; fixture inserts; source-org quota enqueue; authenticated read/write denial; claim and fail the quota job through an owned unexpired lease; enqueue/cancel/retry/claim/complete a separate no-usage lifecycle job; artifact behavior; teacher/global-admin organization and column-ACL cases; a real service-role organization/protected-field reassignment; retry/claim/complete the original quota job; original-org job/usage assertions; upload RPC behavior; `RESET ROLE`; main `ROLLBACK`; read-only rollback proof; final `ROLLBACK`; success echo.
 
 Use exact catalog predicates such as:
 
@@ -1016,134 +1312,56 @@ IF NOT has_function_privilege(
 END IF;
 ```
 
-Authorization failures for ACL and organization-guard cases must assert SQLSTATE `42501`; any other error fails the verifier. For successful artifact behavior, capture `ROW_COUNT` and query persisted state: draft/rejected deletes each affect one row and leave no row, draft update affects one row and persists its new payload, and the non-approved parent cascade removes its child artifact. This prevents an unrelated FK/RLS error from satisfying the test.
+Authorization failures for ACL and organization-guard cases must assert SQLSTATE `42501`; any other error fails the verifier. For successful artifact behavior, capture `ROW_COUNT` and query persisted state: draft/rejected updates each affect one and persist, their combined delete affects exactly two and leaves neither row, and the non-approved parent cascade removes its child artifact. This prevents an unrelated FK/RLS error from satisfying the test.
 
-For quota attribution, enqueue `job_id` in `source_org_id` with one usage item `{ "category": "quiz_generation", "quantity": 1, "referenceId": "verify:quota" }`. Record the job organization and matching ledger count, reassign the lesson to `target_org_id` through the service-role maintenance path, and perform the existing retry transition on that job. Assert afterward that:
+For quota attribution, enqueue `job_id` in `source_org_id` with one usage item `{ "category": "quiz_generation", "quantity": 1, "referenceId": "verify:quota" }`, claim it, and move it to a deterministic failed state through an owned unexpired lease. After a real lesson reassignment, retry, reclaim, and complete that original job. Assert afterward that:
 
 - the job still owns `source_org_id`;
 - the usage row still owns `source_org_id`;
 - exactly one `verify:quota` usage reservation exists;
 - no matching target-organization reservation was created.
 
-Use this exact enqueue shape so the verifier exercises the real quota RPC rather than a direct fixture insert:
-
-```sql
-SELECT public.enqueue_content_jobs_with_usage(
-  :'source_org_id'::uuid,
-  :'teacher_user_id'::uuid,
-  jsonb_build_array(jsonb_build_object(
-    'id', :'job_id',
-    'batch_id', :'batch_id',
-    'lesson_id', :'lesson_id',
-    'objective_id', :'objective_id',
-    'requested_by', :'teacher_user_id',
-    'job_type', 'generate_structured_quiz',
-    'idempotency_key', 'verify:quota',
-    'input', '{}'::jsonb
-  )),
-  jsonb_build_array(jsonb_build_object(
-    'category', 'quiz_generation',
-    'quantity', 1,
-    'referenceId', 'verify:quota'
-  ))
-);
-```
-
-The upload-RPC case must use the complete contract and materialize its return value for assertions:
-
-```sql
-CREATE TEMP TABLE verification_upload_result (payload jsonb) ON COMMIT DROP;
-GRANT INSERT, SELECT ON verification_upload_result TO service_role;
-
--- Run this INSERT only after setting service-role claims and SET LOCAL ROLE service_role.
-INSERT INTO pg_temp.verification_upload_result (payload)
-SELECT public.create_uploaded_lesson_artifact(
-  :'source_org_id'::uuid,
-  :'teacher_user_id'::uuid,
-  'verify:upload',
-  jsonb_build_object(
-    'id', :'upload_asset',
-    'lesson_id', :'lesson_id',
-    'objective_id', :'objective_id',
-    'asset_type', 'uploaded_media',
-    'storage_bucket', 'lesson-assets',
-    'storage_path', 'verification/' || :'upload_asset',
-    'mime_type', 'image/png',
-    'byte_size', 1,
-    'checksum_sha256', repeat('a', 64),
-    'original_filename', 'verification.png',
-    'alt_text', 'Verification image',
-    'caption', '',
-    'processing_status', 'ready'
-  ),
-  jsonb_build_object(
-    'id', :'upload_artifact',
-    'lesson_id', :'lesson_id',
-    'objective_id', :'objective_id',
-    'objective_revision', 1,
-    'kind', 'uploaded_media',
-    'position', 9,
-    'payload', jsonb_build_object('assetId', :'upload_asset')
-  ),
-  jsonb_build_object(
-    'id', :'upload_job_id',
-    'batch_id', :'upload_batch_id',
-    'lesson_id', :'lesson_id',
-    'objective_id', :'objective_id',
-    'job_type', 'extract_media',
-    'idempotency_key', 'verify:upload-job',
-    'input', '{}'::jsonb
-  )
-) AS payload;
-```
-
-After `RESET ROLE`, assert `payload #>> '{asset,id}'`, `payload #>> '{artifact,id}'`, and `payload #>> '{job,id}'` equal their deterministic IDs, and confirm all three rows exist before continuing. Creating the temp table as the migration owner before role switching avoids cross-role ownership failures.
+The exact template calls the real enqueue and upload RPCs, checks the upload payload directly in a CTE, and then verifies the persisted asset, artifact, job, and usage rows. Do not replace those calls with direct fixture inserts or a temp-table variant; the source-equality test intentionally rejects alternate implementations.
 
 - [ ] **Step 4: Verify the checked-in contract**
 
 Run:
 
 ```powershell
-pnpm exec vitest run src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
+pnpm exec vitest run src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts
 git diff --check
 ```
 
-Expected: PASS. This source contract only guards that the intended matrix remains checked in; PostgreSQL execution in Step 6 is the sole proof that the verifier and migration behave correctly.
+Expected: PASS. This source contract only guards that the intended matrix remains checked in; it is not sufficient for commit or merge readiness.
 
-- [ ] **Step 5: Commit Task 5**
+- [ ] **Step 5: Run the mandatory pre-merge PostgreSQL database gate**
 
-```powershell
-git add supabase/verification/0035_harden_lesson_artifact_writes.sql src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
-git commit -m "test(db): add hardening verifier"
-```
+For the full DML matrix, use direct migration-owner connections to two distinct isolated disposable databases that are still at `0034`. Expect exit code `0`, no assertion raises, and the DML transaction rolls back. Run against both:
 
-- [ ] **Step 6: Run the production-rollout database gate when direct environments are available**
-
-For the full DML matrix, use direct migration-owner connections to isolated, empty disposable environments. Expect exit code `0`, no assertion raises, and the transaction rolls back. Run against both:
-
-- a clean environment provisioned from the operator's canonical `0034` schema baseline, after applying `0035`;
-- an isolated upgrade clone already at `0034`, after applying only `0035`.
+- a clean environment provisioned from the operator's canonical `0034` schema baseline, in `canonical` mode;
+- an isolated representative upgrade-state clone already at `0034`, in `upgrade` mode.
 
 Do not call the first environment a raw full-chain replay; the known `0021` typo makes that a separate migration-history repair.
 
-Use the two operator-provided direct URLs explicitly:
+Use the two operator-provided direct URLs explicitly. The runner itself validates the `0034` prerequisite, applies `0035`, runs the read-only catalog verifier, and runs the rollback-only DML verifier:
 
 ```powershell
-$env:DATABASE_URL = $env:BASELINE_DATABASE_URL
-psql $env:DATABASE_URL -X -v ON_ERROR_STOP=1 -v run_dml=true -f 'supabase\verification\0035_harden_lesson_artifact_writes.sql'
-$env:DATABASE_URL = $env:UPGRADE_DATABASE_URL
-psql $env:DATABASE_URL -X -v ON_ERROR_STOP=1 -v run_dml=true -f 'supabase\verification\0035_harden_lesson_artifact_writes.sql'
+pwsh -NoProfile -File scripts/verify-0035.ps1 -DisposableDatabaseUrl $env:BASELINE_0034_DATABASE_URL -Mode canonical -ConfirmDisposable
+pwsh -NoProfile -File scripts/verify-0035.ps1 -DisposableDatabaseUrl $env:UPGRADE_0034_DATABASE_URL -Mode upgrade -ConfirmDisposable
 ```
 
-The repository has no `supabase/config.toml`, migration-runner command, canonical baseline, or disposable database harness. Therefore the operator must provide `BASELINE_DATABASE_URL`, `UPGRADE_DATABASE_URL`, and the canonical `0034` baseline externally. Record both platform migration results and both verifier exit codes in rollout evidence; do not describe them as repo-automated CI.
+The repository has no `supabase/config.toml`, migration-runner command, canonical baseline, or disposable database harness. Therefore the operator must provide `BASELINE_0034_DATABASE_URL`, `UPGRADE_0034_DATABASE_URL`, and the canonical `0034` baseline externally. Record both runner exit codes in rollout evidence; do not describe them as repo-automated CI.
 
-After the migration reaches a shared staging or production target, run catalog-only mode; it must not create fixtures or call `claim_content_jobs`:
+Both commands must print their mode-specific success message and exit `0` before commit or merge. If either direct URL, `psql`, clone, or canonical baseline is unavailable, record database verification as blocked and stop; source-contract tests do not make the change merge-ready. Never pass a shared staging or production URL to the runner.
+
+After either isolated run, any change to migration `0035`, the prerequisite SQL, either verifier SQL file, the authoritative DML template, or the runner invalidates both results. Reprovision fresh `0034` canonical and upgrade clones and rerun both commands. Discard a clone already advanced to `0035`; do not bypass the `0034` prerequisite.
+
+- [ ] **Step 6: Commit Task 5 after PostgreSQL verification**
 
 ```powershell
-psql $env:DATABASE_URL -X -v ON_ERROR_STOP=1 -v run_dml=false -f 'supabase\verification\0035_harden_lesson_artifact_writes.sql'
+git add supabase/migrations/0035_harden_lesson_artifact_writes.sql supabase/verification/0034_prerequisites.sql supabase/verification/0035_catalog.sql supabase/verification/0035_dml.sql scripts/verify-0035.ps1 src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts
+git commit -m "fix(db): verify lesson write hardening"
 ```
-
-This is a production-rollout gate, not a merge blocker.
 
 ---
 
@@ -1155,7 +1373,7 @@ This is a production-rollout gate, not a merge blocker.
 - [ ] **Step 1: Run all focused regression tests together**
 
 ```powershell
-pnpm exec vitest run src/lib/lesson-artifacts/__tests__/lesson-update.test.ts src/lib/lesson-artifacts/__tests__/lesson-update-route.test.ts src/lib/lesson-artifacts/__tests__/lesson-route-contract.test.ts src/lib/lesson-artifacts/__tests__/authoring-ui.test.ts src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts
+pnpm exec vitest run src/lib/lesson-artifacts/__tests__/lesson-update.test.ts src/lib/lesson-artifacts/__tests__/lesson-update-route.test.ts src/lib/lesson-artifacts/__tests__/lesson-route-contract.test.ts src/lib/lesson-artifacts/__tests__/authoring-ui.test.ts src/lib/lesson-artifacts/__tests__/migration-hardening.test.ts src/lib/lesson-artifacts/__tests__/database-verifier-contract.test.ts
 ```
 
 Expected: all focused files pass with zero failed tests.
@@ -1185,14 +1403,19 @@ Confirm:
 
 - [ ] **Step 4: Deploy in the required order**
 
-1. Apply migration `0035` to the isolated upgrade clone and require the full `run_dml=true` verifier to exit `0`.
-2. Apply migration `0035` to the shared target.
-3. Run `run_dml=false` catalog-only verification on the shared target and require exit `0`.
-4. Confirm bundle generation, regeneration/retry, upload extraction, cancellation, and worker progression still succeed through service-role paths.
-5. Deploy the application route/form changes.
-6. Edit an existing lesson without choosing an organization and verify its `organization_id` remains unchanged.
+1. Confirm both mandatory isolated runner modes exited `0` against fresh `0034` clones and that no verifier input changed afterward.
+2. Deploy the omission-aware route and form to the shared target without applying `0035`.
+3. Edit an existing lesson and verify its `organization_id` remains unchanged; do not release reassignment during this compatibility window.
+4. Apply migration `0035` to the shared target.
+5. Run catalog-only verification and require exit `0`:
+
+```powershell
+psql $env:SHARED_DATABASE_URL -X --set ON_ERROR_STOP=1 --file 'supabase\verification\0035_catalog.sql'
+```
+
+6. Confirm bundle generation, regeneration/retry, upload extraction, cancellation, and worker progression through service-role paths.
 7. Exercise one authorized reassignment and one insufficient-role reassignment; expect success and `403`, respectively.
 
-- [ ] **Step 5: Monitor and recover forward-only**
+- [ ] **Step 5: Monitor and recover safely**
 
-Monitor permission errors, lesson PUT `400/403/500` rates, queued jobs that stop progressing, and worker failures. If a defect appears, roll back the application bundle if useful, but repair database behavior with a new forward migration. Never restore authenticated job writes, null organization detachment, or `RETURN NEW` for artifact deletes.
+Monitor permission errors, lesson PUT `400/403/500` rates, queued jobs, and worker failures. Before shared-target `0035`, the compatibility application may be rolled back normally. After `0035`, never restore a pre-compatible route/form because it sends `organization_id = null` and recreates the lesson-edit outage. Recover forward with an omission-safe application or corrective migration while retaining job-write restrictions, the lesson column allowlist, null-detachment prevention, and the corrected artifact-delete return.
