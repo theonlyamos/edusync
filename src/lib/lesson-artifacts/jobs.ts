@@ -27,6 +27,7 @@ export interface ContentJobRecord {
     version?: number;
     supersedesId?: string;
     assetId?: string;
+    taskDescription?: string;
   };
 }
 
@@ -45,8 +46,10 @@ export interface ArtifactGenerationDependencies {
   }>;
 }
 
-const contextFor = (job: ContentJobRecord) =>
-  `Lesson: ${job.input.lessonTitle}\nSubject: ${job.input.subject}\nGrade: ${job.input.gradeLevel}\nObjective: ${job.input.objectiveText}`;
+const contextFor = (job: ContentJobRecord) => {
+  const taskDescription = job.input.taskDescription?.trim();
+  return `Lesson: ${job.input.lessonTitle}\nSubject: ${job.input.subject}\nGrade: ${job.input.gradeLevel}\nObjective: ${job.input.objectiveText}${taskDescription ? `\nLearner request: ${taskDescription}` : ''}`;
+};
 
 export async function generateArtifactPayload(
   job: ContentJobRecord,

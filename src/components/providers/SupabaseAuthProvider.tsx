@@ -4,6 +4,7 @@ import { createBrowserClient } from '@supabase/ssr';
 import { createContext, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { shouldClearInvalidRefreshSession } from '@/lib/auth-session';
 
 interface Props {
   children: React.ReactNode;
@@ -43,7 +44,15 @@ export function SupabaseAuthProvider({ children }: Props) {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
+      if (error && shouldClearInvalidRefreshSession(error)) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        if (mounted) setSession(null);
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login?reason=session-expired');
+        }
+        return;
+      }
       if (mounted) setSession(data.session);
     });
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, sess) => {

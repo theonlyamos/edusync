@@ -4,8 +4,17 @@ import { z } from 'zod';
 import { requireStudentSession } from '@/lib/lesson-artifacts/learning-server';
 import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
+import {
+  isObjectiveSelectionChange,
+  normalizePublishedObjectives,
+  selectPublishedObjective,
+} from '@/lib/lesson-artifacts/student-learning';
 
-const schema = z.object({ lessonId: z.string().uuid(), mode: z.enum(['companion', 'tutor']).default('tutor') });
+const schema = z.object({
+  lessonId: z.string().uuid(),
+  mode: z.enum(['companion', 'tutor']).default('tutor'),
+  objectiveId: z.string().uuid().optional(),
+});
 
 export async function POST(request: Request) {
   try {
@@ -28,8 +37,15 @@ export async function POST(request: Request) {
       .eq('id', lesson.current_publication_id)
       .single();
     if (publicationError) throw publicationError;
-    const firstObjective = publication.manifest?.objectives?.[0];
-    if (!firstObjective) throw new LessonArtifactHttpError(409, 'Published lesson has no objectives');
+    const publishedObjectives = normalizePublishedObjectives(publication.manifest?.objectives ?? []);
+    if (!publishedObjectives) {
+      throw new LessonArtifactHttpError(409, 'The published lesson snapshot needs to be republished');
+    }
+    const selectedObjective = selectPublishedObjective(publishedObjectives, input.objectiveId);
+    if (!selectedObjective) {
+      if (input.objectiveId) throw new LessonArtifactHttpError(400, 'Objective is not part of this publication');
+      throw new LessonArtifactHttpError(409, 'Published lesson has no objectives');
+    }
 
     const { data: existing } = await supabase
       .from('learning_runs')
@@ -48,13 +64,46 @@ export async function POST(request: Request) {
         student_id: session.user.id,
         lesson_id: lesson.id,
         publication_id: publication.id,
-        active_objective_id: firstObjective.id,
+        active_objective_id: selectedObjective.id,
         mode: input.mode,
       }).select('*').single();
       if (result.error) throw result.error;
       run = result.data;
+    } else if (isObjectiveSelectionChange(run.active_objective_id, selectedObjective.id)) {
+      const previousObjectiveId = run.active_objective_id;
+      const { data: updated, error: updateError } = await supabase
+        .from('learning_runs')
+        .update({ active_objective_id: selectedObjective.id, updated_at: new Date().toISOString() })
+        .eq('id', run.id)
+        .eq('student_id', session.user.id)
+        .select('*')
+        .single();
+      if (updateError) throw updateError;
+      run = updated;
+      const { error: eventError } = await supabase.from('learning_events').insert({
+        run_id: run.id,
+        student_id: session.user.id,
+        lesson_id: lesson.id,
+        objective_id: selectedObjective.id,
+        objective_revision: selectedObjective.revision,
+        event_type: 'objective_changed',
+        payload: { position: selectedObjective.position },
+      });
+      if (eventError) {
+        const { error: rollbackError } = await supabase
+          .from('learning_runs')
+          .update({ active_objective_id: previousObjectiveId, updated_at: new Date().toISOString() })
+          .eq('id', run.id)
+          .eq('student_id', session.user.id)
+          .select('*')
+          .single();
+        if (rollbackError) {
+          throw new Error(`Objective event failed and the run could not be restored: ${rollbackError.message}`);
+        }
+        throw eventError;
+      }
     }
-    return NextResponse.json({ run, lesson, objectives: publication.manifest.objectives, publicationVersion: publication.version });
+    return NextResponse.json({ run, lesson, objectives: publishedObjectives, publicationVersion: publication.version });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }

@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import type { LessonContext } from '@/hooks/useAudioStreaming';
+import { useObjectiveLearning } from '@/hooks/useObjectiveLearning';
+import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
 import {
   MAX_EXPLANATION_LENGTH,
@@ -65,9 +67,6 @@ export function StudyCompanionShell() {
   const [gradeLevel, setGradeLevel] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<string | null>(null);
-  const [learningRunId, setLearningRunId] = useState<string | null>(null);
-  const [learningObjectives, setLearningObjectives] = useState<Array<{ id: string; text: string; position: number }>>([]);
-  const [activeObjectiveId, setActiveObjectiveId] = useState<string | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [mode, setMode] = useState<StudyMode>('companion');
   const [intent, setIntent] = useState<StudyIntent>('general');
@@ -81,6 +80,12 @@ export function StudyCompanionShell() {
   const openPanelButtonRef = useRef<HTMLButtonElement>(null);
   const closePanelButtonRef = useRef<HTMLButtonElement>(null);
   const contextPanelToggledRef = useRef(false);
+  const objectiveLearning = useObjectiveLearning({ lessonId: selectedLesson, mode: 'tutor' });
+  const { data: studentProfile } = useStudentProfile(session?.user?.id);
+
+  useEffect(() => {
+    setGradeLevel(studentProfile?.gradeLevel ?? null);
+  }, [studentProfile?.gradeLevel]);
 
   useEffect(() => {
     chatIdRef.current = currentChatId;
@@ -138,17 +143,10 @@ export function StudyCompanionShell() {
 
   useEffect(() => {
     const fetchStudentContext = async () => {
-      const [profileResult, lessonsResult] = await Promise.allSettled([
-        fetch('/api/students/profile'),
-        fetch('/api/students/lessons'),
-      ]);
-
-      if (profileResult.status === 'fulfilled' && profileResult.value.ok) {
-        const profile = await profileResult.value.json();
-        setGradeLevel(profile.gradeLevel);
-      } else {
-        console.warn('Study companion loaded without a student grade level.');
-      }
+      const lessonsResult = await fetch('/api/students/lessons').then(
+        (value) => ({ status: 'fulfilled' as const, value }),
+        (reason) => ({ status: 'rejected' as const, reason }),
+      );
 
       if (lessonsResult.status === 'fulfilled' && lessonsResult.value.ok) {
         const studentLessons = await lessonsResult.value.json();
@@ -327,9 +325,6 @@ export function StudyCompanionShell() {
     const title = lesson ? `Study session: ${lesson.title}` : 'General study session';
 
     setSelectedLesson(lessonId || null);
-    setLearningRunId(null);
-    setLearningObjectives([]);
-    setActiveObjectiveId(null);
     setCurrentChatId(null);
     chatIdRef.current = null;
     setMode('companion');
@@ -354,18 +349,6 @@ export function StudyCompanionShell() {
       setCurrentChatId(chatId);
       setMessages([initialMessage]);
       updateHistoryTimestamp(chatId, title, lessonId);
-      if (lessonId) {
-        const runResponse = await fetch('/api/learning-runs', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lessonId, mode: 'tutor' }),
-        });
-        if (runResponse.ok) {
-          const runData = await runResponse.json();
-          setLearningRunId(runData.run.id);
-          setLearningObjectives(runData.objectives);
-          setActiveObjectiveId(runData.run.active_objective_id);
-        }
-      }
       return chatId;
     } catch (error) {
       console.error('Error creating study session:', error);
@@ -389,27 +372,12 @@ export function StudyCompanionShell() {
 
       setMessages(loadedMessages);
       setSelectedLesson(chat.lessonId || null);
-      setLearningRunId(null);
-      setLearningObjectives([]);
-      setActiveObjectiveId(null);
       const loadedChatId = chat._id ?? chat.id ?? null;
       chatIdRef.current = loadedChatId;
       setCurrentChatId(loadedChatId);
       setMode(lastAssistant?.mode ?? 'companion');
       setIntent(lastAssistant?.intent ?? 'general');
       setOutageNotice(null);
-      if (chat.lessonId) {
-        const runResponse = await fetch('/api/learning-runs', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lessonId: chat.lessonId, mode: 'tutor' }),
-        });
-        if (runResponse.ok) {
-          const runData = await runResponse.json();
-          setLearningRunId(runData.run.id);
-          setLearningObjectives(runData.objectives);
-          setActiveObjectiveId(runData.run.active_objective_id);
-        }
-      }
     } catch (error) {
       console.error('Error loading study session:', error);
       toast({
@@ -432,9 +400,6 @@ export function StudyCompanionShell() {
         setCurrentChatId(null);
         chatIdRef.current = null;
         setSelectedLesson(null);
-        setLearningRunId(null);
-        setLearningObjectives([]);
-        setActiveObjectiveId(null);
         setMode('companion');
         setIntent('general');
         setOutageNotice(null);
@@ -495,7 +460,7 @@ export function StudyCompanionShell() {
           chatId: currentChatId,
           mode: requestMode,
           intent: requestIntent,
-          learningRunId,
+          learningRunId: objectiveLearning.runId,
         }),
       });
 
@@ -783,15 +748,9 @@ export function StudyCompanionShell() {
                   selectedLesson={selectedLesson}
                   disabled={isLoading}
                   onLessonChange={startNewChat}
-                  objectives={learningObjectives}
-                  selectedObjectiveId={activeObjectiveId}
-                  onObjectiveChange={async (objectiveId) => {
-                    if (!learningRunId) return;
-                    const response = await fetch(`/api/learning-runs/${learningRunId}/objective`, {
-                      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ objectiveId }),
-                    });
-                    if (response.ok) setActiveObjectiveId(objectiveId);
-                  }}
+                  objectives={objectiveLearning.objectives}
+                  selectedObjectiveId={objectiveLearning.activeObjective?.id}
+                  onObjectiveChange={objectiveLearning.selectObjective}
                 />
               </div>
               <ChatHistoryPanel

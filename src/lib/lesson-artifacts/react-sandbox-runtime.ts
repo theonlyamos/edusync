@@ -1,27 +1,31 @@
 export const REACT_SANDBOX_SOURCES = {
   react: '/lesson-runtime/react-18.3.1.production.min.js',
   reactDom: '/lesson-runtime/react-dom-18.3.1.production.min.js',
+  tailwindCss: '/lesson-runtime/tailwind.generated.css',
 } as const;
 
-export type ReactSandboxSourceText = { react: string; reactDom: string };
+export type ReactSandboxSourceText = { react: string; reactDom: string; tailwindCss: string };
 
 export async function fetchReactSandboxSources(
   fetcher: typeof fetch = globalThis.fetch,
 ): Promise<ReactSandboxSourceText> {
-  const [reactResponse, reactDomResponse] = await Promise.all([
+  const [reactResponse, reactDomResponse, tailwindResponse] = await Promise.all([
     fetcher(REACT_SANDBOX_SOURCES.react),
     fetcher(REACT_SANDBOX_SOURCES.reactDom),
+    fetcher(REACT_SANDBOX_SOURCES.tailwindCss),
   ]);
-  if (!reactResponse.ok || !reactDomResponse.ok) throw new Error('Failed to load React runtime assets');
-  const [react, reactDom] = await Promise.all([reactResponse.text(), reactDomResponse.text()]);
-  return { react, reactDom };
+  if (!reactResponse.ok || !reactDomResponse.ok || !tailwindResponse.ok) throw new Error('Failed to load React runtime assets');
+  const [react, reactDom, tailwindCss] = await Promise.all([reactResponse.text(), reactDomResponse.text(), tailwindResponse.text()]);
+  return { react, reactDom, tailwindCss };
 }
 
 const escapeInlineScript = (source: string) => source.replace(/<\/script/gi, '<\\/script');
+const escapeInlineStyle = (source: string) => source.replace(/<\/style/gi, '<\\/style');
 
 export function renderReactSandboxScripts(nonce: string, sources: ReactSandboxSourceText): string {
   if (!/^[a-zA-Z0-9_-]+$/.test(nonce)) throw new Error('Invalid sandbox script nonce');
   return `
+  <style nonce="${nonce}">${escapeInlineStyle(sources.tailwindCss)}</style>
   <script nonce="${nonce}">${escapeInlineScript(sources.react)}</script>
   <script nonce="${nonce}">${escapeInlineScript(sources.reactDom)}</script>
   <script nonce="${nonce}">

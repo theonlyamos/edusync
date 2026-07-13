@@ -135,7 +135,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com https://cdn.tailwindcss.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline' https://unpkg.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
   <script nonce="${nonce}">
     window.__lessonRenderFailed = false;
@@ -246,27 +246,6 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     (function() {
       const needsRecharts = ${needsRecharts ? 'true' : 'false'};
       const needsLeaflet = ${needsLeaflet ? 'true' : 'false'};
-      function loadOptionalTailwind() {
-        if (document.querySelector('script[data-lesson-tailwind]')) return;
-        const tailwindScript = document.createElement('script');
-        tailwindScript.src = 'https://cdn.tailwindcss.com';
-        tailwindScript.async = true;
-        tailwindScript.dataset.lessonTailwind = 'true';
-        tailwindScript.addEventListener('load', function () {
-          if (!window.tailwind) return;
-          window.tailwind.config = {
-            theme: {
-              extend: {
-                colors: {
-                  primary: '#3b82f6',
-                  secondary: '#6b7280'
-                }
-              }
-            }
-          };
-        });
-        document.head.appendChild(tailwindScript);
-      }
       // Wait for React and ReactDOM to load
       function waitForReact(callback, maxAttempts = 100) {
         if (window.React && window.ReactDOM && window.reactLoaded && window.reactDOMLoaded) {
@@ -655,7 +634,6 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
           setTimeout(function () {
             if (!window.__lessonRenderFailed && window.parent !== window) {
               window.parent.postMessage({ type: 'react-render-ready' }, '*');
-              setTimeout(loadOptionalTailwind, 0);
             }
           }, 0);
         } catch (err) {

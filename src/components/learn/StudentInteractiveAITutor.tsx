@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { LessonContext } from '@/hooks/useAudioStreaming';
 import { TutorExperience } from '@/components/learn/tutor/TutorExperience';
+import { useObjectiveLearning } from '@/hooks/useObjectiveLearning';
+import type { StudentLessonDetail } from '@/lib/lesson-artifacts/student-learning';
+import { Button } from '@/components/ui/button';
 
 type StudentInteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
@@ -17,15 +20,17 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const debugMode = searchParams.get('debug') === 'true';
   const getFeedback = searchParams.get('getFeedback') === 'true';
 
-  // Parse lesson context from URL params
   const lessonIdFromUrl = searchParams.get('lessonId');
-  const lessonTitleFromUrl = searchParams.get('lessonTitle');
-  const lessonSubjectFromUrl = searchParams.get('lessonSubject');
-  const lessonGradeFromUrl = searchParams.get('lessonGrade');
-  const lessonObjectivesFromUrl = searchParams.get('lessonObjectives');
+  const objectiveIdFromUrl = searchParams.get('objectiveId');
+  const objectiveLearning = useObjectiveLearning({
+    lessonId: lessonIdFromUrl,
+    objectiveId: objectiveIdFromUrl,
+    mode: 'tutor',
+  });
 
-  const [lessonContext, setLessonContext] = useState<LessonContext | undefined>(initialLessonContext);
+  const [lessonDetail, setLessonDetail] = useState<StudentLessonDetail | null>(null);
   const [lessonLoading, setLessonLoading] = useState(!!lessonIdFromUrl);
+  const [lessonError, setLessonError] = useState<string | null>(null);
 
   // Fetch lesson content if lessonId is provided
   useEffect(() => {
@@ -37,31 +42,14 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
 
       try {
         setLessonLoading(true);
-        const response = await fetch(`/api/lessons/${lessonIdFromUrl}`);
-        if (response.ok) {
-          const lesson = await response.json();
-          const context: LessonContext = {
-            lessonId: lessonIdFromUrl,
-            title: lesson.title,
-            subject: lesson.subject,
-            gradeLevel: lesson.gradelevel,
-            objectives: lesson.objectives,
-            content: lesson.content,
-          };
-          setLessonContext(context);
-        }
+        setLessonError(null);
+        const response = await fetch(`/api/students/lessons/${lessonIdFromUrl}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Failed to load lesson');
+        setLessonDetail(data);
       } catch (error) {
         console.error('Failed to fetch lesson:', error);
-        // Fall back to URL params if fetch fails
-        if (lessonTitleFromUrl) {
-          setLessonContext({
-            lessonId: lessonIdFromUrl,
-            title: lessonTitleFromUrl,
-            subject: lessonSubjectFromUrl || undefined,
-            gradeLevel: lessonGradeFromUrl || undefined,
-            objectives: lessonObjectivesFromUrl || undefined,
-          });
-        }
+        setLessonError(error instanceof Error ? error.message : 'Failed to load lesson');
       } finally {
         setLessonLoading(false);
       }
@@ -70,13 +58,43 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
     fetchLessonContent();
   }, [lessonIdFromUrl]);
 
-  // Show loading state while fetching lesson
-  if (lessonLoading) {
+  const lessonContext = useMemo<LessonContext | undefined>(() => {
+    if (!lessonDetail) return initialLessonContext;
+    return {
+      lessonId: lessonDetail.lesson.id,
+      title: lessonDetail.lesson.title,
+      subject: lessonDetail.lesson.subject,
+      gradeLevel: lessonDetail.lesson.gradeLevel,
+      objectives: lessonDetail.objectives.map((objective) => objective.text),
+      content: lessonDetail.lesson.content ?? undefined,
+      learningRunId: objectiveLearning.runId ?? undefined,
+      activeObjective: objectiveLearning.activeObjective ?? undefined,
+    };
+  }, [initialLessonContext, lessonDetail, objectiveLearning.activeObjective, objectiveLearning.runId]);
+
+  if (lessonLoading || objectiveLearning.loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading lesson...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const blockingError = lessonError || objectiveLearning.error;
+  if (lessonIdFromUrl && blockingError && !lessonContext?.learningRunId) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="w-full max-w-md rounded-3xl border border-amber-300/20 bg-white/5 p-7 text-center shadow-2xl">
+          <AlertTriangle className="mx-auto h-10 w-10 text-amber-300" />
+          <h1 className="mt-4 text-xl font-semibold">Tutor session unavailable</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-300">{blockingError}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button onClick={() => window.location.reload()}>Try again</Button>
+            <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => window.location.assign(`/students/lessons/${lessonIdFromUrl}`)}>Back to lesson</Button>
+          </div>
         </div>
       </div>
     );
@@ -88,8 +106,9 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       apiKey={null}
       getFeedback={getFeedback}
       debugMode={debugMode}
-      initialTopic={lessonTitleFromUrl || lessonContext?.title || null}
+      initialTopic={lessonContext?.activeObjective?.text || lessonContext?.title || null}
       lessonContext={lessonContext}
+      objectiveLearning={lessonContext?.learningRunId ? objectiveLearning : undefined}
       onSessionStarted={onSessionStarted}
       onSessionEnded={onSessionEnded}
     />

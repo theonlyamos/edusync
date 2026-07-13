@@ -92,7 +92,7 @@ Subtract 96px from provided width and height for your canvas or root element to 
 - **SPEED RULE:** Do not write huge arrays of quiz questions. Write 1–2 powerful interactive questions max.
 - Available charts (Recharts): LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart, and all standard sub-components.
 - Available maps (React-Leaflet): MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap.
-- Styling: Tailwind utility classes for standard styles; inline \`style\` props for gradients and dynamic values. No \`@import \`, no CSS variables.
+- Styling: Use common Tailwind layout, spacing, typography, palette, border, and shadow utilities only. Use inline \`style\` props for gradients, transforms, arbitrary values, and dynamic values. No arbitrary bracket classes, \`@import\`, or CSS variables.
 - Images: Use \`React.createElement('img', { src, alt, style })\`. Extract URLs from markdown syntax in the task description.
 
 ### Three.js & p5.js Rules

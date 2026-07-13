@@ -8,11 +8,14 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen } from 'lucide-react';
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import { LessonContext } from '@/hooks/useAudioStreaming';
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
+import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
+import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
+import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -33,6 +36,7 @@ export type TutorExperienceProps = {
   debugMode: boolean;
   initialTopic: string | null;
   lessonContext?: LessonContext;
+  objectiveLearning?: ObjectiveLearningController;
   onSessionStarted?: (sessionId: string) => void;
   onSessionEnded?: (sessionId: string | null) => void;
 };
@@ -44,6 +48,7 @@ export const TutorExperience = ({
   debugMode,
   initialTopic,
   lessonContext,
+  objectiveLearning,
   onSessionStarted,
   onSessionEnded,
 }: TutorExperienceProps) => {
@@ -192,6 +197,10 @@ export const TutorExperience = ({
   };
 
   const handleRegenerateVisualization = useCallback(async (isManualTrigger = true) => {
+    if (objectiveLearning?.runId) {
+      await objectiveLearning.requestArtifact('visualization', `manual:${objectiveLearning.runId}:${crypto.randomUUID()}`);
+      return;
+    }
     // Reset retry counter when manually triggered
     if (isManualTrigger) {
       regenerationAttemptsRef.current = 0;
@@ -238,7 +247,7 @@ export const TutorExperience = ({
     } finally {
       vizDispatch({ type: 'SET_GENERATING', payload: false });
     }
-  }, [currentVizIndex, visualizations, apiKey, theme, themeColors])
+  }, [currentVizIndex, visualizations, apiKey, theme, themeColors, objectiveLearning])
 
   const handleRendererError = useCallback(async (errMsg: string) => {
     // Increment retry counter
@@ -284,7 +293,22 @@ export const TutorExperience = ({
 
   const handleEditorSubmit = useCallback(() => { }, []);
 
-  const handleToolCall = async (name: string, args: any) => {
+  const handleToolCall = async (name: string, args: any, callId?: string) => {
+    if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
+      try {
+        const kind = normalizeRequestedArtifactKind(args?.kind);
+        const requestId = callId
+          ? `voice:${objectiveLearning.runId}:${callId}`
+          : `voice:${objectiveLearning.runId}:${crypto.randomUUID()}`;
+        const taskDescription = typeof args?.taskDescription === 'string'
+          ? args.taskDescription
+          : typeof args?.task_description === 'string' ? args.task_description : undefined;
+        await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+      } catch (artifactError) {
+        setError(artifactError instanceof Error ? artifactError.message : 'The learning activity could not be prepared');
+      }
+      return;
+    }
     if (name === 'generate_visualization_description') {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
       try {
@@ -682,6 +706,11 @@ export const TutorExperience = ({
               {lessonContext.subject} {lessonContext.gradeLevel && `• ${lessonContext.gradeLevel}`}
             </p>
           )}
+          {lessonContext?.activeObjective && (
+            <p className="mt-1 max-w-sm line-clamp-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Objective {lessonContext.activeObjective.position + 1}: {lessonContext.activeObjective.text}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -699,6 +728,20 @@ export const TutorExperience = ({
       </div>
     </div>
   );
+
+  const currentObjectiveArtifact = objectiveLearning?.artifacts.at(-1);
+  const preparingActivity = generatingVisualization || Boolean(objectiveLearning?.activityLoading);
+  const activityError = objectiveLearning?.error || error;
+  const objectiveActivityControls = objectiveLearning?.runId ? (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <Button size="sm" variant="outline" disabled={objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
+        <Presentation className="mr-2 h-4 w-4" /> Show next visual
+      </Button>
+      <Button size="sm" variant="outline" disabled={objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
+        <CircleHelp className="mr-2 h-4 w-4" /> Start knowledge check
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
@@ -729,7 +772,24 @@ export const TutorExperience = ({
         </div>
       )}
       <div className="flex-1 flex flex-col ml-0 lg:min-w-0 overflow-y-auto" ref={vizRef}>
-        {code && library ? (
+        {currentObjectiveArtifact ? (
+          <Card className="flex-1 overflow-y-auto rounded-none border-0 bg-background/95 shadow-none">
+            <CardHeader className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Objective activity</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Prepared for {lessonContext?.activeObjective?.text}</p>
+                </div>
+                {objectiveActivityControls}
+              </div>
+            </CardHeader>
+            <CardContent className="mx-auto w-full max-w-5xl p-6 pb-28">
+              {objectiveLearning?.activityLoading && <div className="mb-4 flex items-center gap-2 rounded-xl border bg-muted/50 p-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Preparing activity...</div>}
+              {activityError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{activityError}</div>}
+              <LearningArtifactCard attachment={currentObjectiveArtifact} />
+            </CardContent>
+          </Card>
+        ) : code && library ? (
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
               <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end">
@@ -767,7 +827,7 @@ export const TutorExperience = ({
             </CardHeader>
             <CardContent className="flex-1 flex flex-col p-0 relative">
               <div className="flex-1 p-6 space-y-4">
-                {!generatingVisualization && (
+                {!preparingActivity && (
                   <div
                     ref={vizOnlyRef}
                     className="h-full w-full flex justify-center items-center"
@@ -776,7 +836,7 @@ export const TutorExperience = ({
                     {renderVisualization}
                   </div>
                 )}
-                {!generatingVisualization && (
+                {!preparingActivity && (
                   <div
                     className="h-full"
                     style={{ display: show === 'code' ? 'block' : 'none' }}
@@ -787,11 +847,11 @@ export const TutorExperience = ({
                     />
                   </div>
                 )}
-                {generatingVisualization && (
+                {preparingActivity && (
                   <div className="h-full flex flex-col items-center justify-center">
                     <Loader2 className="w-10 h-10 animate-spin mr-2" />
                     <div className="text-center text-muted-foreground">
-                      <div className="text-lg mb-2">Generating visualization...</div>
+                      <div className="text-lg mb-2">Preparing activity...</div>
                     </div>
                   </div>
                 )}
@@ -799,7 +859,7 @@ export const TutorExperience = ({
             </CardContent>
           </Card>
         ) : (
-          generatingVisualization ? (
+          preparingActivity ? (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
               <CardHeader>
                 {emptyStateHeader}
@@ -807,7 +867,7 @@ export const TutorExperience = ({
               <CardContent className="flex-1 flex flex-col items-center justify-center">
                 <Loader2 className="w-10 h-10 animate-spin mr-2" />
                 <div className="text-center text-muted-foreground">
-                  <div className="text-lg mb-2">Generating visualization...</div>
+                  <div className="text-lg mb-2">Preparing activity...</div>
                 </div>
               </CardContent>
             </Card>
@@ -818,8 +878,10 @@ export const TutorExperience = ({
               </CardHeader>
               <CardContent className="flex-1 flex items-center justify-center">
                 <div className="text-center text-muted-foreground">
-                  <div className="text-lg mb-2">No visualization yet</div>
-                  <div className="text-sm">Ask a question to generate a visualization, quiz, or interactive component</div>
+                  {activityError && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{activityError}</div>}
+                  <div className="text-lg mb-2">Ready for this objective</div>
+                  <div className="mb-5 text-sm">Ask the tutor, open a reviewed visual, or start a knowledge check.</div>
+                  {objectiveActivityControls}
                 </div>
               </CardContent>
             </Card>

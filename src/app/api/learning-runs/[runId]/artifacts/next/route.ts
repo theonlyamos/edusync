@@ -8,6 +8,7 @@ import { rateLimit } from '@/lib/rate-limiter';
 const schema = z.object({
   kind: z.enum(['visualization', 'quiz']),
   requestId: z.string().trim().min(1).max(160),
+  taskDescription: z.string().trim().min(1).max(500).optional(),
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {

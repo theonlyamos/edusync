@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import { requireLessonViewer } from '@/lib/lesson-artifacts/lesson-read-server';
+import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session) {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
         const { searchParams } = new URL(req.url);
         const lessonId = searchParams.get('lessonId');
+        if (!lessonId) throw new LessonArtifactHttpError(400, 'lessonId is required');
 
-        const supabase = createServerSupabase();
+        const { supabase } = await requireLessonViewer(lessonId);
 
         // Check if resources table exists - return empty array if not
         const { data, error } = await supabase
@@ -29,7 +27,7 @@ export async function GET(req: Request) {
         return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching resources:', error);
-        return NextResponse.json([]);
+        return lessonArtifactErrorResponse(error);
     }
 }
 
