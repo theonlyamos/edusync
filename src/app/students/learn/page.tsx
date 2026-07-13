@@ -48,14 +48,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
   );
 
   const handleSelectLesson = (lesson: Lesson) => {
-    const params = new URLSearchParams({
-      lessonId: lesson.id,
-      lessonTitle: lesson.title,
-      lessonSubject: lesson.subject,
-      lessonGrade: lesson.gradelevel,
-      lessonObjectives: lesson.objectives || '',
-    });
-    router.push(`/students/learn?${params.toString()}`);
+    router.push(`/students/lessons/${lesson.id}`);
   };
 
   const handleStartWithoutLesson = () => {

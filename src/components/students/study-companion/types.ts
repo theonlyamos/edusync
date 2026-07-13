@@ -1,3 +1,5 @@
+import type { ObjectiveLearningArtifact } from '@/lib/lesson-artifacts/objective-learning-controller';
+
 export type StudyMode = 'companion' | 'tutor';
 
 export type StudyIntent = 'general' | 'plan' | 'hint' | 'explain' | 'quiz' | 'review' | 'walkthrough';
@@ -20,16 +22,7 @@ export interface SuggestedAction {
   prompt: string;
 }
 
-export interface LearningArtifactAttachment {
-  instanceId: string;
-  source: 'teacher_approved' | 'session_generated';
-  exhausted: boolean;
-  artifact: {
-    id: string;
-    kind: 'interactive_visualization' | 'generated_image' | 'structured_quiz' | 'visual_quiz' | 'uploaded_media';
-    payload: any;
-  } & Record<string, unknown>;
-}
+export type LearningArtifactAttachment = ObjectiveLearningArtifact;
 
 /** Payload emitted when an interactive element is regenerated in place. */
 export interface InteractiveElementUpdate {

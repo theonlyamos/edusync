@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "pnpm lesson-runtime:css",
     "dev": "next dev",
+    "prebuild": "pnpm lesson-runtime:css",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -11,7 +13,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
-    "worker:content": "tsx scripts/content-worker.ts"
+    "worker:content": "tsx scripts/content-worker.ts",
+    "lesson-runtime:css": "tailwindcss -c tailwind.lesson-runtime.config.ts -i src/styles/lesson-runtime.css -o public/lesson-runtime/tailwind.generated.css --minify"
   },
   "dependencies": {
     "@edusync/shared": "workspace:*",

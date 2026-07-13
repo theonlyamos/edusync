@@ -42,6 +42,7 @@ export async function generateSessionArtifact(input: {
   objective: { id: string; text: string; revision: number };
   studentId: string;
   kind: 'visualization' | 'quiz';
+  taskDescription?: string;
 }) {
   const instanceId = randomUUID();
   const job: ContentJobRecord = {
@@ -59,6 +60,7 @@ export async function generateSessionArtifact(input: {
       objectiveText: input.objective.text,
       objectiveRevision: input.objective.revision,
       position: 999,
+      ...(input.taskDescription?.trim() ? { taskDescription: input.taskDescription.trim().slice(0, 500) } : {}),
     },
   };
   const payload = await generateArtifactPayload(job, {
@@ -94,6 +96,7 @@ export async function resolveNextLearningArtifact(input: {
   runId: string;
   kind: LearningArtifactKind;
   requestId: string;
+  taskDescription?: string;
 }) {
   const { session, supabase, run } = await requireOwnedLearningRun(input.runId);
   const { data: existing } = await supabase.from('learning_events').select('payload').eq('run_id', run.id).eq('request_id', input.requestId).maybeSingle();
@@ -152,6 +155,7 @@ export async function resolveNextLearningArtifact(input: {
       objective,
       studentId: session.user.id,
       kind: input.kind,
+      taskDescription: input.taskDescription,
     });
     instanceId = generated.instanceId;
     studentArtifact = generated.studentArtifact;

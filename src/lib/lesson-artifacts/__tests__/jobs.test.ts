@@ -42,6 +42,23 @@ describe('content job generation', () => {
     });
   });
 
+  it('includes a bounded learner request in session fallback generation prompts', async () => {
+    let visualPrompt = '';
+    await generateArtifactPayload({
+      ...baseJob,
+      input: { ...baseJob.input, taskDescription: 'Compare equal and unequal opposing forces.' },
+    }, {
+      visualize: async (prompt) => {
+        visualPrompt = prompt;
+        return { library: 'react', code: 'function App() {}', explanation: 'Compare forces.' };
+      },
+      generateText: async () => '',
+      generateImage: async () => { throw new Error('not used'); },
+    });
+
+    expect(visualPrompt).toContain('Learner request: Compare equal and unequal opposing forces.');
+  });
+
   it('creates a five-question structured quiz that conforms to the server grading schema', async () => {
     const questions = Array.from({ length: 5 }, (_, index) => ({
       id: `q${index + 1}`,

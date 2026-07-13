@@ -1,19 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
+import { requireLessonViewer } from '@/lib/lesson-artifacts/lesson-read-server';
+import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session) {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
         const { searchParams } = new URL(req.url);
         const lessonId = searchParams.get('lessonId');
         const type = searchParams.get('type');
+        if (!lessonId) throw new LessonArtifactHttpError(400, 'lessonId is required');
 
-        const supabase = createServerSupabase();
+        const { supabase } = await requireLessonViewer(lessonId);
         let query = supabase.from('lesson_content').select('*');
         if (lessonId) query = query.eq('lesson_id', lessonId);
         if (type) query = query.eq('type', type);
@@ -22,7 +20,7 @@ export async function GET(req: Request) {
         return NextResponse.json(data ?? []);
     } catch (error) {
         console.error('Error fetching content:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        return lessonArtifactErrorResponse(error);
     }
 }
 

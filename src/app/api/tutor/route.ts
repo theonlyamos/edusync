@@ -242,6 +242,7 @@ export async function POST(req: NextRequest) {
                         runId: parsedBody.data.learningRunId,
                         kind: artifactKind,
                         requestId: `tutor:${persistedChatId}:${randomUUID()}`,
+                        taskDescription: vizReq?.taskDescription || userMessage.content,
                     });
                     if ('artifact' in attachment) {
                         tutorMessage.learningArtifacts = [attachment];

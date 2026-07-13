@@ -57,3 +57,4 @@ opencode.json
 /agents/live-class-agent/logs
 /agents/live-class-agent/tmp
 /agents/live-class-agent/tmp
+public/lesson-runtime/tailwind.generated.css

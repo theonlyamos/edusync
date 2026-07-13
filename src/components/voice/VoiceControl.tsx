@@ -10,7 +10,7 @@ interface VoiceControlProps {
   topic?: string | null;
   lessonContext?: LessonContext;
   onError?: (error: string) => void;
-  onToolCall?: (name: string, args: any) => void;
+  onToolCall?: (name: string, args: any, callId?: string) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
   mobileMode?: boolean;
@@ -218,4 +218,4 @@ export function VoiceControl({ active, sessionId, topic, lessonContext, onError,
       </div>
     </div>
   );
-} 
+}

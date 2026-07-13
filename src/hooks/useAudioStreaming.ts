@@ -4,6 +4,7 @@ import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyM
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
 import { convertToWav } from '@/lib/audio/wav';
+import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion';
@@ -32,7 +33,7 @@ interface AudioStreamingActions {
     startStreaming: () => Promise<void>;
     stopStreaming: () => void;
     clearError: () => void;
-    setToolCallListener: (cb: (name: string, args: any) => void) => void;
+    setToolCallListener: (cb: (name: string, args: any, callId?: string) => void) => void;
     setOnAudioDataListener: (cb: (data: Float32Array<ArrayBufferLike>) => void) => void;
     setOnAiAudioDataListener: (cb: (data: Float32Array) => void) => void;
     setOnRecordingsReady: (cb: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) => void;
@@ -54,8 +55,10 @@ export interface LessonContext {
     title?: string;
     subject?: string;
     gradeLevel?: string;
-    objectives?: string;
+    objectives?: string | string[];
     content?: string;
+    learningRunId?: string;
+    activeObjective?: { id: string; text: string; position: number; revision: number };
 }
 
 const systemPrompt = EUREKA_TUTOR_SYSTEM_PROMPT;
@@ -83,7 +86,7 @@ export function useAudioStreaming(
     const nextPlaybackTimeRef = useRef<number>(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micAnalyserRef = useRef<AnalyserNode | null>(null);
-    const toolCallListenerRef = useRef<((name: string, args: any) => void) | null>(null);
+    const toolCallListenerRef = useRef<((name: string, args: any, callId?: string) => void) | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
@@ -467,7 +470,18 @@ export function useAudioStreaming(
             const lessonCtx = lessonContextRef.current;
             const topicNow = topicRef.current;
 
-            if (lessonCtx?.title) {
+            if (lessonCtx?.title && lessonCtx.learningRunId && lessonCtx.activeObjective) {
+                contextAddition = `\n\n${buildObjectiveTutorPromptContext({
+                    lessonTitle: lessonCtx.title,
+                    subject: lessonCtx.subject,
+                    gradeLevel: lessonCtx.gradeLevel,
+                    objectiveText: lessonCtx.activeObjective.text,
+                    lessonContent: lessonCtx.content,
+                })}`;
+            } else if (lessonCtx?.title) {
+                const objectiveText = Array.isArray(lessonCtx.objectives)
+                    ? lessonCtx.objectives.map((objective) => `- ${objective}`).join('\n')
+                    : lessonCtx.objectives;
                 contextAddition = `
 
 ### **Lesson Context**
@@ -478,7 +492,7 @@ You are helping a student learn material from a specific lesson:
 - **Grade Level:** ${lessonCtx.gradeLevel || 'Not specified'}
 
 **Learning Objectives:**
-${lessonCtx.objectives || 'No specific objectives provided.'}
+${objectiveText || 'No specific objectives provided.'}
 
 **Lesson Content:**
 ${lessonCtx.content ? lessonCtx.content.substring(0, 2000) + (lessonCtx.content.length > 2000 ? '...' : '') : 'No content provided.'}
@@ -502,7 +516,9 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         ? {
                             title: lessonCtx.title,
                             subject: lessonCtx.subject || 'general',
-                            objectives: lessonCtx.objectives ?? null,
+                            objectives: Array.isArray(lessonCtx.objectives)
+                                ? lessonCtx.objectives.join('\n')
+                                : lessonCtx.objectives ?? null,
                             content: lessonCtx.content ?? null,
                         }
                         : undefined;
@@ -528,11 +544,24 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 },
             };
 
+            const objectiveArtifactToolDeclaration = {
+                name: 'request_learning_artifact',
+                description: 'Shows the next teacher-reviewed visualization or quiz for the active objective, generating a fallback only after reviewed activities are exhausted.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        kind: { type: 'string', enum: ['visualization', 'quiz'] },
+                        taskDescription: { type: 'string', description: 'A short description of the concept or check the learner needs.' },
+                    },
+                    required: ['kind', 'taskDescription'],
+                },
+            };
+
             const tutorTools = [
                 { googleSearch: {} },
                 {
                     functionDeclarations: [
-                        visualizationToolDeclaration,
+                        lessonCtx?.learningRunId ? objectiveArtifactToolDeclaration : visualizationToolDeclaration,
                         {
                             name: 'set_topic',
                             description:
@@ -960,7 +989,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 // Handle tool calls
                 if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
                     for (const fn of message.toolCall.functionCalls) {
-                        toolCallListenerRef.current?.(fn.name || '', fn.args);
+                        toolCallListenerRef.current?.(fn.name || '', fn.args, fn.id || undefined);
 
                         // Send response back to Gemini
                         try {
@@ -1134,7 +1163,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
     // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
-    const setToolCallListener = useCallback((cb: (name: string, args: any) => void) => {
+    const setToolCallListener = useCallback((cb: (name: string, args: any, callId?: string) => void) => {
         toolCallListenerRef.current = cb;
     }, []);
 

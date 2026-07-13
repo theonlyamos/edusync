@@ -16,20 +16,29 @@ import {
 } from "@/components/ui/card";
 import { BookOpen, Brain, MessagesSquare, Trophy, Clock, FileText } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { useStudentProfile } from '@/hooks/useStudentProfile';
+import { resolveStudentDisplayName } from '@/lib/student-profile';
 
 export default function StudentDashboard() {
   const session = useContext(SupabaseSessionContext);
   const router = useRouter();
+  const { data: profile } = useStudentProfile(session?.user?.id);
 
   if (!session) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
+  const displayName = resolveStudentDisplayName({
+    profileName: profile?.name,
+    metadataName: session.user.user_metadata?.name,
+    email: profile?.email ?? session.user.email,
+  });
+
   return (
     <DashboardLayout>
       <div className="p-6">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold text-foreground">Welcome back, {session?.user?.name}!</h2>
+          <h2 className="text-3xl font-bold text-foreground">Welcome back, {displayName}!</h2>
           <p className="text-muted-foreground">Here's an overview of your learning journey</p>
         </div>
 
@@ -174,4 +183,4 @@ export default function StudentDashboard() {
       </div>
     </DashboardLayout>
   );
-} 
+}
