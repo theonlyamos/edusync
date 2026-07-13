@@ -13,11 +13,14 @@ describe('lesson mutation route ownership', () => {
     expect(route).not.toContain(".select('id, teacher')");
     expect(route).not.toMatch(/existing\.teacher(?!_)/);
     expect(route).not.toMatch(/lesson\.teacher(?!_)/);
-    expect(route).toContain(".select('id, teacher_id')");
+    expect(route).toContain(".select('id, teacher_id, organization_id')");
     expect(route).toContain(".from('teachers')");
     expect(route).toContain(".select('user_id')");
-    expect(route).toContain('gradelevel: body.gradeLevel');
-    expect(route).toContain('organization_id: body.organizationId');
+    expect(route).not.toContain('organization_id: body.organizationId ?? null');
+    expect(route).toContain('mapLessonUpdate(');
+    expect(route).toContain('isLessonOrganizationGuardError(');
+    expect(route).toContain('createServerSupabase');
+    expect(route).toContain('createSSRUserSupabase');
     expect(route).toContain('mapLessonRecord(updatedLesson)');
   });
 });
