@@ -1,17 +1,15 @@
 import { NextResponse, NextRequest } from "next/server";
-import { z } from 'zod';
+import { ZodError } from 'zod';
 import { getServerSession } from "@/lib/auth";
-import { createSSRUserSupabase } from "@/lib/supabase.server";
+import { createSSRUserSupabase, createServerSupabase } from "@/lib/supabase.server";
 import { mapLessonRecord } from '@/lib/lesson-record';
-
-const updateLessonSchema = z.object({
-    title: z.string().trim().min(1).max(160),
-    subject: z.string().trim().min(1).max(120),
-    gradeLevel: z.string().trim().min(1).max(80),
-    objectives: z.array(z.string().trim().min(1).max(500)).min(1).max(20),
-    content: z.string().max(100_000).nullable().default(null),
-    organizationId: z.string().uuid().nullable().optional(),
-});
+import {
+    hasRequiredOrganizationAdminMemberships,
+    isLessonOrganizationGuardError,
+    mapLessonUpdate,
+    requiredOrganizationAdminIds,
+    updateLessonSchema,
+} from '@/lib/lesson-update';
 
 export async function GET(
     request: NextRequest,
@@ -65,11 +63,11 @@ export async function PUT(
             );
         }
 
-        const supabase = await createSSRUserSupabase();
+        const userSupabase = await createSSRUserSupabase();
         const { lessonId } = await params;
-        const { data: existing, error: findErr } = await supabase
+        const { data: existing, error: findErr } = await userSupabase
             .from('lessons')
-            .select('id, teacher_id')
+            .select('id, teacher_id, organization_id')
             .eq('id', lessonId)
             .maybeSingle();
         if (findErr) throw findErr;
@@ -82,7 +80,7 @@ export async function PUT(
         }
 
         if (session.user.role === 'teacher') {
-            const { data: teacher, error: teacherError } = await supabase
+            const { data: teacher, error: teacherError } = await userSupabase
                 .from('teachers')
                 .select('user_id')
                 .eq('id', existing.teacher_id)
@@ -96,23 +94,58 @@ export async function PUT(
             }
         }
 
-        const body = updateLessonSchema.parse(await request.json());
-        const updateData = {
-            title: body.title,
-            subject: body.subject,
-            gradelevel: body.gradeLevel,
-            objectives: body.objectives,
-            content: body.content,
-            organization_id: body.organizationId ?? null,
-            updated_at: new Date().toISOString(),
-        };
-        const { data: updatedLesson, error } = await supabase
+        let body;
+        try {
+            body = updateLessonSchema.parse(await request.json());
+        } catch (error) {
+            if (error instanceof ZodError) {
+                return NextResponse.json(
+                    { error: 'Invalid lesson update' },
+                    { status: 400 },
+                );
+            }
+            throw error;
+        }
+
+        const requiredOrganizationIds = requiredOrganizationAdminIds({
+            actorRole: session.user.role,
+            currentOrganizationId: existing.organization_id,
+            update: body,
+        });
+        if (requiredOrganizationIds.length > 0) {
+            const trustedSupabase = createServerSupabase();
+            const { data: memberships, error: membershipError } = await trustedSupabase
+                .from('organization_members')
+                .select('organization_id, role, is_active')
+                .eq('user_id', session.user.id)
+                .in('organization_id', requiredOrganizationIds);
+            if (membershipError) throw membershipError;
+
+            if (!hasRequiredOrganizationAdminMemberships(requiredOrganizationIds, memberships ?? [])) {
+                return NextResponse.json(
+                    { error: 'Not authorized to reassign this lesson organization' },
+                    { status: 403 },
+                );
+            }
+        }
+
+        const organizationChangeRequested = Object.hasOwn(body, 'organizationId')
+            && body.organizationId !== existing.organization_id;
+        const { data: updatedLesson, error } = await userSupabase
             .from('lessons')
-            .update(updateData)
+            .update(mapLessonUpdate(body, new Date().toISOString()))
             .eq('id', lessonId)
             .select('*')
             .maybeSingle();
-        if (error) throw error;
+        if (error) {
+            if (isLessonOrganizationGuardError(error, organizationChangeRequested)) {
+                return NextResponse.json(
+                    { error: 'Not authorized to reassign this lesson organization' },
+                    { status: 403 },
+                );
+            }
+            throw error;
+        }
 
         return NextResponse.json(mapLessonRecord(updatedLesson));
     } catch (error) {

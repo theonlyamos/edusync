@@ -22,6 +22,23 @@ export type ContentJobSummary = {
   active: number;
 };
 
+export type LessonSubmissionFields = {
+  title: string;
+  subject: string;
+  gradeLevel: string;
+  objectives: string[];
+  content: string;
+};
+
+export function buildLessonSubmissionPayload(
+  fields: LessonSubmissionFields,
+  operation: { mode: 'edit' } | { mode: 'create'; organizationId: string },
+): LessonSubmissionFields | (LessonSubmissionFields & { organizationId: string | null }) {
+  if (operation.mode === 'edit') return { ...fields };
+
+  return { ...fields, organizationId: operation.organizationId || null };
+}
+
 export function summarizeContentJobs(jobs: Array<{ status: string }>): ContentJobSummary {
   const succeeded = jobs.filter((job) => job.status === 'succeeded').length;
   const failed = jobs.filter((job) => job.status === 'failed').length;

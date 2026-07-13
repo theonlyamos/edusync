@@ -23,7 +23,7 @@ import {
 import { Loader2, Plus, Trash2, Wand2, X } from "lucide-react";
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
-import { mergeGeneratedLessonDraft } from '@/lib/lesson-artifacts/authoring-ui';
+import { buildLessonSubmissionPayload, mergeGeneratedLessonDraft } from '@/lib/lesson-artifacts/authoring-ui';
 
 interface Teacher {
   subjects?: string[];
@@ -150,14 +150,10 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title,
-          subject,
-          gradeLevel,
-          objectives,
-          content: generatedContent,
-          organizationId: organizationId || null,
-        }),
+        body: JSON.stringify(buildLessonSubmissionPayload(
+          { title, subject, gradeLevel, objectives, content: generatedContent },
+          isEditing ? { mode: 'edit' } : { mode: 'create', organizationId },
+        )),
       });
 
       const result = await response.json().catch(() => ({}));

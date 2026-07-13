@@ -1,11 +1,23 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildLessonSubmissionPayload,
   isArtifactActionBusy,
+  type LessonSubmissionFields,
   mergeGeneratedLessonDraft,
   shouldApplyRemoteObjectives,
   summarizeContentJobs,
 } from '../authoring-ui';
+
+const fields = Object.freeze<LessonSubmissionFields>({
+  title: 'Comparing fractions',
+  subject: 'Mathematics',
+  gradeLevel: '5',
+  objectives: ['Compare fractions with unlike denominators'],
+  content: 'Use equivalent fractions to compare values.',
+});
 
 describe('Objective Studio state helpers', () => {
   it('tracks the active action separately for each artifact', () => {
@@ -43,5 +55,38 @@ describe('Objective Studio state helpers', () => {
       generated,
       replaceExisting: true,
     })).toEqual({ title: 'Manual title', objectives: ['Generated objective'], content: 'Generated content' });
+  });
+});
+
+describe('lesson submission payloads', () => {
+  it('omits organization ownership from edit payloads', () => {
+    const editPayload = buildLessonSubmissionPayload(fields, { mode: 'edit' });
+
+    expect(editPayload).toEqual(fields);
+    expect(Object.hasOwn(editPayload, 'organizationId')).toBe(false);
+    expect(Object.hasOwn(JSON.parse(JSON.stringify(editPayload)), 'organizationId')).toBe(false);
+  });
+
+  it('adds organization ownership only when creating a lesson', () => {
+    expect(buildLessonSubmissionPayload(fields, {
+      mode: 'create',
+      organizationId: '11111111-1111-4111-8111-111111111111',
+    })).toEqual({ ...fields, organizationId: '11111111-1111-4111-8111-111111111111' });
+
+    expect(buildLessonSubmissionPayload(fields, {
+      mode: 'create',
+      organizationId: '',
+    })).toEqual({ ...fields, organizationId: null });
+  });
+});
+
+describe('CreateLessonForm submission wiring', () => {
+  it('uses ownership-aware payload construction', () => {
+    const source = readFileSync(new URL('../../../components/lessons/CreateLessonForm.tsx', import.meta.url), 'utf8');
+
+    expect(source).toContain('buildLessonSubmissionPayload');
+    expect(source).toContain("{ mode: 'edit' }");
+    expect(source).toContain("{ mode: 'create', organizationId }");
+    expect(source).not.toContain('organizationId: organizationId || null');
   });
 });

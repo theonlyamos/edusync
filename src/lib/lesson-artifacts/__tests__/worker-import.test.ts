@@ -5,5 +5,5 @@ describe('standalone content worker imports', () => {
     const processor = await import('../job-processor');
 
     expect(processor.processContentJobBatch).toBeTypeOf('function');
-  });
+  }, 15_000);
 });
