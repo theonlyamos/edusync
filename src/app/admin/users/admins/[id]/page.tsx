@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useContext } from 'react';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -43,8 +43,9 @@ interface PageProps {
 export default function AdminDetailsPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
   const router = useRouter();
-  const userRole = (session?.user?.user_metadata as any)?.role;
+  const userRole = appUser?.role;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,7 +58,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    if (session === undefined) return; // Still loading
+    if (session === undefined || profileLoading || Boolean(profileError)) return; // Still loading
     
     if (!session) {
       router.replace('/login');
@@ -104,7 +105,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
     };
 
     fetchAdmin();
-  }, [session, userRole, router, resolvedParams.id, toast]);
+  }, [session, profileLoading, profileError, userRole, router, resolvedParams.id, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +169,7 @@ export default function AdminDetailsPage({ params }: PageProps) {
     }));
   };
 
-  if (session === undefined || isLoading) {
+  if (session === undefined || profileLoading || Boolean(profileError) || isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">

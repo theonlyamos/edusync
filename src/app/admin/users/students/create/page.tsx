@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useContext } from 'react';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,8 @@ import { GRADE_LEVELS } from '@/lib/constants';
 
 export default function CreateStudentPage() {
   const session = useContext(SupabaseSessionContext);
-  const userRole = (session?.user?.user_metadata as any)?.role;
+  const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
+  const userRole = appUser?.role;
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +90,7 @@ export default function CreateStudentPage() {
     }));
   };
 
-  if (session === undefined) {
+  if (session === undefined || profileLoading || Boolean(profileError)) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">

@@ -53,7 +53,7 @@ export async function getServerSession(adapter?: CookieAdapter): Promise<null | 
             id: authUser.id,
             email: authUser.email ?? appUser?.email ?? '',
             name: appUser?.name ?? authUser.user_metadata?.name ?? null,
-            role: (appUser as any)?.role ?? authUser.user_metadata?.role ?? null,
+            role: appUser?.role ?? null,
             image: appUser?.image ?? null,
         },
     };

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { getAppRedirect } from '@/lib/app-user';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -16,35 +17,17 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const supabase = useContext(SupabaseBrowserClientContext);
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState<'authenticated' | 'unauthenticated' | 'loading'>(session ? 'authenticated' : 'unauthenticated');
-  const redirectedFromRaw = searchParams.get('redirectedFrom');
-  const redirectedFrom = redirectedFromRaw ? decodeURIComponent(redirectedFromRaw) : null;
+  const redirectedFrom = searchParams.get('redirectedFrom');
   const code = searchParams.get('code');
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      if (redirectedFrom) {
-        router.replace(redirectedFrom);
-        return;
-      }
-
-      switch (session.user.user_metadata.role) {
-        case 'admin':
-          router.push('/admin/dashboard');
-          break;
-        case 'teacher':
-          router.push('/teachers/dashboard');
-          break;
-        case 'student':
-          router.push('/students/dashboard');
-          break;
-        default:
-          router.push('/learn');
-      }
+    if (!code && session?.user && appUser && !profileLoading) {
+      router.replace(getAppRedirect(appUser.role, redirectedFrom));
     }
-  }, [session, status, router, redirectedFrom]);
+  }, [code, session, appUser, profileLoading, router, redirectedFrom]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -57,11 +40,6 @@ function LoginContent() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      setStatus('authenticated');
-      if (redirectedFrom) {
-        router.replace(redirectedFrom);
-        return;
-      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -75,13 +53,20 @@ function LoginContent() {
 
   const handleOAuth = async (provider: 'google') => {
     try {
-      const redirectTo = `${window.location.origin}/login?redirectedFrom=${encodeURIComponent(redirectedFrom || '/learn')}`;
+      const redirectTo = `${window.location.origin}/login${redirectedFrom ? `?redirectedFrom=${encodeURIComponent(redirectedFrom)}` : ''}`;
       const { data, error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) throw error;
     } catch (error) {
       toast({ title: 'Error', description: (error as any)?.message ?? 'OAuth failed', variant: 'destructive' });
     }
   };
+
+  if (profileError) {
+    return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <p role="alert">{profileError}</p>
+      <Button onClick={() => window.location.reload()}>Try again</Button>
+    </main>;
+  }
 
   // Show loading interface if code parameter exists (OAuth callback)
   if (code) {
@@ -95,7 +80,7 @@ function LoginContent() {
     )
   }
 
-  if (status === 'loading' || status === 'authenticated') {
+  if (profileLoading || session?.user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-md space-y-8 px-4">
@@ -130,6 +115,7 @@ function LoginContent() {
               </p>
             </div>
 
+            {searchParams.get('error') === 'oauth' && <p role="alert">Google sign-in failed. Please try again.</p>}
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-4">
                 <div className="space-y-2">

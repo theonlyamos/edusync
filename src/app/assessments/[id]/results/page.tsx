@@ -7,7 +7,7 @@ import { AssessmentResults } from '@/components/assessment/AssessmentResults';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 
 interface Assessment {
   _id: string;
@@ -58,7 +58,8 @@ export default function AssessmentResultsPage({
   const router = useRouter();
   const { toast } = useToast();
   const session = useContext(SupabaseSessionContext);
-  const userRole = (session?.user?.user_metadata as any)?.role;
+  const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
+  const userRole = appUser?.role;
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [results, setResults] = useState<AssessmentResult[]>([]);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
@@ -66,10 +67,10 @@ export default function AssessmentResultsPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session === undefined) return; // Wait for auth to load
+    if (session === undefined || profileLoading || Boolean(profileError)) return; // Wait for auth to load
     if (!session) return; // Not authenticated
     fetchData();
-  }, [session, userRole]);
+  }, [session, profileLoading, profileError, userRole]);
 
   const fetchData = async () => {
     try {
