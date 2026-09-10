@@ -2,3 +2,7 @@ packages:
   - .
   - agents/*
   - packages/*
+allowBuilds:
+  '@google/genai': true
+  bufferutil: true
+  esbuild: true
