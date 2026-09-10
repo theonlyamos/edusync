@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { getAppRedirect } from '@/lib/app-user';
 import Image from 'next/image';
 import { Loader2 } from 'lucide-react';
 
@@ -15,27 +16,13 @@ export default function SignupPage() {
   const router = useRouter();
   const supabase = useContext(SupabaseBrowserClientContext);
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [status, setStatus] = useState<'authenticated' | 'unauthenticated' | 'loading'>(session ? 'authenticated' : 'unauthenticated');
 
   useEffect(() => {
-    if (status === 'authenticated') {
-      switch (session.user.role) {
-        case 'admin':
-          router.push('/admin/dashboard');
-          break;
-        case 'teacher':
-          router.push('/teachers/dashboard');
-          break;
-        case 'student':
-          router.push('/students/dashboard');
-          break;
-        default:
-          router.push('/');
-      }
-    }
-  }, [session, status, router]);
+    if (session?.user && appUser && !profileLoading) router.replace(getAppRedirect(appUser.role));
+  }, [session, appUser, profileLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -74,7 +61,7 @@ export default function SignupPage() {
         options: {
           data: {
             name: name,
-            role: 'learner' // Default role
+            role: 'student' // Matches new app profiles; authorization uses the database role.
           }
         }
       });
@@ -91,7 +78,6 @@ export default function SignupPage() {
           title: 'Account created',
           description: 'Welcome! Your account has been created successfully.',
         });
-        setStatus('authenticated');
       }
     } catch (error) {
       toast({
@@ -109,7 +95,7 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/login`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -122,7 +108,14 @@ export default function SignupPage() {
     }
   };
 
-  if (status === 'loading' || status === 'authenticated') {
+  if (profileError) {
+    return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <p role="alert">{profileError}</p>
+      <Button onClick={() => window.location.reload()}>Try again</Button>
+    </main>;
+  }
+
+  if (profileLoading || session?.user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-md space-y-8 px-4">

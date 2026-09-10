@@ -2,7 +2,7 @@
 
 import { useEffect, useContext } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Sidebar } from './Sidebar';
 
 export interface DashboardLayoutProps {
@@ -14,16 +14,24 @@ export interface DashboardLayoutProps {
 export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
   const router = useRouter();
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser, loading, error } = useContext(AppUserContext);
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!session?.user) {
+    if (session === null) {
       const back = pathname ? `?redirectedFrom=${encodeURIComponent(pathname)}` : ''
       router.push(`/login${back}`);
     }
-  }, [session, router]);
+  }, [session, router, pathname]);
 
-  if (!session?.user) {
+  if (error) {
+    return <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+      <p role="alert">{error}</p>
+      <button onClick={() => window.location.reload()}>Try again</button>
+    </main>;
+  }
+
+  if (!session?.user || loading || !appUser) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -31,14 +39,14 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
     );
   }
 
-  const userRole = (session.user.user_metadata as any)?.role;
+  const userRole = appUser.role;
   const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
     ? userRole
-    : 'student';
+    : null;
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar role={role} />
+      {role && <Sidebar role={role} />}
       <main className="flex-1 overflow-y-auto">
         {fullBleed ? (
           children
@@ -50,4 +58,4 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
       </main>
     </div>
   );
-} 
+}

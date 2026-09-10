@@ -4,7 +4,7 @@ import { useState, useEffect, useContext } from 'react';
 
 export const dynamic = 'force-dynamic';
 import { useRouter } from 'next/navigation';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -47,6 +47,7 @@ export default function AssessmentsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser } = useContext(AppUserContext);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -108,12 +109,12 @@ export default function AssessmentsPage() {
           <div>
             <h1 className="text-3xl font-bold">Assessments</h1>
             <p className="text-muted-foreground">
-              {session?.user?.role === 'student'
+              {appUser?.role === 'student'
                 ? 'View and take available assessments'
                 : 'Manage and create assessments'}
             </p>
           </div>
-          {(session?.user?.role === 'teacher' || session?.user?.role === 'admin') && (
+          {(appUser?.role === 'teacher' || appUser?.role === 'admin') && (
             <Button onClick={() => router.push('/assessments/create')}>
               <Plus className="mr-2 h-4 w-4" />
               Create Assessment
@@ -204,7 +205,7 @@ export default function AssessmentsPage() {
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between">
-                {session?.user?.role === 'student' ? (
+                {appUser?.role === 'student' ? (
                   <Button
                     className="w-full"
                     onClick={() => handleStartAssessment(assessment._id)}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useContext } from 'react';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar, BookOpen, GraduationCap, Book, X } from 'lucide-react';
@@ -40,6 +40,7 @@ interface Lesson {
 
 export function TeacherTimeTable() {
   const session = useContext(SupabaseSessionContext);
+  const { user: appUser } = useContext(AppUserContext);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [timeTable, setTimeTable] = useState<TimeTable>({});
@@ -50,10 +51,10 @@ export function TeacherTimeTable() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   useEffect(() => {
-    if (session?.user?.role === 'teacher') {
+    if (appUser?.role === 'teacher') {
       fetchTimeTableAndLessons();
     }
-  }, [session]);
+  }, [session, appUser]);
 
   const fetchTimeTableAndLessons = async () => {
     try {

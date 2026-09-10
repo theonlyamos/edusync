@@ -109,10 +109,12 @@ const displayVisualAidFunctionDeclaration = {
   type: 'function' as const,
   function: {
     name: 'display_visual_aid',
+    ...(AI_PROVIDER === 'CEREBRAS' ? { strict: true } : {}),
     description:
       'Generates and displays a complete visual aid for the student. This is the final step and should contain the generated code, the library used, and a user-friendly explanation of the concept.',
     parameters: {
       type: 'object',
+      ...(AI_PROVIDER === 'CEREBRAS' ? { additionalProperties: false } : {}),
       properties: {
         explanation: {
           type: 'string',
@@ -191,6 +193,14 @@ async function generateVisualizationOnce(
       { role: 'user', content: taskDescription },
     ],
     tools: [displayVisualAidFunctionDeclaration],
+    ...(AI_PROVIDER === 'CEREBRAS' ? {
+      tool_choice: { type: 'function' as const, function: { name: VISUAL_AID_TOOL_NAME } },
+      parallel_tool_calls: false,
+    } : {}),
+    // Qwen defaults to high reasoning, which can consume the budget before producing code.
+    ...(AI_PROVIDER === 'CEREBRAS' && PROVIDER_MODEL === 'qwen-3.8-27b'
+      ? { reasoning_effort: 'low' as const }
+      : {}),
     temperature: 0.7,
     max_tokens: 16384,
   })

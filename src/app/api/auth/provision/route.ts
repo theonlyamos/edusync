@@ -37,28 +37,47 @@ export async function POST(request: NextRequest) {
 
         const supabaseAdmin = createServerSupabase()
 
-        const { data: existing } = await supabaseAdmin
+        const { data: existing, error: lookupError } = await supabaseAdmin
             .from('users')
             .select('id')
             .eq('id', id)
             .maybeSingle()
 
-        if (!existing) {
-            const { error: insertError } = await supabaseAdmin
-                .from('users')
-                .insert({ id, email, name, image, role: 'student', credits: 60 })
-            if (insertError) throw insertError
+        if (lookupError) throw lookupError
+        const profileFields = 'id, email, name, image, role'
+        let user
 
-            // Initialize credits for new user
-            await initializeUserCredits(id)
+        if (!existing) {
+            const { data, error: insertError } = await supabaseAdmin
+                .from('users')
+                .upsert({ id, email, name, image, role: 'student', credits: 60 }, { onConflict: 'id', ignoreDuplicates: true })
+                .select(profileFields)
+                .maybeSingle()
+            if (insertError) throw insertError
+            user = data
+
+            if (user) {
+                await initializeUserCredits(id)
+            } else {
+                // Another tab may have provisioned this account after our lookup.
+                const { data: profile, error } = await supabaseAdmin.from('users').select(profileFields).eq('id', id).single()
+                if (error) throw error
+                user = profile
+            }
         } else {
-            await supabaseAdmin
+            const { data, error: updateError } = await supabaseAdmin
                 .from('users')
                 .update({ email, name, image })
                 .eq('id', id)
+                .select(profileFields)
+                .single()
+            if (updateError) throw updateError
+            user = data
         }
 
-        return NextResponse.json({ ok: true })
+        const result = NextResponse.json({ ok: true, user })
+        response.cookies.getAll().forEach(cookie => result.cookies.set(cookie))
+        return result
     } catch (error) {
         return NextResponse.json({ error: (error as any)?.message ?? 'Server error' }, { status: 500 })
     }
