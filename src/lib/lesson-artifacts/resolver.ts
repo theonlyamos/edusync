@@ -28,6 +28,7 @@ export function selectNextPublishedArtifact(input: {
     .filter(
       (artifact) =>
         artifact.status === 'approved' &&
+        !(artifact.payload.kind === 'generated_image' && artifact.payload.introductionFor) &&
         input.publishedArtifactIds.has(artifact.id) &&
         !input.consumedArtifactIds.has(artifact.id) &&
         belongsToKind(artifact.kind, input.kind),

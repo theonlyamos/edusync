@@ -6,6 +6,7 @@ import {
   appendUniqueArtifact,
   createAsyncRequestDeduper,
   createLearningScopeGuard,
+  type LearningScopeToken,
   type ObjectiveLearningArtifact,
 } from '@/lib/lesson-artifacts/objective-learning-controller';
 
@@ -43,14 +44,20 @@ export function useObjectiveLearning(options: {
   const [error, setError] = useState<string | null>(null);
   const deduperRef = useRef(createAsyncRequestDeduper());
   const scopeGuardRef = useRef(createLearningScopeGuard());
-  const scope = lessonId ? `${lessonId}:${mode}` : null;
+  const activeTokenRef = useRef<LearningScopeToken | null>(null);
+  const transitioningRef = useRef(false);
+  const scope = lessonId ? `${lessonId}:${mode}:${objectiveId ?? ''}` : null;
   const scopedRun = runScope === scope ? run : null;
 
   const initialize = useCallback(async (requestedObjectiveId?: string | null) => {
     if (!lessonId) return null;
-    const requestScope = `${lessonId}:${mode}`;
+    const requestScope = `${lessonId}:${mode}:${objectiveId ?? ''}`;
     const token = scopeGuardRef.current.begin(requestScope);
+    activeTokenRef.current = token;
+    transitioningRef.current = true;
     setLoading(true);
+    setActivityLoading(false);
+    setArtifacts([]);
     setError(null);
     try {
       const key = `run:${lessonId}:${mode}:${requestedObjectiveId ?? ''}`;
@@ -63,7 +70,7 @@ export function useObjectiveLearning(options: {
       setRun(data.run);
       setRunScope(requestScope);
       setObjectives(data.objectives ?? []);
-      setArtifacts([]);
+      setArtifacts(data.introduction ? [data.introduction] : []);
       return data.run as LearningRun;
     } catch (requestError) {
       if (scopeGuardRef.current.isCurrent(token)) {
@@ -75,20 +82,33 @@ export function useObjectiveLearning(options: {
       }
       return null;
     } finally {
-      if (scopeGuardRef.current.isCurrent(token)) setLoading(false);
+      if (scopeGuardRef.current.isCurrent(token)) {
+        transitioningRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [lessonId, mode]);
+  }, [lessonId, mode, objectiveId]);
 
   useEffect(() => {
-    scopeGuardRef.current.clear();
-    if (!autoStart || !lessonId) return;
-    const timeoutId = window.setTimeout(() => { void initialize(objectiveId); }, 0);
-    return () => window.clearTimeout(timeoutId);
+    const guard = scopeGuardRef.current;
+    guard.clear();
+    const timeoutId = autoStart && lessonId
+      ? window.setTimeout(() => { void initialize(objectiveId); }, 0)
+      : undefined;
+    return () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      guard.clear();
+    };
   }, [autoStart, initialize, lessonId, mode, objectiveId]);
 
   const selectObjective = useCallback(async (nextObjectiveId: string) => {
-    if (!scopedRun) return false;
+    if (!scopedRun || !scope || transitioningRef.current || activeTokenRef.current?.scope !== scope) return false;
+    const token = scopeGuardRef.current.begin(scope);
+    activeTokenRef.current = token;
+    transitioningRef.current = true;
     setLoading(true);
+    setActivityLoading(false);
+    setArtifacts([]);
     setError(null);
     try {
       const data = await readJson(await fetch(`/api/learning-runs/${scopedRun.id}/objective`, {
@@ -96,23 +116,33 @@ export function useObjectiveLearning(options: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ objectiveId: nextObjectiveId }),
       }));
+      if (!scopeGuardRef.current.isCurrent(token)) return false;
       setRun(data.run);
-      setArtifacts([]);
+      setArtifacts(data.introduction ? [data.introduction] : []);
       return true;
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'The objective could not be selected');
+      if (scopeGuardRef.current.isCurrent(token)) {
+        setRun(null);
+        setError(requestError instanceof Error ? requestError.message : 'The objective could not be selected');
+      }
       return false;
     } finally {
-      setLoading(false);
+      if (scopeGuardRef.current.isCurrent(token)) {
+        transitioningRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [scopedRun]);
+  }, [scope, scopedRun]);
 
   const requestArtifact = useCallback(async (
     kind: 'visualization' | 'quiz',
     requestId = crypto.randomUUID(),
     taskDescription?: string,
   ) => {
-    if (!scopedRun) throw new Error('The objective learning session is not ready');
+    const token = activeTokenRef.current;
+    if (!scopedRun || !token || token.scope !== scope || transitioningRef.current || !scopeGuardRef.current.isCurrent(token)) {
+      throw new Error('The objective learning session is not ready');
+    }
     setActivityLoading(true);
     setError(null);
     try {
@@ -124,16 +154,17 @@ export function useObjectiveLearning(options: {
           body: JSON.stringify({ kind, requestId, ...(taskDescription?.trim() ? { taskDescription: taskDescription.trim() } : {}) }),
         },
       ))) as ObjectiveLearningArtifact;
+      if (!scopeGuardRef.current.isCurrent(token)) throw new Error('The active objective has changed');
       setArtifacts((current) => appendUniqueArtifact(current, attachment));
       return attachment;
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : 'The learning activity could not be prepared';
-      setError(message);
+      if (scopeGuardRef.current.isCurrent(token)) setError(message);
       throw requestError;
     } finally {
-      setActivityLoading(false);
+      if (scopeGuardRef.current.isCurrent(token)) setActivityLoading(false);
     }
-  }, [scopedRun]);
+  }, [scope, scopedRun]);
 
   const activeObjective = useMemo(
     () => objectives.find((objective) => objective.id === scopedRun?.active_objective_id) ?? null,
@@ -141,10 +172,10 @@ export function useObjectiveLearning(options: {
   );
 
   return {
-    runId: scopedRun?.id ?? null,
+    runId: !loading ? scopedRun?.id ?? null : null,
     objectives: scopedRun ? objectives : [],
     activeObjective,
-    artifacts: scopedRun ? artifacts : [],
+    artifacts: scopedRun && !loading ? artifacts : [],
     loading: Boolean(autoStart && scope && runScope !== scope) || loading,
     activityLoading: scopedRun ? activityLoading : false,
     error: runScope === scope ? error : null,

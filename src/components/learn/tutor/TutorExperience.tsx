@@ -734,10 +734,10 @@ export const TutorExperience = ({
   const activityError = objectiveLearning?.error || error;
   const objectiveActivityControls = objectiveLearning?.runId ? (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Button size="sm" variant="outline" disabled={objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
+      <Button size="sm" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
         <Presentation className="mr-2 h-4 w-4" /> Show next visual
       </Button>
-      <Button size="sm" variant="outline" disabled={objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
+      <Button size="sm" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
         <CircleHelp className="mr-2 h-4 w-4" /> Start knowledge check
       </Button>
     </div>
@@ -786,7 +786,7 @@ export const TutorExperience = ({
             <CardContent className="mx-auto w-full max-w-5xl p-6 pb-28">
               {objectiveLearning?.activityLoading && <div className="mb-4 flex items-center gap-2 rounded-xl border bg-muted/50 p-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Preparing activity...</div>}
               {activityError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{activityError}</div>}
-              <LearningArtifactCard attachment={currentObjectiveArtifact} />
+              <LearningArtifactCard key={currentObjectiveArtifact.instanceId} attachment={currentObjectiveArtifact} />
             </CardContent>
           </Card>
         ) : code && library ? (

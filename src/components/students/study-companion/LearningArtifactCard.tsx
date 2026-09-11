@@ -50,7 +50,7 @@ function PrivateAsset({
   }
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={alt} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} className="aspect-[4/3] w-full rounded-lg object-cover" />
+    <img src={url} alt={alt} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} className="aspect-[4/3] w-full rounded-lg object-contain" />
   ) : <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-muted"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 }
 
@@ -125,7 +125,7 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               {artifact.kind === 'generated_image' ? <ImageIcon className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              {isStructured ? payload.title : isVisualQuiz ? 'Visual challenge' : artifact.kind === 'generated_image' ? 'Lesson illustration' : 'Interactive visualization'}
+              {isStructured ? payload.title : isVisualQuiz ? 'Visual challenge' : artifact.kind === 'generated_image' ? payload.introductionFor ? 'Objective introduction' : 'Lesson illustration' : 'Interactive visualization'}
             </CardTitle>
             <CardDescription className="mt-1 text-xs">Aligned to your current objective</CardDescription>
           </div>

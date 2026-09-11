@@ -1,3 +1,5 @@
+import { requireLessonViewer } from '@/lib/lesson-artifacts/lesson-read-server';
+import { publicationArtifactIds } from '@/lib/lesson-artifacts/introductions';
 import { NextResponse } from 'next/server';
 
 import { getServerSession } from '@/lib/auth';
@@ -29,6 +31,8 @@ export async function GET(
     if (['teacher', 'admin'].includes(session.user.role ?? '')) {
       await requireLessonManager(asset.lesson_id);
     } else {
+      if (session.user.role !== 'student') throw new LessonArtifactHttpError(403, 'Student or teacher access required');
+      await requireLessonViewer(asset.lesson_id);
       const { data: runs, error: runError } = await supabase
         .from('learning_runs')
         .select('publication_id')
@@ -36,16 +40,28 @@ export async function GET(
         .eq('lesson_id', asset.lesson_id);
       if (runError) throw runError;
       const publicationIds = (runs ?? []).map((run) => run.publication_id);
-      if (!publicationIds.length) throw new LessonArtifactHttpError(403, 'Asset is not available in your learning run');
-      const { data: publications, error: publicationError } = await supabase.from('lesson_publications').select('manifest').in('id', publicationIds);
+      const { data: publications, error: publicationError } = publicationIds.length
+        ? await supabase.from('lesson_publications').select('manifest').in('id', publicationIds)
+        : { data: [], error: null };
       if (publicationError) throw publicationError;
-      const artifactIds = (publications ?? []).flatMap((publication: any) => publication.manifest?.objectives?.flatMap((objective: any) => objective.artifactIds ?? []) ?? []);
+      const artifactIds = (publications ?? []).flatMap((publication) => publicationArtifactIds(publication.manifest ?? {}));
+      // The lesson introduction is visible on the assigned lesson page before a run exists.
+      const { data: lesson, error: lessonError } = await supabase.from('lessons').select('current_publication_id').eq('id', asset.lesson_id).single();
+      if (lessonError) throw lessonError;
+      if (lesson.current_publication_id) {
+        const { data: current, error: currentError } = await supabase.from('lesson_publications').select('manifest')
+          .eq('id', lesson.current_publication_id).eq('lesson_id', asset.lesson_id).single();
+        if (currentError) throw currentError;
+        const introductionId = current.manifest?.lesson?.introductionArtifactId;
+        if (introductionId) artifactIds.push(introductionId);
+      }
       if (!artifactIds.length) throw new LessonArtifactHttpError(403, 'Asset is not part of your published lesson');
       const { data: publishedArtifact, error: publishedError } = await supabase
         .from('lesson_artifacts')
         .select('id')
         .in('id', artifactIds)
         .eq('status', 'approved')
+        .eq('lesson_id', asset.lesson_id)
         .contains('payload', { assetId })
         .limit(1)
         .maybeSingle();

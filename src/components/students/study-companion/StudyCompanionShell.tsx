@@ -21,6 +21,7 @@ import {
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatThread } from './ChatThread';
 import { Composer } from './Composer';
+import { LearningArtifactCard } from './LearningArtifactCard';
 import { LessonContextPanel } from './LessonContextPanel';
 import { QuickActions } from './QuickActions';
 import { quickActions, type QuickAction } from './study-actions';
@@ -80,8 +81,14 @@ export function StudyCompanionShell() {
   const openPanelButtonRef = useRef<HTMLButtonElement>(null);
   const closePanelButtonRef = useRef<HTMLButtonElement>(null);
   const contextPanelToggledRef = useRef(false);
+  const introductionRef = useRef<HTMLDivElement>(null);
   const objectiveLearning = useObjectiveLearning({ lessonId: selectedLesson, mode: 'tutor' });
+  const introductionInstanceId = objectiveLearning.artifacts[0]?.instanceId;
   const { data: studentProfile } = useStudentProfile(session?.user?.id);
+
+  useEffect(() => {
+    if (introductionInstanceId) introductionRef.current?.scrollIntoView({ block: 'start' });
+  }, [introductionInstanceId]);
 
   useEffect(() => {
     setGradeLevel(studentProfile?.gradeLevel ?? null);
@@ -599,6 +606,11 @@ export function StudyCompanionShell() {
         )}
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto p-6">
+            {selectedLesson && <div ref={introductionRef} className="mx-auto mb-6 max-w-3xl">
+              {objectiveLearning.loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading objective introduction...</p>}
+              {objectiveLearning.error && <div role="alert" className="space-y-2"><p className="text-sm text-destructive">{objectiveLearning.error}</p><Button variant="outline" size="sm" onClick={() => void objectiveLearning.initialize(objectiveLearning.activeObjective?.id)}>Try again</Button></div>}
+              {objectiveLearning.artifacts.map((attachment) => <LearningArtifactCard key={attachment.instanceId} attachment={attachment} />)}
+            </div>}
             {messages.length > 0 ? (
               <ChatThread
                 messages={messages}
@@ -666,7 +678,7 @@ export function StudyCompanionShell() {
               )}
               <Composer
                 value={input}
-                disabled={false}
+                disabled={Boolean(selectedLesson && objectiveLearning.loading)}
                 isLoading={isLoading}
                 mode={mode}
                 intent={intent}
@@ -746,7 +758,7 @@ export function StudyCompanionShell() {
                   gradeLevel={gradeLevel}
                   lessons={lessons}
                   selectedLesson={selectedLesson}
-                  disabled={isLoading}
+                  disabled={isLoading || objectiveLearning.loading}
                   onLessonChange={startNewChat}
                   objectives={objectiveLearning.objectives}
                   selectedObjectiveId={objectiveLearning.activeObjective?.id}

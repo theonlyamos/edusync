@@ -99,6 +99,7 @@ export const visualQuizPayloadSchema = z.object({
 
 export const generatedImagePayloadSchema = z.object({
   kind: z.literal('generated_image'),
+  introductionFor: z.enum(['lesson', 'objective']).optional(),
   assetId: z.string().uuid(),
   altText: z.string().trim().min(1),
   caption: z.string().trim().min(1),
@@ -130,7 +131,7 @@ export type ArtifactSource = 'ai_generated' | 'teacher_uploaded' | 'teacher_auth
 export interface LessonArtifactRecord {
   id: string;
   lessonId: string;
-  objectiveId: string;
+  objectiveId: string | null;
   seriesId: string;
   version: number;
   objectiveRevision: number;
@@ -140,6 +141,7 @@ export interface LessonArtifactRecord {
   position: number;
   payload: ArtifactPayload;
   source: ArtifactSource;
+  createdAt?: string;
 }
 
 type StudentSafeQuestion = Omit<z.infer<typeof structuredQuizQuestionSchema>, 'correctAnswer' | 'explanation'>;
@@ -189,6 +191,7 @@ export interface PublicationManifestInput {
     subject: string;
     gradeLevel: string;
     content: string | null;
+    visualRevision?: number;
   };
   objectives: Array<{
     id: string;
@@ -206,6 +209,7 @@ export function buildPublicationManifest(input: PublicationManifestInput) {
     .map((objective) => {
       const matchingApproved = input.artifacts.filter(
           (item) =>
+            item.lessonId === input.lesson.id &&
             item.objectiveId === objective.id &&
             item.objectiveRevision === objective.revision &&
             item.status === 'approved',
@@ -216,6 +220,8 @@ export function buildPublicationManifest(input: PublicationManifestInput) {
         if (!current || item.version > current.version) latestBySeries.set(item.seriesId, item);
       }
       const approved = [...latestBySeries.values()].sort((a, b) => a.position - b.position);
+      const introduction = approved.filter((item) => item.payload.kind === 'generated_image' && item.payload.introductionFor === 'objective')
+        .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? '') || right.version - left.version)[0];
       const interactiveCount = approved.filter((item) => item.kind === 'interactive_visualization').length;
 
       if (interactiveCount < 2) {
@@ -237,12 +243,17 @@ export function buildPublicationManifest(input: PublicationManifestInput) {
 
       return {
         ...objective,
+        introductionArtifactId: introduction?.id ?? null,
         artifactIds: approved.map((item) => item.id),
       };
     });
 
   return {
-    lesson: { ...input.lesson },
+    lesson: { ...input.lesson, introductionArtifactId: input.artifacts
+      .filter((item) => item.lessonId === input.lesson.id && item.objectiveId === null && item.status === 'approved'
+        && item.objectiveRevision === (input.lesson.visualRevision ?? 1)
+        && item.payload.kind === 'generated_image' && item.payload.introductionFor === 'lesson')
+      .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? '') || right.version - left.version)[0]?.id ?? null },
     objectives,
     warnings,
   };

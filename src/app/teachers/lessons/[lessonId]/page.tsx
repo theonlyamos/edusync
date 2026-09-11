@@ -1,5 +1,7 @@
 'use client';
 
+import { LessonIntroduction } from '@/components/lessons/LessonIntroduction';
+
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -71,7 +73,7 @@ interface ContentGenerationFormProps {
 }
 
 export default function LessonPage() {
-    const params = useParams();
+    const params = useParams<{ lessonId: string }>();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -231,8 +233,8 @@ export default function LessonPage() {
 
     return (
         <DashboardLayout>
-            <div className="p-6">
-                <div className="flex justify-between items-start mb-6">
+            <div className="p-3 sm:p-6">
+                <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
                     <div>
                         <h1 className="text-3xl font-bold">{lesson.title}</h1>
                         <p className="text-muted-foreground">
@@ -245,7 +247,7 @@ export default function LessonPage() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList>
+                    <TabsList className="grid h-auto grid-cols-2 sm:inline-flex">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
@@ -253,6 +255,7 @@ export default function LessonPage() {
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-6">
+                        <LessonIntroduction lessonId={params.lessonId} />
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             {/* Lesson Details Card */}
                             <Card className="lg:col-span-2">

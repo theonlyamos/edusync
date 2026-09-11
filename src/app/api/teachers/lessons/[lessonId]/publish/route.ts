@@ -1,9 +1,11 @@
+import { missingPublicationIntroductions } from '@/lib/lesson-artifacts/introductions';
 import { NextResponse } from 'next/server';
 
 import { createPublicationHash } from '@/lib/lesson-artifacts/authoring';
 import { buildPublicationManifest } from '@/lib/lesson-artifacts/domain';
 import {
   lessonArtifactErrorResponse,
+  LessonArtifactHttpError,
   mapArtifactRow,
   requireLessonManager,
 } from '@/lib/lesson-artifacts/server';
@@ -34,6 +36,7 @@ export async function POST(
         subject: lesson.subject,
         gradeLevel: lesson.gradelevel ?? '',
         content: lesson.content,
+        visualRevision: lesson.visual_revision ?? 1,
       },
       objectives: (objectives ?? []).map((objective) => ({
         id: objective.id,
@@ -43,6 +46,8 @@ export async function POST(
       })),
       artifacts: (artifacts ?? []).map(mapArtifactRow),
     });
+    const missing = missingPublicationIntroductions(manifest);
+    if (missing.length) throw new LessonArtifactHttpError(409, `Approve the following before publishing: ${missing.join(', ')}.`);
     const contentHash = createPublicationHash(manifest);
 
     const { data: publication, error: publicationError } = await supabase.rpc('publish_lesson_manifest', {
@@ -52,6 +57,7 @@ export async function POST(
       p_content_hash: contentHash,
       p_published_by: session.user.id,
     });
+    if (publicationError?.message.includes('INTRODUCTION_REQUIRED:')) throw new LessonArtifactHttpError(409, publicationError.message.replace('INTRODUCTION_REQUIRED: ', ''));
     if (publicationError) throw publicationError;
 
     return NextResponse.json({ publication, warnings: manifest.warnings });

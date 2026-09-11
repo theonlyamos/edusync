@@ -4,6 +4,7 @@ export type PublishedObjective = {
   position: number;
   revision: number;
   artifactIds?: string[];
+  introductionArtifactId?: string | null;
 };
 
 export type StudentObjectiveSummary = Omit<PublishedObjective, 'artifactIds'> & {
@@ -74,8 +75,10 @@ export function normalizePublishedObjectives(value: unknown): PublishedObjective
     const position = objective.position;
     const revision = objective.revision;
     const artifactIds = objective.artifactIds;
+    const introductionArtifactId = objective.introductionArtifactId;
     if (
       !id || ids.has(id) || !text
+      || (introductionArtifactId != null && (typeof introductionArtifactId !== 'string' || !introductionArtifactId.trim() || !Array.isArray(artifactIds) || !artifactIds.includes(introductionArtifactId)))
       || !Number.isInteger(position) || Number(position) < 0
       || !Number.isInteger(revision) || Number(revision) < 1
       || (artifactIds !== undefined && (
@@ -90,6 +93,7 @@ export function normalizePublishedObjectives(value: unknown): PublishedObjective
       text,
       position: Number(position),
       revision: Number(revision),
+      ...(typeof introductionArtifactId === 'string' ? { introductionArtifactId } : {}),
       ...(Array.isArray(artifactIds) ? { artifactIds: artifactIds.map((artifactId) => artifactId.trim()) } : {}),
     });
   }

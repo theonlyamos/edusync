@@ -179,7 +179,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       margin: 0; 
       padding: 0; 
       overflow: auto; 
-      background: transparent;
+      background: #ffffff;
+      color: #0f172a;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
       width: 100%;
       min-height: 100vh;

@@ -1,4 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { regenerationSchema } from '@/lib/lesson-artifacts/authoring';
+import { artifactMaterialRole, creativeConceptSchema } from '@/lib/lesson-artifacts/creative-concept';
+import { createHash, randomUUID } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
 
 import {
@@ -20,7 +22,7 @@ const jobTypeFor = (kind: string) => {
 };
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ artifactId: string }> },
 ) {
   try {
@@ -35,17 +37,34 @@ export async function POST(
     if (!artifact) throw new LessonArtifactHttpError(404, 'Artifact not found');
 
     const { session, lesson } = await requireLessonManager(artifact.lesson_id);
-    const { data: objective, error: objectiveError } = await supabase
-      .from('lesson_objectives')
-      .select('id,text,revision,archived_at')
-      .eq('id', artifact.objective_id)
-      .maybeSingle();
+    const rawBody = await request.text();
+    let body: unknown = {};
+    try { body = rawBody.trim() ? JSON.parse(rawBody) : {}; }
+    catch { throw new LessonArtifactHttpError(400, 'Invalid JSON request'); }
+    const input = regenerationSchema.parse(body);
+    const previousFeedback = artifact.generation_metadata?.feedback ?? '';
+    const feedback = [previousFeedback, input.feedback].filter(Boolean).join('\n');
+    if (feedback.length > 12_000) throw new LessonArtifactHttpError(400, 'Revision feedback is too long; generate a fresh bundle with consolidated visual instructions');
+    const { data: objective, error: objectiveError } = artifact.objective_id
+      ? await supabase.from('lesson_objectives').select('id,text,revision,archived_at,visual_instructions')
+        .eq('id', artifact.objective_id).eq('lesson_id', artifact.lesson_id).maybeSingle()
+      : { data: null, error: null };
     if (objectiveError) throw objectiveError;
-    if (!objective || objective.archived_at) throw new LessonArtifactHttpError(409, 'Objective is no longer active');
-
+    if (artifact.objective_id && (!objective || objective.archived_at)) throw new LessonArtifactHttpError(409, 'Objective is no longer active');
+    let objectiveText = objective?.text ?? '';
+    if (!artifact.objective_id) {
+      const { data: objectives, error } = await supabase.from('lesson_objectives').select('text')
+        .eq('lesson_id', lesson.id).is('archived_at', null).order('position');
+      if (error) throw error;
+      objectiveText = (objectives ?? []).map((item) => item.text).join('\n');
+    }
+    const revision = objective?.revision ?? lesson.visual_revision;
+    const creativeConcept = creativeConceptSchema.safeParse(artifact.generation_metadata?.creativeConcept);
     const batchId = randomUUID();
     const jobType = jobTypeFor(artifact.kind);
-    const idempotencyKey = `regenerate:${artifact.id}`;
+    const materialRole = artifactMaterialRole(artifact);
+    const instructionHash = createHash('sha256').update(JSON.stringify([feedback, revision, lesson.visual_instructions, objective?.visual_instructions, materialRole])).digest('hex').slice(0, 32);
+    const idempotencyKey = `regenerate:${artifact.id}:${instructionHash}`;
     const { data: existingJob, error: existingJobError } = await supabase
       .from('content_jobs')
       .select('*')
@@ -83,9 +102,14 @@ export async function POST(
           lessonTitle: lesson.title,
           subject: lesson.subject,
           gradeLevel: lesson.gradelevel,
-          objectiveText: objective.text,
-          objectiveRevision: objective.revision,
-          position: artifact.position,
+          objectiveText,
+          objectiveRevision: revision,
+          visualInstructions: lesson.visual_instructions ?? '',
+          objectiveVisualInstructions: objective?.visual_instructions ?? '',
+          feedback,
+          ...(materialRole ? { materialRole } : {}),
+          ...(creativeConcept.success ? { creativeConcept: creativeConcept.data } : {}),
+          position: artifact.kind === 'generated_image' ? 0 : artifact.position,
           seriesId: artifact.series_id,
           version: artifact.version + 1,
           supersedesId: artifact.id,
