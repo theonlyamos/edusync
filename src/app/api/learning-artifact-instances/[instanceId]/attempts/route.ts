@@ -7,9 +7,9 @@ import { requireStudentSession } from '@/lib/lesson-artifacts/learning-server';
 import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
-const answerValue = z.union([z.string(), z.array(z.string()), z.boolean(), z.number()]);
+const answerValue = z.union([z.string().max(1000), z.array(z.string().max(1000)).max(20), z.boolean(), z.number().finite()]);
 const schema = z.object({
-  answers: z.record(answerValue).optional(),
+  answers: z.record(answerValue).refine((answers) => Object.keys(answers).length <= 100 && JSON.stringify(answers).length <= 20000, 'Quiz answers are too large').optional(),
   completed: z.boolean().optional(),
 });
 
@@ -33,8 +33,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ ins
       throw new LessonArtifactHttpError(400, 'This artifact does not accept quiz attempts');
     }
     const eventType = kind === 'structured_quiz' ? 'quiz_submitted' : 'visual_quiz_completed';
-    const { data: existing } = await supabase.from('learning_events').select('payload').eq('run_id', resolved.run_id).eq('instance_id', instanceId).eq('event_type', eventType).maybeSingle();
-    if (existing) return NextResponse.json(existing.payload);
+    const feedbackScope = { runId: resolved.run_id, objectiveId: resolved.objective_id, objectiveRevision: resolved.objective_revision };
+    const { data: existing, error: existingError } = await supabase.from('learning_events').select('payload').eq('run_id', resolved.run_id).eq('instance_id', instanceId).eq('event_type', eventType).maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) return NextResponse.json(kind === 'structured_quiz' ? { ...existing.payload, feedbackScope } : existing.payload);
 
     if (kind === 'visual_quiz') {
       if (!input.completed) throw new LessonArtifactHttpError(400, 'completed must be true');
@@ -63,7 +65,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ ins
     const quiz = structuredQuizPayloadSchema.parse(payload);
     const grade = gradeStructuredQuiz(quiz, input.answers ?? {});
     const masteryEarned = resolved.source === 'teacher_approved' && grade.percentage >= 80;
-    const response = { ...grade, masteryEligible: resolved.source === 'teacher_approved', masteryEarned };
+    const response = {
+      ...grade,
+      results: grade.results.map((result, index) => ({
+        ...result,
+        prompt: quiz.questions[index].prompt,
+        selectedAnswer: input.answers?.[result.questionId] ?? null,
+      })),
+      masteryEligible: resolved.source === 'teacher_approved', masteryEarned, feedbackScope,
+    };
     const { error: attemptError } = await supabase.from('learning_events').insert({
       run_id: resolved.run_id, student_id: resolved.student_id, lesson_id: resolved.lesson_id,
       objective_id: resolved.objective_id, objective_revision: resolved.objective_revision,

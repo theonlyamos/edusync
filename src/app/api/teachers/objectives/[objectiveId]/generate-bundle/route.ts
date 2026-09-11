@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
-import { z } from 'zod';
 
 import { buildDefaultBundleJobs } from '@/lib/lesson-artifacts/authoring';
+import { bundleRequestSchema } from '@/lib/lesson-artifacts/creative-concept';
 import { drainContentWorker } from '@/lib/lesson-artifacts/content-worker-runtime';
 import { processContentJobBatch } from '@/lib/lesson-artifacts/job-processor.server';
 import { quotaCategoryForJob } from '@/lib/lesson-artifacts/quota';
@@ -13,10 +13,6 @@ import {
 } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
-const requestSchema = z.object({
-  idempotencyKey: z.string().trim().min(1).max(160).optional(),
-});
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ objectiveId: string }> },
@@ -26,14 +22,21 @@ export async function POST(
     const supabase = createServerSupabase();
     const { data: objective, error: objectiveError } = await supabase
       .from('lesson_objectives')
-      .select('id,lesson_id,text,revision,archived_at')
+      .select('id,lesson_id,text,revision,archived_at,visual_instructions')
       .eq('id', objectiveId)
       .maybeSingle();
     if (objectiveError) throw objectiveError;
     if (!objective || objective.archived_at) throw new LessonArtifactHttpError(404, 'Objective not found');
 
     const { session, lesson } = await requireLessonManager(objective.lesson_id);
-    const body = requestSchema.parse(await request.json().catch(() => ({})));
+    const rawBody = await request.text();
+    let parsedBody: unknown = {};
+    try { parsedBody = rawBody.trim() ? JSON.parse(rawBody) : {}; }
+    catch { throw new LessonArtifactHttpError(400, 'Invalid JSON request'); }
+    const body = bundleRequestSchema.parse(parsedBody);
+    if (body.objectiveRevision !== undefined && body.objectiveRevision !== objective.revision) {
+      throw new LessonArtifactHttpError(409, 'The objective changed. Refresh and review its creative concept again.');
+    }
     let batchId = randomUUID();
     const prefix = body.idempotencyKey ?? batchId;
     const jobs = buildDefaultBundleJobs({
@@ -50,6 +53,9 @@ export async function POST(
       .eq('requested_by', session.user.id)
       .in('idempotency_key', keys);
     if (existingError) throw existingError;
+    if (existing?.some((job) => job.objective_id !== objectiveId || job.input?.objectiveRevision !== objective.revision || (job.input?.creativeConcept ?? '') !== (body.creativeConcept ?? ''))) {
+      throw new LessonArtifactHttpError(409, 'This generation request already belongs to a different objective revision or creative concept. Start a new generation request.');
+    }
     if (existing?.length === jobs.length) {
       return NextResponse.json({ batchId: existing[0].batch_id, jobs: existing });
     }
@@ -72,6 +78,9 @@ export async function POST(
         objectiveText: objective.text,
         objectiveRevision: objective.revision,
         position: job.position,
+        visualInstructions: lesson.visual_instructions ?? '',
+        objectiveVisualInstructions: objective.visual_instructions ?? '',
+        ...(body.creativeConcept ? { creativeConcept: body.creativeConcept } : {}),
       },
     }));
 

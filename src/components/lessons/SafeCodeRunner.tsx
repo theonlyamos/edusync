@@ -52,7 +52,8 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: transparent;
+      background: #ffffff;
+      color: #0f172a;
       font-family: Arial, sans-serif;
       width: 100vw;
       height: 100vh;

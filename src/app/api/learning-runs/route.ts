@@ -1,3 +1,4 @@
+import { prepareObjectiveIntroduction } from '@/lib/lesson-artifacts/introductions-server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -103,7 +104,8 @@ export async function POST(request: Request) {
         throw eventError;
       }
     }
-    return NextResponse.json({ run, lesson, objectives: publishedObjectives, publicationVersion: publication.version });
+    const introduction = await prepareObjectiveIntroduction(supabase, run, selectedObjective);
+    return NextResponse.json({ introduction, run, lesson, objectives: publishedObjectives, publicationVersion: publication.version });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 
 import { InteractiveElementCard } from './InteractiveElementCard';
 import type { LearningArtifactAttachment } from './types';
@@ -50,7 +51,7 @@ function PrivateAsset({
   }
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={alt} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} className="aspect-[4/3] w-full rounded-lg object-cover" />
+    <img src={url} alt={alt} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} className="aspect-[4/3] w-full rounded-lg object-contain" />
   ) : <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-muted"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 }
 
@@ -60,6 +61,7 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
   const [answers, setAnswers] = useState<Record<string, string | string[] | boolean | number>>({});
   const [result, setResult] = useState<any>();
   const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string>();
   const [completed, setCompleted] = useState(false);
   const [retryAttachment, setRetryAttachment] = useState<LearningArtifactAttachment>();
   const renderedRef = useRef(false);
@@ -91,28 +93,38 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
 
   const submitQuiz = async () => {
     setSubmitting(true);
+    setSubmissionError(undefined);
     try {
       const data = await json(await fetch(`/api/learning-artifact-instances/${instanceId}/attempts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers }),
       }));
       setResult(data);
+      if (data.feedbackScope) window.dispatchEvent(new CustomEvent(QUIZ_FEEDBACK_EVENT, { detail: data.feedbackScope }));
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : 'Could not save your quiz. Try again.');
     } finally { setSubmitting(false); }
   };
 
   const completeVisual = async () => {
     setSubmitting(true);
+    setSubmissionError(undefined);
     try {
       await json(await fetch(`/api/learning-artifact-instances/${instanceId}/attempts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: true }),
       }));
       setCompleted(true);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : 'Could not save completion. Try again.');
     } finally { setSubmitting(false); }
   };
 
   const retryQuiz = async () => {
     setSubmitting(true);
+    setSubmissionError(undefined);
     try {
       setRetryAttachment(await json(await fetch(`/api/learning-artifact-instances/${instanceId}/retry`, { method: 'POST' })));
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : 'Could not start another attempt. Try again.');
     } finally { setSubmitting(false); }
   };
 
@@ -125,7 +137,7 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               {artifact.kind === 'generated_image' ? <ImageIcon className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-              {isStructured ? payload.title : isVisualQuiz ? 'Visual challenge' : artifact.kind === 'generated_image' ? 'Lesson illustration' : 'Interactive visualization'}
+              {isStructured ? payload.title : isVisualQuiz ? 'Visual challenge' : artifact.kind === 'generated_image' ? payload.introductionFor ? 'Objective introduction' : 'Lesson illustration' : 'Interactive visualization'}
             </CardTitle>
             <CardDescription className="mt-1 text-xs">Aligned to your current objective</CardDescription>
           </div>
@@ -133,6 +145,7 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
         </div>
       </CardHeader>
       <CardContent className="p-4">
+        {submissionError && <p role="alert" className="mb-3 text-sm text-destructive">{submissionError}</p>}
         {interactiveElement && <InteractiveElementCard element={interactiveElement} onReady={artifact.kind === 'interactive_visualization' ? recordRendered : undefined} />}
         {artifact.kind === 'generated_image' && <PrivateAsset assetId={payload.assetId} alt={payload.altText} onConsumed={recordRendered} />}
         {artifact.kind === 'uploaded_media' && <PrivateAsset assetId={payload.assetId} alt={payload.title} mimeType={payload.mimeType} filename={payload.originalFilename} onConsumed={recordRendered} />}

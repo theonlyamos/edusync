@@ -1,3 +1,4 @@
+import { prepareObjectiveIntroduction } from '@/lib/lesson-artifacts/introductions-server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -25,7 +26,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ru
       objective_id: objective.id, objective_revision: objective.revision,
       event_type: 'objective_changed', payload: { position: objective.position },
     });
-    return NextResponse.json({ run: updated, objective });
+    const introduction = await prepareObjectiveIntroduction(supabase, updated, objective);
+    return NextResponse.json({ run: updated, objective, introduction });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }

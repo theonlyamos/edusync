@@ -18,7 +18,7 @@ import {
 type DatabaseJob = {
   id: string;
   lesson_id: string;
-  objective_id: string;
+  objective_id: string | null;
   requested_by: string;
   job_type: ContentJobType;
   attempt_count: number;
@@ -49,13 +49,13 @@ const extensionFor = (mimeType: string) => {
 async function generateAndStoreImage(job: ContentJobRecord, prompt: string) {
   const generated = await generateGeminiLessonImage(prompt);
   const supabase = createAdminSupabase();
-  const storagePath = `${job.lessonId}/${job.objectiveId}/${randomUUID()}.${extensionFor(generated.mimeType)}`;
+  const storagePath = `${job.lessonId}/${job.objectiveId ?? 'introduction'}/${randomUUID()}.${extensionFor(generated.mimeType)}`;
   const { error: uploadError } = await supabase.storage
     .from('lesson-assets')
     .upload(storagePath, generated.bytes, { contentType: generated.mimeType, upsert: false });
   if (uploadError) throw uploadError;
 
-  const altText = `Educational illustration for: ${job.input.objectiveText}`;
+  const altText = `Introduction diagram: ${job.objectiveId ? job.input.objectiveText : job.input.lessonTitle}`;
   const { data: asset, error: assetError } = await supabase
     .from('lesson_assets')
     .insert({

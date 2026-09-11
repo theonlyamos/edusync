@@ -34,9 +34,9 @@ describe('authoring contracts', () => {
     });
 
     expect(jobs.map((job) => job.jobType)).toEqual([
-      'generate_interactive',
-      'generate_interactive',
       'generate_image',
+      'generate_interactive',
+      'generate_interactive',
       'generate_structured_quiz',
       'generate_visual_quiz',
     ]);

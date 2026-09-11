@@ -176,7 +176,7 @@ describe('publication readiness', () => {
     const replacement = artifact({ id: '00000000-0000-4000-8000-000000000302', version: 2 });
     const manifest = buildPublicationManifest({
       lesson: { id: first.lessonId, title: 'Forces', subject: 'Science', gradeLevel: '6', content: null },
-      objectives: [{ id: first.objectiveId, text: 'Explain forces.', position: 0, revision: 1 }],
+      objectives: [{ id: first.objectiveId!, text: 'Explain forces.', position: 0, revision: 1 }],
       artifacts: [first, replacement],
     });
 

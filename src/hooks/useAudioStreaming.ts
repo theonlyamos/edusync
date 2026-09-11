@@ -5,6 +5,7 @@ import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
 import { convertToWav } from '@/lib/audio/wav';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
+import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion';
@@ -84,6 +85,8 @@ export function useAudioStreaming(
     const streamRef = useRef<MediaStream | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
+    const tutorTurnsRef = useRef(createTutorTurnTracker());
+    const decodingAudioRef = useRef(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micAnalyserRef = useRef<AnalyserNode | null>(null);
     const toolCallListenerRef = useRef<((name: string, args: any, callId?: string) => void) | null>(null);
@@ -153,6 +156,63 @@ export function useAudioStreaming(
     const vadStopThresholdRef = useRef<number>(0.007); // RMS stop threshold (hysteresis)
     const vadMinSpeechMsRef = useRef<number>(150);
     const vadMinSilenceMsRef = useRef<number>(300);
+
+    const sendLiveText = useCallback((text: string) => {
+        if (!geminiLiveSessionRef.current) throw new Error('Not connected');
+        geminiLiveSessionRef.current.sendRealtimeInput({ text });
+        tutorTurnsRef.current.sent();
+    }, []);
+
+    const feedbackRunId = lessonContext?.learningRunId;
+    const feedbackObjectiveId = lessonContext?.activeObjective?.id;
+    const feedbackRevision = lessonContext?.activeObjective?.revision;
+    useEffect(() => {
+        if (connectionStatus !== 'connected' || !feedbackRunId || !feedbackObjectiveId || !feedbackRevision) return;
+        const scope = { runId: feedbackRunId, objectiveId: feedbackObjectiveId, objectiveRevision: feedbackRevision };
+        const controller = new AbortController();
+        let retryTimer: ReturnType<typeof setTimeout> | undefined;
+        const delivery = createQuizFeedbackDelivery(scope, {
+            load: async () => {
+                const response = await fetch(`/api/learning-runs/${scope.runId}/quiz-feedback`, { cache: 'no-store', signal: controller.signal });
+                if (!response.ok) throw new Error('Could not load saved quiz feedback');
+                return response.json();
+            },
+            isIdle: () => {
+                const current = lessonContextRef.current;
+                const playback = playbackCtxRef.current;
+                return current?.learningRunId === scope.runId && current.activeObjective?.id === scope.objectiveId
+                    && current.activeObjective.revision === scope.objectiveRevision && !!geminiLiveSessionRef.current
+                    && !vadSpeechActiveRef.current && decodingAudioRef.current === 0
+                    && (!playback || playback.state === 'closed' || nextPlaybackTimeRef.current <= playback.currentTime)
+                    && tutorTurnsRef.current.isIdle();
+            },
+            send: (context) => {
+                sendLiveText(context);
+            },
+        });
+        const refresh = (attempt = 0) => {
+            clearTimeout(retryTimer);
+            void delivery.refresh().catch(() => {
+                if (controller.signal.aborted) return;
+                if (attempt < 2) retryTimer = setTimeout(() => refresh(attempt + 1), 2_000 * (attempt + 1));
+                else setError('Your quiz is saved, but voice feedback could not be updated. Reconnect voice to retry.');
+            });
+        };
+        const onQuiz = (event: Event) => {
+            if (matchesQuizFeedbackScope((event as CustomEvent<unknown>).detail, scope)) refresh();
+        };
+        const onOnline = () => refresh();
+        refresh();
+        // Local idle checks only; no database polling. Failed socket sends remain queued.
+        const timer = setInterval(() => { try { delivery.flush(); } catch { /* Reconnection will restore saved evidence. */ } }, 250);
+        window.addEventListener(QUIZ_FEEDBACK_EVENT, onQuiz);
+        window.addEventListener('online', onOnline);
+        return () => {
+            delivery.dispose(); controller.abort(); clearTimeout(retryTimer); clearInterval(timer);
+            window.removeEventListener(QUIZ_FEEDBACK_EVENT, onQuiz);
+            window.removeEventListener('online', onOnline);
+        };
+    }, [connectionStatus, feedbackRunId, feedbackObjectiveId, feedbackRevision, sendLiveText]);
 
     // Audio batching to reduce main thread processing frequency
     const audioBatchRef = useRef<Float32Array[]>([]);
@@ -253,6 +313,7 @@ export function useAudioStreaming(
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
+        tutorTurnsRef.current.reset();
         // Disconnect and stop the audio processor
         processorRef.current?.disconnect();
         processorRef.current = null;
@@ -612,11 +673,13 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 },
                 callbacks: {
                     onopen: () => {
+                        tutorTurnsRef.current.reset();
                         setConnectionStatus('connected');
                         isResumingSessionRef.current = false;
                         sessionOpenedAtRef.current = Date.now();
                     },
                     onmessage: (message: LiveServerMessage) => {
+                        tutorTurnsRef.current.received(message);
                         responseQueue.push(message);
                         processGeminiResponseQueueRef.current?.(responseQueue, audioParts);
                     },
@@ -745,6 +808,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             sumSquares += s * s;
                         }
                         const rms = Math.sqrt(sumSquares / Math.max(1, float32Chunk.length));
+                        if (rms >= vadStartThresholdRef.current) tutorTurnsRef.current.activity();
 
                         const ms = (float32Chunk.length / sampleRate) * 1000;
                         const startThresh = vadStartThresholdRef.current;
@@ -754,6 +818,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                                 vadSpeechAccumMsRef.current += ms;
                                 if (vadSpeechAccumMsRef.current >= vadMinSpeechMsRef.current) {
                                     vadSpeechActiveRef.current = true;
+                                    tutorTurnsRef.current.sent();
                                     vadSpeechAccumMsRef.current = 0;
                                     vadSilenceAccumMsRef.current = 0;
                                     vadSpeechSinceLastChunkRef.current = true;
@@ -877,13 +942,13 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 : isStudyCompanion
                     ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
                     : 'Hello';
-            geminiSession.sendRealtimeInput({ text: initialMessage });
+            sendLiveText(initialMessage);
 
         } catch (error: any) {
             console.error('Failed to start Gemini Live session:', error);
             throw error;
         }
-    }, [cleanupAudioResources, maybeUploadSegment]);
+    }, [cleanupAudioResources, maybeUploadSegment, sendLiveText]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
@@ -1041,6 +1106,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
     // Play audio chunks from Gemini
     const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
+        decodingAudioRef.current += 1;
         try {
             // Single decode path via convertToWav (avoid duplicate base64→PCM work per chunk).
             const wavBuffer = convertToWav(rawData, 24000);
@@ -1150,6 +1216,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
         } catch (e) {
             console.error('Failed to play Gemini audio chunks:', e);
+        } finally {
+            decodingAudioRef.current -= 1;
         }
     }, [maybeUploadSegment]);
 
@@ -1184,7 +1252,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     const sendText = useCallback((text: string) => {
         try {
             if (geminiLiveSessionRef.current) {
-                geminiLiveSessionRef.current.sendRealtimeInput({ text });
+                sendLiveText(text);
             } else {
                 setError('Not connected');
             }
@@ -1192,7 +1260,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             console.error('sendText failed:', e);
             setError('Failed to send text');
         }
-    }, []);
+    }, [sendLiveText]);
 
     const sendViewport = useCallback((width: number, height: number, dpr: number) => {
         const payload = `VISUAL_VIEWPORT ${JSON.stringify({ width, height, devicePixelRatio: dpr })}`;

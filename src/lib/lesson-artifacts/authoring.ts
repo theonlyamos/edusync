@@ -3,9 +3,13 @@ import { z } from 'zod';
 
 import { structuredQuizPayloadSchema, type ArtifactPayload } from './domain';
 
+export const visualInstructionsSchema = z.string().trim().max(4_000);
+export const regenerationSchema = z.object({ feedback: visualInstructionsSchema.default('') });
+
 const objectiveInputSchema = z.object({
   id: z.string().uuid().optional(),
   text: z.string().trim().min(1).max(500),
+  visualInstructions: visualInstructionsSchema.optional(),
 });
 
 export const authoringUpdateSchema = z
@@ -14,6 +18,7 @@ export const authoringUpdateSchema = z
     subject: z.string().trim().min(1).max(120),
     gradeLevel: z.string().trim().min(1).max(80),
     content: z.string().max(100_000).nullable().default(null),
+    visualInstructions: visualInstructionsSchema.optional(),
     objectives: z.array(objectiveInputSchema).min(1).max(20),
   })
   .transform((input) => ({
@@ -21,6 +26,7 @@ export const authoringUpdateSchema = z
     objectives: input.objectives.map((objective, position) => ({
       ...(objective.id ? { id: objective.id } : {}),
       text: objective.text,
+      ...(objective.visualInstructions !== undefined ? { visualInstructions: objective.visualInstructions } : {}),
       position,
     })),
   }));
@@ -111,9 +117,9 @@ export function buildDefaultBundleJobs(input: {
   idempotencyPrefix: string;
 }): BundleJobSpec[] {
   const types: BundleJobSpec['jobType'][] = [
-    'generate_interactive',
-    'generate_interactive',
     'generate_image',
+    'generate_interactive',
+    'generate_interactive',
     'generate_structured_quiz',
     'generate_visual_quiz',
   ];

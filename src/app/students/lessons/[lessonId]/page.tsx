@@ -1,5 +1,7 @@
 'use client';
 
+import { LessonIntroduction } from '@/components/lessons/LessonIntroduction';
+
 import { useState, useEffect, use, useCallback, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
@@ -272,6 +274,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6">
+                <LessonIntroduction lessonId={resolvedParams.lessonId} />
                 <section className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white shadow-sm">
                   <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-end">
                     <div>

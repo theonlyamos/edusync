@@ -26,7 +26,7 @@ export async function requireLessonManager(lessonId: string) {
   const supabase = createServerSupabase();
   const { data: lesson, error } = await supabase
     .from('lessons')
-    .select('id,title,subject,gradelevel,content,teacher_id,organization_id,current_publication_id')
+    .select('id,title,subject,gradelevel,content,teacher_id,organization_id,current_publication_id,visual_instructions,visual_revision')
     .eq('id', lessonId)
     .maybeSingle();
   if (error) throw error;
@@ -63,6 +63,7 @@ export function mapArtifactRow(row: any): LessonArtifactRecord {
     position: row.position,
     payload: row.payload,
     source: row.source,
+    createdAt: row.created_at,
   };
 }
 
