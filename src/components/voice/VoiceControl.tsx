@@ -143,6 +143,10 @@ export function VoiceControl({ active, sessionId, topic, lessonContext, onError,
   }, [connectionStatus, onConnectionStatusChange]);
 
   useEffect(() => {
+    if (_streamingError) onError?.(_streamingError);
+  }, [_streamingError, onError]);
+
+  useEffect(() => {
     onCountdownChange?.(countdown);
   }, [countdown, onCountdownChange]);
 

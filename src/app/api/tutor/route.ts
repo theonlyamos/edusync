@@ -25,6 +25,8 @@ import { randomUUID } from 'crypto';
 import { runVisualizeGeneration } from '@/lib/visualize-ai-task';
 import { resolveNextLearningArtifact, retrieveLearningGrounding } from '@/lib/lesson-artifacts/learning-server';
 import { buildUntrustedGroundingContext } from '@/lib/lesson-artifacts/grounding';
+import { getQuizTutorFeedback } from '@/lib/lesson-artifacts/quiz-feedback-server';
+import { LessonArtifactHttpError, lessonArtifactErrorResponse } from '@/lib/lesson-artifacts/server';
 
 const getSystemPrompt = (
     gradeLevel: string,
@@ -159,6 +161,14 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        let quizFeedbackContext = '';
+        if (parsedBody.data.learningRunId) {
+            if (!effectiveLessonId) {
+                throw new LessonArtifactHttpError(400, 'A learning run requires a lesson');
+            }
+            quizFeedbackContext = (await getQuizTutorFeedback(parsedBody.data.learningRunId, effectiveLessonId)).context;
+        }
+
         const userMessage: StudyMessage = {
             role: 'user',
             content,
@@ -216,7 +226,7 @@ export async function POST(req: NextRequest) {
                 }
             }
             const assistantRaw = await generateAICompletion(
-                [getSystemPrompt(gradeLevel, mode, intent, lesson), groundingContext].filter(Boolean).join('\n\n'),
+                [getSystemPrompt(gradeLevel, mode, intent, lesson), groundingContext, quizFeedbackContext].filter(Boolean).join('\n\n'),
                 buildTrimmedPrompt(messagesWithUser, mode, intent),
                 undefined,
                 true
@@ -316,6 +326,7 @@ export async function POST(req: NextRequest) {
             });
         }
     } catch (error) {
+        if (error instanceof LessonArtifactHttpError) return lessonArtifactErrorResponse(error);
         console.error('Error in AI tutor:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
     }

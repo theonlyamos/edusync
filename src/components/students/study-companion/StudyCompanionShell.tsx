@@ -135,8 +135,10 @@ export function StudyCompanionShell() {
       gradeLevel: lesson.gradeLevel ?? lesson.gradelevel ?? gradeLevel ?? undefined,
       objectives: lesson.objectives ?? undefined,
       content: lesson.content ?? undefined,
+      learningRunId: objectiveLearning.runId ?? undefined,
+      activeObjective: objectiveLearning.activeObjective ?? undefined,
     };
-  }, [selectedLesson, lessons, gradeLevel]);
+  }, [selectedLesson, lessons, gradeLevel, objectiveLearning.runId, objectiveLearning.activeObjective]);
 
   const voiceLiveOptions = useMemo(
     () => ({
