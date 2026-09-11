@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         ];
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp-image-generation',
+            model: process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image',
             contents: contents,
             config: {
                 responseModalities: [Modality.TEXT, Modality.IMAGE],
@@ -77,4 +77,4 @@ export async function POST(request: NextRequest) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
         return NextResponse.json({ error: 'Internal Server Error', details: errorMessage }, { status: 500 });
     }
-} 
+}
