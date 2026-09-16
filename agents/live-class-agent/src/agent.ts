@@ -194,7 +194,7 @@ export default defineAgent({
     const model =
       process.env.GEMINI_LIVE_MODEL ||
       process.env.GOOGLE_LIVE_MODEL ||
-      'gemini-3.1-flash-live-preview'
+      'gemini-3.8-live'
 
     const session = new voice.AgentSession({
       llm: new google.beta.realtime.RealtimeModel({
