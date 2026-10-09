@@ -37,6 +37,7 @@ export default function TeacherDashboard() {
       <div>
         <h2 className="text-3xl font-bold text-foreground mb-2">Teacher Dashboard</h2>
         <p className="text-muted-foreground mb-6">Manage your lessons and resources</p>
+        <Button className="mb-6" onClick={()=>router.push('/teachers/homework')}>Manage homework</Button>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {/* Lesson Planning Card */}
@@ -99,4 +100,4 @@ export default function TeacherDashboard() {
       </div>
     </DashboardLayout>
   );
-} 
+}

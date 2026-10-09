@@ -260,6 +260,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
         <Card>
           <CardHeader>
             <CardTitle>{lesson.title}</CardTitle>
+            <Button variant="outline" onClick={()=>router.push(`/students/homework?lessonId=${resolvedParams.lessonId}`)}>View lesson homework</Button>
             <CardDescription>
               {lesson.subject} • Grade {lesson.gradeLevel}
             </CardDescription>

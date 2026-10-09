@@ -241,6 +241,7 @@ export default function LessonPage() {
                             {lesson.subject} • Grade {lesson.gradeLevel}
                         </p>
                     </div>
+                    <Button variant="outline" asChild><Link href={`/teachers/homework/new?lessonId=${params.lessonId}`}>Create homework</Link></Button>
                     <Button onClick={() => router.push('/teachers/lessons')}>
                         Back to Lessons
                     </Button>
