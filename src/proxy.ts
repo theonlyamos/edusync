@@ -4,6 +4,8 @@ import { getServerSession, type CookieAdapter } from '@/lib/auth';
 import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 import { rateLimit } from '@/lib/rate-limiter';
 import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/auth-middleware';
+import {isGeneralHomeworkAiTool} from '@/lib/homework/ai-policy';
+import {editableHomeworkForUser} from '@/lib/homework/ai-policy-server';
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -49,6 +51,22 @@ export async function proxy(request: NextRequest) {
       }
 
       if (authContext) {
+        if (
+          (authContext.userRole === 'student' || authContext.authType === 'apiKey') &&
+          isGeneralHomeworkAiTool(pathname, request.method)
+        ) {
+          try {
+            const homework = await editableHomeworkForUser(authContext.userId);
+            if (homework) return NextResponse.json({
+              error: 'Use the help controls in your homework while an editable attempt is open.',
+              homeworkId: homework.homework_id,
+            }, { status: 403 });
+          } catch {
+            return NextResponse.json({
+              error: 'Homework help policy could not be checked. Please retry.',
+            }, { status: 503 });
+          }
+        }
         if (authMode === 'session' && authContext.authType !== 'session') {
           return NextResponse.json(
             { error: 'This endpoint requires session authentication' },

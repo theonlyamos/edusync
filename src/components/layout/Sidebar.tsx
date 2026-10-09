@@ -110,6 +110,7 @@ const teacherLinks: SidebarLink[] = [
     icon: <Book className="h-5 w-5" />,
     href: '/teachers/lessons'
   },
+  {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/teachers/homework'},
   {
     label: 'Content',
     icon: <FileText className="h-5 w-5" />,
@@ -160,6 +161,7 @@ const studentLinks: SidebarLink[] = [
     icon: <Book className="h-5 w-5" />,
     href: '/students/lessons'
   },
+  {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/students/homework'},
   {
     label: 'Practice',
     icon: <FileText className="h-5 w-5" />,

@@ -36,12 +36,18 @@ export default [
         'warn',
         { argsIgnorePattern: '^_', caughtErrors: 'none' },
       ],
-      'react/no-unescaped-entities': 'warn',
       '@typescript-eslint/ban-ts-comment': 'warn',
       '@typescript-eslint/no-empty-object-type': 'warn',
       '@typescript-eslint/no-require-imports': 'warn',
-      '@next/next/no-html-link-for-pages': 'warn',
       'prefer-const': 'warn',
+    },
+  },
+  {
+    // Match Next's React plugin scope; standalone CommonJS scripts do not use it.
+    files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
+    rules: {
+      'react/no-unescaped-entities': 'warn',
+      '@next/next/no-html-link-for-pages': 'warn',
       // React Compiler lint family (eslint-plugin-react-hooks v6) — high-value
       // but a large pre-existing backlog; warn for now.
       'react-hooks/immutability': 'warn',
