@@ -79,6 +79,10 @@ function HomeComponent() {
   } | null>(null);
 
   const showOverlay = (mode === 'record') && (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
+  const handleVoiceStartupFailed = useCallback(() => {
+    setVoiceActive(false);
+    setSessionManuallyStopped(true);
+  }, []);
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -610,8 +614,10 @@ function HomeComponent() {
                 <StartButtonOverlay
                   onStart={() => {
                     setMode('record');
+                    setError('');
                     setVoiceActive(true);
                   }}
+                  error={error}
                   connectionStatus={connectionStatus}
                   creditsLoading={creditsLoading}
                   outOfCredits={credits !== null && credits <= 0}
@@ -676,6 +682,7 @@ function HomeComponent() {
                         sessionId={currentSessionId || sessionIdFromUrl}
                         topic={topic}
                         onError={setError}
+                        onStartupFailed={handleVoiceStartupFailed}
                         onToolCall={handleToolCall}
                         onConnectionStatusChange={setConnectionStatus}
                         onCountdownEnd={handleCountdownEnd}

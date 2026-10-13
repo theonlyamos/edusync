@@ -248,6 +248,25 @@ describe('one startup per user activation', () => {
     expect(active).toBe(false);
     expect(stopTrack).toHaveBeenCalledOnce();
   });
+
+  it('reports a terminal error once before deactivating after startup resolves', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ token: 'synthetic-token' }));
+    let active = true;
+    const events: string[] = [];
+    const onError = (error: string) => events.push(`error:${error}`);
+    const onStartupFailed = () => { events.push('failed'); active = false; };
+    const render = () => hookHarness.render(() => VoiceControl({ active, onError, onStartupFailed }));
+    render();
+    await settleHook();
+    render();
+    gemini.configurations[0].callbacks.onclose({ code: 1006, reason: 'terminal close' });
+    render();
+    expect(events).toEqual(['error:Live voice connection ended. Please try again.', 'failed']);
+    expect(active).toBe(false);
+    render();
+    expect(events).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });
 
 describe('socket resumption', () => {

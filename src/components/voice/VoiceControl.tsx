@@ -83,6 +83,10 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     }
   }, [connectionStatus, stopStreaming, onCountdownEnd]);
 
+  useEffect(() => {
+    if (_streamingError) onError?.(_streamingError);
+  }, [_streamingError, onError]);
+
   // React to `active` prop changes
   useEffect(() => {
     const manage = async () => {
@@ -156,10 +160,6 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
-
-  useEffect(() => {
-    if (_streamingError) onError?.(_streamingError);
-  }, [_streamingError, onError]);
 
   useEffect(() => {
     onCountdownChange?.(countdown);
