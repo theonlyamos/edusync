@@ -78,13 +78,15 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
     var originals = new WeakMap();
     var observed = new WeakSet();
     var queued = false;
+    var mutationObserver;
     var resizeObserver = new ResizeObserver(schedule);
     function schedule() {
       if (queued) return;
       queued = true;
       requestAnimationFrame(function () {
         queued = false;
-        document.querySelectorAll('#root svg').forEach(layout);
+        try { document.querySelectorAll('#root svg').forEach(layout); }
+        finally { mutationObserver.takeRecords(); }
       });
     }
     function intersects(a, b, gap) {
@@ -114,7 +116,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         });
       }
       var matrix = svg.getScreenCTM();
-      if (!svg.hasAttribute('viewBox') || !svg.querySelector('[marker-end], [marker-start]') || svg.closest('.recharts-wrapper, .leaflet-container') || /chart|graph|plot|map/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24) { remember(); return; }
+      if (!svg.hasAttribute('viewBox') || !svg.querySelector('[marker-end], [marker-start]') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24) { remember(); return; }
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
       var bounds = svg.getBoundingClientRect();
       var circles = Array.from(svg.querySelectorAll('circle')).map(function (circle) { return circle.getBoundingClientRect(); });
@@ -204,13 +206,15 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
     }
     window.addEventListener('lesson-viewport-change', schedule);
     window.addEventListener('resize', schedule);
-    new MutationObserver(function (records) {
+    mutationObserver = new MutationObserver(function (records) {
       if (records.some(function (record) {
         var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
         if (target && target.closest('svg')) return true;
+        if (record.type === 'attributes' && (record.attributeName === 'class' || record.attributeName === 'style') && target && target.querySelector('svg')) return true;
         return Array.from(record.addedNodes).some(function (node) { return node.nodeType === 1 && (node.tagName.toLowerCase() === 'svg' || node.querySelector('svg')); });
       })) schedule();
-    }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label'] });
+    });
+    mutationObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label', 'transform', 'class', 'style', 'marker-start', 'marker-mid', 'marker-end'] });
     schedule();
   })();
 `;

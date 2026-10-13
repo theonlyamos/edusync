@@ -200,19 +200,51 @@ async function collisionCases(context, html, report, outputDir) {
 }
 
 function readControls() {
-  return Array.from(document.querySelectorAll('text[id]')).map(label => ({
-    id: label.id, font: label.style.fontSize, transform: label.getAttribute('transform'), rotate: label.getAttribute('rotate'),
-    x: label.getAttribute('x'), y: label.getAttribute('y'), authoredFont: label.getAttribute('font-size'),
-    rect: label.getBoundingClientRect().toJSON(), computedTransform: getComputedStyle(label).transform,
-  }));
+  return Array.from(document.querySelectorAll('text[id]')).map(label => {
+    const svg = label.closest('svg');
+    const matrix = label.getScreenCTM();
+    const rect = label.getBoundingClientRect();
+    const arrowTips = Array.from(svg.querySelectorAll('line[marker-end]')).map(line => {
+      const point = svg.createSVGPoint();
+      point.x = line.x2.baseVal.value; point.y = line.y2.baseVal.value;
+      const tip = point.matrixTransform(line.getScreenCTM());
+      return { x: tip.x, y: tip.y };
+    });
+    return {
+      id: label.id, font: label.style.fontSize, transform: label.getAttribute('transform'), rotate: label.getAttribute('rotate'),
+      x: label.getAttribute('x'), y: label.getAttribute('y'), authoredFont: label.getAttribute('font-size'),
+      rect: rect.toJSON(), computedTransform: getComputedStyle(label).transform,
+      svgId: svg.id, svgBounds: svg.getBoundingClientRect().toJSON(), arrowTips,
+      renderedFont: parseFloat(getComputedStyle(label).fontSize) * Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)),
+    };
+  });
 }
 
 function assertControls(values, stage) {
+  const semanticIds = ['flowchart-evaporation', 'flowchart-rainfall', 'concept-map-producer', 'concept-map-consumer'];
   for (const label of values) {
-    if (label.id === 'visible-label') continue;
+    if (label.id === 'visible-label' || semanticIds.includes(label.id)) continue;
     assert.equal(label.font, '', `${label.id}: authored font changed ${stage}`);
     assert.equal(label.transform, label.id === 'svg-transform-label' ? 'translate(6 0)' : null, `${label.id}: authored transform changed ${stage}`);
     assert.equal(label.rotate, label.id === 'rotated-label' ? '20' : null, `${label.id}: authored rotation changed ${stage}`);
+  }
+  for (const id of [...semanticIds, 'named-chart-label', 'data-chart-label', 'geographic-map-label', 'chart-label', 'map-label']) {
+    assert(values.some(label => label.id === id), `Semantic control missing ${id}`);
+  }
+  const semanticLabels = values.filter(label => semanticIds.includes(label.id));
+  for (const label of semanticLabels) {
+    assert(label.renderedFont >= 13.99, `${label.id}: unreadable semantic diagram label ${stage}: ${label.renderedFont}px`);
+    assert.equal(label.authoredFont, '8', `${label.id}: authored font attribute changed ${stage}`);
+    assert.equal(label.x, label.id.endsWith('evaporation') || label.id.endsWith('producer') ? '65' : '67', `${label.id}: authored x changed ${stage}`);
+    assert.equal(label.y, label.id.endsWith('evaporation') || label.id.endsWith('producer') ? '45' : '47', `${label.id}: authored y changed ${stage}`);
+    const bounds = label.svgBounds, rect = label.rect;
+    assert(rect.left >= bounds.left - .5 && rect.top >= bounds.top - .5 && rect.right <= bounds.right + .5 && rect.bottom <= bounds.bottom + .5, `${label.id}: clipped semantic diagram label ${stage}`);
+    assert(!label.arrowTips.some(tip => tip.x > rect.left && tip.x < rect.right && tip.y > rect.top && tip.y < rect.bottom), `${label.id}: semantic diagram label covers arrow tip ${stage}`);
+    for (const other of semanticLabels.filter(other => other.svgId === label.svgId && other.id !== label.id)) {
+      const width = Math.min(rect.right, other.rect.right) - Math.max(rect.left, other.rect.left);
+      const height = Math.min(rect.bottom, other.rect.bottom) - Math.max(rect.top, other.rect.top);
+      assert(width <= .5 || height <= .5, `${label.id}: overlapping semantic diagram label ${other.id} ${stage}`);
+    }
   }
   const visible = values.find(label => label.id === 'visible-label');
   assert(visible, 'Visible control is missing');
@@ -231,6 +263,30 @@ async function guardCase(context, html, report, outputDir) {
     assert(item.before.some(label => label.id === id), `Guard fixture missing ${id}`);
   }
   assertControls(item.before, 'initially');
+  item.chartPhraseControls = [];
+  for (const phrase of ['data plot', 'monthly rainfall bar chart', 'knowledge graph', 'data chart']) {
+    await frame.evaluate(name => document.getElementById('named-data-chart').setAttribute('aria-label', name), phrase);
+    await settle(frame);
+    const control = await frame.locator('#data-chart-label').evaluate(label => ({
+      font: label.style.fontSize, authoredFont: label.getAttribute('font-size'),
+      transform: label.getAttribute('transform'), renderedFont: parseFloat(getComputedStyle(label).fontSize),
+    }));
+    assert.equal(control.authoredFont, '8', phrase + ': authored font attribute changed');
+    assert.equal(control.transform, null, phrase + ': authored transform changed');
+    if (phrase === 'knowledge graph') assert(control.renderedFont >= 13.99, 'Knowledge graph must remain eligible');
+    else assert.equal(control.font, '', phrase + ': data-chart guard weakened');
+    item.chartPhraseControls.push({ phrase, authoredLayoutPreserved: phrase !== 'knowledge graph', eligible: phrase === 'knowledge graph' });
+  }
+  item.idleLabelMeasurements = await frame.evaluate(async () => {
+    let measurements = 0;
+    document.querySelectorAll('svg text').forEach(label => {
+      const measure=label.getBoundingClientRect.bind(label);
+      label.getBoundingClientRect=()=>{measurements++;return measure();};
+    });
+    for(let i=0;i<8;i++)await new Promise(resolve=>requestAnimationFrame(resolve));
+    return measurements;
+  });
+  assert.equal(item.idleLabelMeasurements,0,'Own label writes triggered a layout feedback loop');
   item.htmlTimerMeasurements = await frame.evaluate(async () => {
     let measurements = 0;
     document.querySelectorAll('svg text').forEach(label => {
@@ -247,23 +303,34 @@ async function guardCase(context, html, report, outputDir) {
     return measurements;
   });
   assert.equal(item.htmlTimerMeasurements, 0, 'HTML timer relaid out static SVG labels');
-  for (const transition of ['chart', 'viewBox', 'marker', 'rotation']) {
+  for (const transition of ['chart', 'viewBox', 'marker', 'rotation', 'group-transform', 'group-class', 'group-style', 'text-transform', 'text-class', 'text-style']) {
     await frame.evaluate(kind => {
       const svg = document.getElementById('hidden');
-      if (kind === 'chart') svg.setAttribute('aria-label', 'chart');
+      if (kind === 'chart') svg.setAttribute('aria-label', 'line chart');
       if (kind === 'viewBox') svg.removeAttribute('viewBox');
       if (kind === 'marker') svg.querySelector('line').removeAttribute('marker-end');
       if (kind === 'rotation') svg.style.transform = 'rotate(5deg)';
-      window.dispatchEvent(new Event('resize'));
+      const group=document.getElementById('dynamic-group');
+      const label=document.getElementById('visible-label');
+      if(kind==='group-transform')group.setAttribute('transform','scale(0.5)');
+      if(kind==='group-class')group.setAttribute('class','css-group');
+      if(kind==='group-style')group.style.transform='scale(0.5)';
+      if(kind==='text-transform')label.setAttribute('transform','translate(6 0)');
+      if(kind==='text-class')label.setAttribute('class','css-label');
+      if(kind==='text-style')label.style.transform='rotate(5deg)';
     }, transition);
     await settle(frame);
     assert.equal(await frame.locator('#visible-label').evaluate(label => label.style.fontSize), '', `${transition} transition retained injected font`);
-    assert.equal(await frame.locator('#visible-label').getAttribute('transform'), null, `${transition} transition retained injected transform`);
+    assert.equal(await frame.locator('#visible-label').getAttribute('transform'), transition === 'text-transform' ? 'translate(6 0)' : null, `${transition} transition retained injected transform`);
     await frame.evaluate(() => {
       const svg = document.getElementById('hidden');
       svg.removeAttribute('aria-label'); svg.setAttribute('viewBox', '0 0 200 100');
       svg.querySelector('line').setAttribute('marker-end', 'url(#controlArrow)');
-      svg.style.transform = ''; window.dispatchEvent(new Event('resize'));
+      svg.style.transform = '';
+      const group=document.getElementById('dynamic-group');
+      const label=document.getElementById('visible-label');
+      group.removeAttribute('transform');group.removeAttribute('class');group.style.transform='';
+      label.removeAttribute('transform');label.removeAttribute('class');label.style.transform='';
     });
     await settle(frame);
     assert(parseFloat(await frame.locator('#visible-label').evaluate(label => label.style.fontSize)) >= 14, `${transition} supported transition did not restore label pass`);
