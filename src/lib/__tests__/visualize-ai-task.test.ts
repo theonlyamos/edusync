@@ -21,6 +21,44 @@ beforeEach(() => {
 })
 
 describe('responsive visualization generation', () => {
+  it('rejects malformed generated React syntax and uses the existing bounded retry', async () => {
+    const response = (code: string) => ({ choices: [{ message: { tool_calls: [{
+      type: 'function',
+      function: { name: 'display_visual_aid', arguments: JSON.stringify({ library: 'react', code, explanation: 'Follow the oxygen.' }) },
+    }] } }] })
+    complete
+      .mockResolvedValueOnce(response("function App() { return React.createElement('p', null, 'Plant's oxygen'); }"))
+      .mockResolvedValueOnce(response('function App() { return React.createElement("p", null, "Oxygen comes from water."); }'))
+
+    const result = await runVisualizeGeneration({ task_description: 'Show how water releases oxygen.' })
+    expect(result.code).toContain('Oxygen comes from water.')
+    expect(complete).toHaveBeenCalledTimes(2)
+  })
+
+  it('never returns invalid React syntax after all three existing attempts fail', async () => {
+    complete.mockResolvedValue({ choices: [{ message: { tool_calls: [{
+      type: 'function',
+      function: { name: 'display_visual_aid', arguments: JSON.stringify({ library: 'react', code: "function App() { return React.createElement('p', null, 'Plant's oxygen'); }", explanation: 'Follow the oxygen.' }) },
+    }] } }] })
+
+    await expect(runVisualizeGeneration({ task_description: 'Show how water releases oxygen.' }))
+      .rejects.toThrow('Generated React code has invalid JavaScript syntax')
+    expect(complete).toHaveBeenCalledTimes(3)
+  })
+
+  it('validates generated syntax without executing its body on the server', async () => {
+    const state = globalThis as typeof globalThis & { __generatedCodeExecuted?: boolean }
+    delete state.__generatedCodeExecuted
+    const code = 'globalThis.__generatedCodeExecuted = true; function App() { return null; }'
+    complete.mockResolvedValueOnce({ choices: [{ message: { tool_calls: [{
+      type: 'function',
+      function: { name: 'display_visual_aid', arguments: JSON.stringify({ library: 'react', code, explanation: 'Explore.' }) },
+    }] } }] })
+
+    expect((await runVisualizeGeneration({ task_description: 'Explore.' })).code).toBe(code)
+    expect(state.__generatedCodeExecuted).toBeUndefined()
+  })
+
   it.each([
     [{ width: 320, height: 520 }, '320px wide × 520px tall'],
     [{ width: 768, height: 620 }, '768px wide × 620px tall'],
