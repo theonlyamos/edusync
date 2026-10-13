@@ -92,6 +92,25 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
     function intersects(a, b, gap) {
       return a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top;
     }
+    function markedEdgeTips(svg) {
+      var tips = [];
+      svg.querySelectorAll('line, path, polyline').forEach(function (edge) {
+        if (edge.closest('defs, marker')) return;
+        try {
+          var matrix = edge.getScreenCTM();
+          var length = edge.getTotalLength();
+          if (!matrix || !Number.isFinite(length)) return;
+          var style = getComputedStyle(edge);
+          ['start', 'end'].forEach(function (side) {
+            var marker = style.getPropertyValue('marker-' + side) || edge.getAttribute('marker-' + side);
+            if (!marker || marker.trim().toLowerCase() === 'none') return;
+            var point = edge.getPointAtLength(side === 'start' ? 0 : length).matrixTransform(matrix);
+            if (Number.isFinite(point.x) && Number.isFinite(point.y)) tips.push({ left: point.x, right: point.x, top: point.y, bottom: point.y });
+          });
+        } catch (_) { /* Invalid edge geometry must not interrupt the label pass. */ }
+      });
+      return tips;
+    }
     function restore(label) {
       var original = originals.get(label);
       if (!original) {
@@ -120,6 +139,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
       var bounds = svg.getBoundingClientRect();
       var circles = Array.from(svg.querySelectorAll('circle')).map(function (circle) { return circle.getBoundingClientRect(); });
+      var tips = markedEdgeTips(svg);
       var visible = [];
       var eligible = new WeakSet();
       var baseline = new WeakMap();
@@ -152,15 +172,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
           var distance = Infinity;
           var obstacles = placed.slice();
           circles.forEach(function (circle) { if (!intersects(baseline.get(label), circle, 0)) obstacles.push(circle); });
-          var line = label.previousElementSibling;
-          if (line && line.tagName.toLowerCase() === 'line' && line.getAttribute('marker-end')) {
-            var point = svg.createSVGPoint();
-            point.x = line.x2.baseVal.value;
-            point.y = line.y2.baseVal.value;
-            var tip = point.matrixTransform(line.getScreenCTM());
-            var tipRect = { left: tip.x, right: tip.x, top: tip.y, bottom: tip.y };
-            if (!intersects(baseline.get(label), tipRect, -0.5)) obstacles.push(tipRect);
-          }
+          tips.forEach(function (tip) { if (!intersects(baseline.get(label), tip, -0.5)) obstacles.push(tip); });
           if (rect.width <= bounds.width - 8 && rect.height <= bounds.height - 8) {
             var left = Math.max(bounds.left + 4, Math.min(rect.left, bounds.right - rect.width - 4));
             var top = Math.max(bounds.top + 4, Math.min(rect.top, bounds.bottom - rect.height - 4));
@@ -214,7 +226,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         return Array.from(record.addedNodes).some(function (node) { return node.nodeType === 1 && (node.tagName.toLowerCase() === 'svg' || node.querySelector('svg')); });
       })) schedule();
     });
-    mutationObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label', 'transform', 'class', 'style', 'marker-start', 'marker-mid', 'marker-end'] });
+    mutationObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label', 'transform', 'class', 'style', 'marker-start', 'marker-mid', 'marker-end', 'opacity', 'visibility', 'display'] });
     schedule();
   })();
 `;

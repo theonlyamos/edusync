@@ -202,7 +202,7 @@ async function collisionCases(context, html, report, outputDir) {
 function readControls() {
   return Array.from(document.querySelectorAll('text[id]')).map(label => {
     const svg = label.closest('svg');
-    const matrix = label.getScreenCTM();
+    const matrix = label.getScreenCTM() || { a: 0, b: 0, c: 0, d: 0 };
     const rect = label.getBoundingClientRect();
     const arrowTips = Array.from(svg.querySelectorAll('line[marker-end]')).map(line => {
       const point = svg.createSVGPoint();
@@ -252,6 +252,31 @@ function assertControls(values, stage) {
   assert(parseFloat(visible.font) >= 14, 'Visible control not adapted');
 }
 
+async function presentationTransitions(frame) {
+  const transitions = [];
+  for (const attribute of ['opacity', 'visibility', 'display']) {
+    const hidden = attribute === 'opacity' ? '0' : attribute === 'visibility' ? 'hidden' : 'none';
+    const shown = attribute === 'opacity' ? '1' : attribute === 'visibility' ? 'visible' : 'inline';
+    for(let repeat=0;repeat<2;repeat++) {
+      await frame.evaluate(({name,value})=>document.getElementById('hide-'+name+'-group').setAttribute(name,value),{name:attribute,value:shown});
+      await settle(frame);
+      const visible = await frame.locator('#hide-'+attribute+'-label').evaluate(label=>({
+        font: label.style.fontSize, renderedFont: parseFloat(getComputedStyle(label).fontSize),
+        authoredFont: label.getAttribute('font-size'), x: label.getAttribute('x'), y: label.getAttribute('y'),
+      }));
+      assert(visible.renderedFont>=13.99, attribute+': revealed label stayed undersized without resize');
+      assert.equal(visible.authoredFont,'8',attribute+': authored font changed');
+      assert.equal(visible.x,'80',attribute+': authored x changed');
+      assert.equal(visible.y,'45',attribute+': authored y changed');
+      await frame.evaluate(({name,value})=>document.getElementById('hide-'+name+'-group').setAttribute(name,value),{name:attribute,value:hidden});
+      await settle(frame);
+      assert.equal(await frame.locator('#hide-'+attribute+'-label').evaluate(label=>label.style.fontSize),'',attribute+': hidden label retained injected font');
+    }
+    transitions.push({attribute,automaticReveal:true,authoredHiddenLayoutRestored:true,repetitions:2});
+  }
+  return transitions;
+}
+
 async function guardCase(context, html, report, outputDir) {
   const item = { name: 'svg-label-controls', assertionsPassed: false, transitions: [] };
   report.cases.push(item);
@@ -277,6 +302,7 @@ async function guardCase(context, html, report, outputDir) {
     else assert.equal(control.font, '', phrase + ': data-chart guard weakened');
     item.chartPhraseControls.push({ phrase, authoredLayoutPreserved: phrase !== 'knowledge graph', eligible: phrase === 'knowledge graph' });
   }
+  item.presentationTransitions = await presentationTransitions(frame);
   item.idleLabelMeasurements = await frame.evaluate(async () => {
     let measurements = 0;
     document.querySelectorAll('svg text').forEach(label => {
@@ -340,6 +366,8 @@ async function guardCase(context, html, report, outputDir) {
   await settle(frame);
   item.after = await frame.evaluate(readControls);
   assertControls(item.after, 'on resize');
+  item.phonePresentationTransitions = await presentationTransitions(frame);
+  assertControls(await frame.evaluate(readControls), 'after phone hide/show');
   const authored = values => values.map(({ id, x, y, authoredFont, rotate }) => ({ id, x, y, authoredFont, rotate }));
   assert.deepEqual(authored(item.after), authored(item.before), 'Guard authored attributes changed on resize');
   await page.screenshot({ path: path.join(outputDir, `${item.name}-390.png`), fullPage: true });
@@ -347,6 +375,137 @@ async function guardCase(context, html, report, outputDir) {
   item.assertionsPassed = true;
   await page.close();
 }
+
+// Independent endpoint oracle: every marked geometry endpoint is compared with every label.
+function readEdgeGeometry() {
+  return Array.from(document.querySelectorAll('svg[data-edge-case]')).map(svg => {
+    const bounds = svg.getBoundingClientRect();
+    const matrix = svg.getScreenCTM();
+    const endpoints = Array.from(svg.querySelectorAll('line, path, polyline')).flatMap(edge => {
+      const edgeMatrix = edge.getScreenCTM();
+      const length = edge.getTotalLength();
+      return ['start', 'end'].filter(side => {
+        const marker = getComputedStyle(edge).getPropertyValue(`marker-${side}`) || edge.getAttribute(`marker-${side}`);
+        return marker && marker.trim().toLowerCase() !== 'none';
+      }).map(side => {
+        const point = edge.getPointAtLength(side === 'start' ? 0 : length);
+        const tip = point.matrixTransform(edgeMatrix);
+        return { edgeId: edge.id, side, x: tip.x, y: tip.y,
+          svgX: (tip.x - matrix.e) / matrix.a, svgY: (tip.y - matrix.f) / matrix.d };
+      });
+    });
+    const labels = Array.from(svg.querySelectorAll('text')).map(label => {
+      const rect = label.getBoundingClientRect();
+      const labelMatrix = label.getScreenCTM();
+      const movement = (label.getAttribute('transform') || '').match(/^translate\(([-\d.e+]+) ([-\d.e+]+)\)$/);
+      const shiftX = movement ? Number(movement[1]) * matrix.a : 0;
+      const shiftY = movement ? Number(movement[2]) * matrix.d : 0;
+      const covers = point => point.x > rect.left + .5 && point.x < rect.right - .5 && point.y > rect.top + .5 && point.y < rect.bottom - .5;
+      const enlargedUnshifted = point => point.x > rect.left - shiftX + .5 && point.x < rect.right - shiftX - .5 && point.y > rect.top - shiftY + .5 && point.y < rect.bottom - shiftY - .5;
+      return { id: label.id, rect: rect.toJSON(), authoredX: label.getAttribute('x'), authoredY: label.getAttribute('y'),
+        authoredFont: label.getAttribute('font-size'), transform: label.getAttribute('transform'), movement: Math.hypot(shiftX, shiftY),
+        fontSize: parseFloat(getComputedStyle(label).fontSize) * Math.min(Math.hypot(labelMatrix.a, labelMatrix.b), Math.hypot(labelMatrix.c, labelMatrix.d)),
+        covered: endpoints.filter(covers).map(({ edgeId, side }) => ({ edgeId, side })),
+        enlargedUnshiftedCovered: endpoints.filter(enlargedUnshifted).map(({ edgeId, side }) => ({ edgeId, side })),
+      };
+    });
+    return { id: svg.id, scale: matrix.a, bounds: bounds.toJSON(), endpoints, labels,
+      edges: Array.from(svg.querySelectorAll('line[id], path[id], polyline[id]')).map(edge => ({
+        id: edge.id, tag: edge.tagName.toLowerCase(), transform: edge.getAttribute('transform'),
+        attributes: Object.fromEntries(['x1', 'y1', 'x2', 'y2', 'd', 'points', 'marker-start', 'marker-end'].map(name => [name, edge.getAttribute(name)])),
+      })),
+    };
+  });
+}
+
+function assertEdgeGeometry(values, stage) {
+  const expected = [
+    { id: 'edge-nonadjacent-line', tag: 'line', tips: [['end', 100, 40]], transform: null },
+    { id: 'edge-marker-start', tag: 'line', tips: [['start', 100, 40]], transform: null },
+    { id: 'edge-path', tag: 'path', tips: [['start', 10, 75], ['end', 100, 40]], transform: null, startLabel: ['30', '80'] },
+    { id: 'edge-polyline-ctm', tag: 'polyline', tips: [['start', 40, 90], ['end', 100, 40]], transform: 'translate(30 20)', startLabel: ['60', '95'] },
+  ];
+  assert.equal(values.length, expected.length, `${stage}: endpoint fixture SVG count`);
+  for (const control of expected) {
+    const svg = values.find(value => value.id === control.id);
+    assert(svg, `${stage}: missing ${control.id}`);
+    assert.equal(svg.endpoints.length, control.tips.length, `${stage}: missing marked endpoints in ${control.id}`);
+    assert.equal(svg.edges.length, 1, `${stage}: missing edge in ${control.id}`);
+    assert.equal(svg.edges[0].tag, control.tag, `${stage}: edge type changed in ${control.id}`);
+    assert.equal(svg.edges[0].transform, control.transform, `${stage}: authored edge transform changed in ${control.id}`);
+    for (const [side, x, y] of control.tips) {
+      const tip = svg.endpoints.find(value => value.side === side);
+      assert(tip, `${stage}: missing ${side} endpoint in ${control.id}`);
+      assert(Math.abs(tip.svgX - x) < .01 && Math.abs(tip.svgY - y) < .01, `${stage}: unexpected ${side} endpoint geometry in ${control.id}`);
+    }
+    assert.equal(svg.labels.length, control.startLabel ? 3 : 2, `${stage}: missing endpoint labels in ${control.id}`);
+    for (const label of svg.labels) {
+      const target = label.id === `${control.id}-label`;
+      const startTarget = label.id === `${control.id}-start-label`;
+      assert.equal(label.authoredX, startTarget ? control.startLabel[0] : target ? '80' : '150', `${stage}: authored x changed for ${label.id}`);
+      assert.equal(label.authoredY, startTarget ? control.startLabel[1] : target ? '45' : '85', `${stage}: authored y changed for ${label.id}`);
+      assert.equal(label.authoredFont, '8', `${stage}: authored font attribute changed for ${label.id}`);
+      assert.deepEqual(label.covered, [], `${stage}: ${label.id} covers marked endpoint`);
+      assert(label.fontSize >= 13.99, `${stage}: unreadable endpoint label ${label.id}: ${label.fontSize}px`);
+      assert(label.movement <= 48.01, `${stage}: endpoint label moved too far ${label.id}: ${label.movement}px`);
+      assert(label.rect.left >= svg.bounds.left - .5 && label.rect.top >= svg.bounds.top - .5 && label.rect.right <= svg.bounds.right + .5 && label.rect.bottom <= svg.bounds.bottom + .5, `${stage}: clipped endpoint label ${label.id}`);
+      if (target || startTarget) {
+        assert(label.movement > .01, `${stage}: candidate did not move away from endpoint in ${control.id}`);
+        const challengedSide = startTarget || control.id === 'edge-marker-start' ? 'start' : 'end';
+        assert(label.enlargedUnshiftedCovered.some(tip => tip.side === challengedSide), `${stage}: fixture did not challenge enlarged candidate at ${challengedSide} endpoint in ${control.id}`);
+      }
+      for (const other of svg.labels.filter(value => value.id !== label.id)) {
+        const width = Math.min(label.rect.right, other.rect.right) - Math.max(label.rect.left, other.rect.left);
+        const height = Math.min(label.rect.bottom, other.rect.bottom) - Math.max(label.rect.top, other.rect.top);
+        assert(width <= .5 || height <= .5, `${stage}: endpoint labels overlap ${label.id} / ${other.id}`);
+      }
+    }
+  }
+}
+
+async function endpointCase(context, html, report, outputDir) {
+  for (const viewport of viewports) {
+    const item = { name: `svg-edge-endpoints-${viewport.width}`, viewport, assertionsPassed: false };
+    report.cases.push(item);
+    const { page, frame } = await openFixture(context, html, viewport);
+    item.before = await frame.evaluate(readEdgeGeometry);
+    await page.screenshot({ path: path.join(outputDir, `${item.name}.png`), fullPage: true });
+    assertEdgeGeometry(item.before, `${viewport.width}px initially`);
+    const authoredEdges = values => values.map(svg => svg.edges);
+    const opposite = viewports.find(size => size.width !== viewport.width);
+    item.resizeTo = opposite;
+    await page.setViewportSize(opposite);
+    await settle(frame);
+    item.after = await frame.evaluate(readEdgeGeometry);
+    assertEdgeGeometry(item.after, `${opposite.width}px resized`);
+    assert.deepEqual(authoredEdges(item.after), authoredEdges(item.before), 'Authored edge geometry changed on resize');
+    await page.screenshot({ path: path.join(outputDir, `${item.name}-resized.png`), fullPage: true });
+    for (let repeat = 0; repeat < 3; repeat++) {
+      await page.setViewportSize(viewport);
+      await settle(frame);
+      assert.deepEqual(await frame.evaluate(readEdgeGeometry), item.before, 'Endpoint label placement drift after repeated resize');
+      await page.setViewportSize(opposite);
+      await settle(frame);
+      assert.deepEqual(await frame.evaluate(readEdgeGeometry), item.after, 'Endpoint label placement drift after reciprocal resize');
+    }
+    await frame.evaluate(() => document.querySelectorAll('svg[data-edge-case]').forEach(svg => {
+      svg.style.width = '180px';
+      svg.style.maxWidth = '180px';
+    }));
+    await settle(frame);
+    item.scaled = await frame.evaluate(readEdgeGeometry);
+    item.scale = .9;
+    assert(item.scaled.every(svg => Math.abs(svg.scale - item.scale) < .0001), 'Endpoint fixture did not enter non-unit CTM stage');
+    assertEdgeGeometry(item.scaled, `${opposite.width}px non-unit CTM scale ${item.scale}`);
+    assert.deepEqual(authoredEdges(item.scaled), authoredEdges(item.before), 'Authored edge geometry changed under non-unit CTM');
+    await page.screenshot({ path: path.join(outputDir, `${item.name}-scaled.png`), fullPage: true });
+    item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
+    item.repeatedResizeDrift = false;
+    item.assertionsPassed = true;
+    await page.close();
+  }
+}
+
 
 async function run() {
   const options = parseOptions(process.argv.slice(2));
@@ -357,7 +516,7 @@ async function run() {
   const report = {
     utc: new Date().toISOString(), kind: 'offline actual ReactRenderer and visualizationReducer',
     chromiumSandbox: true, externalNetworkBlocked: true, assertionsPassed: false,
-    fixtures: ['photosynthesis-label-collision.json', 'svg-label-controls.json'],
+    fixtures: ['photosynthesis-label-collision.json', 'svg-label-controls.json', 'svg-edge-endpoints.json'],
     omitted: ['Persisted sequence 808 (requires a test-only explicit Component wrapper for the existing renderer normalization issue)'],
     networkRequests: [], errors: [], cases: [],
   };
@@ -375,9 +534,10 @@ async function run() {
     context.on('page', page => page.on('pageerror', error => report.errors.push(error.message)));
     await collisionCases(context, html(fixtures[0]), report, outputDir);
     await guardCase(context, html(fixtures[1]), report, outputDir);
+    await endpointCase(context, html(fixtures[2]), report, outputDir);
     assert.equal(report.networkRequests.length, 0, 'Unexpected network attempted');
     assert.deepEqual(report.errors, [], 'Renderer errors');
-    assert.equal(report.cases.length, 3, 'Missing regression case');
+    assert.equal(report.cases.length, 5, 'Missing regression case');
     assert(report.cases.every(item => item.assertionsPassed), 'Incomplete regression case');
     report.assertionsPassed = true;
   } catch (error) {
