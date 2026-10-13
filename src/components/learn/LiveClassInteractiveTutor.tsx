@@ -321,12 +321,13 @@ export function LiveClassInteractiveTutor({
   // ─── Lobby / connecting / error states ───────────────────────────────
   if (phase !== 'live') {
     return (
-      <div className="flex h-screen flex-col bg-background">
+      <div className="flex h-dvh min-h-0 flex-col bg-background overflow-y-auto">
         {/* Header */}
         <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-card/60 backdrop-blur-sm px-4">
           <Link
             href={backHref}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Back to live classes"
+            className="flex min-h-11 min-w-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Back to classes</span>
@@ -427,12 +428,13 @@ export function LiveClassInteractiveTutor({
 
   // ─── Live session layout ─────────────────────────────────────────────
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
+    <div className="flex h-dvh min-h-0 flex-col bg-background overflow-hidden">
       {/* Header bar */}
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-card/60 backdrop-blur-sm px-4">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card/60 backdrop-blur-sm px-3 sm:gap-3 sm:px-4">
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Back to live classes"
+          className="flex min-h-11 min-w-11 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Back</span>
@@ -472,7 +474,7 @@ export function LiveClassInteractiveTutor({
       </header>
 
       {/* Main content: board + sidebar */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="relative min-h-0 flex-1 flex overflow-hidden">
         {/* Board area */}
         <div className="flex-1 min-w-0 overflow-hidden relative bg-muted/20">
           {boardContent ? (
@@ -506,14 +508,15 @@ export function LiveClassInteractiveTutor({
       </div>
 
       {/* Bottom toolbar */}
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-t bg-card/80 backdrop-blur-sm px-4">
+      <div className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-t bg-card/80 backdrop-blur-sm px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4">
         <div className="flex items-center gap-1">
           <Button
             variant={micOn ? 'secondary' : 'destructive'}
             size="icon"
-            className="h-9 w-9"
+            className="h-11 w-11"
             onClick={() => void toggleMic()}
             title={micOn ? 'Mute microphone' : 'Unmute microphone'}
+            aria-label={micOn ? 'Mute microphone' : 'Unmute microphone'}
           >
             {micOn ? (
               <Mic className="h-4 w-4" />
@@ -527,9 +530,11 @@ export function LiveClassInteractiveTutor({
           <Button
             variant={showParticipants ? 'secondary' : 'ghost'}
             size="icon"
-            className="h-9 w-9"
+            className="h-11 w-11"
             onClick={() => setShowParticipants((p) => !p)}
             title={showParticipants ? 'Hide participants' : 'Show participants'}
+            aria-label={showParticipants ? 'Hide participants' : 'Show participants'}
+            aria-expanded={showParticipants}
           >
             <Users className="h-4 w-4" />
           </Button>
@@ -539,7 +544,8 @@ export function LiveClassInteractiveTutor({
           <Button
             variant="destructive"
             size="sm"
-            className="gap-1.5"
+            className="min-h-11 min-w-11 gap-1.5"
+            aria-label="Leave session"
             onClick={() => void disconnect()}
           >
             <LogOut className="h-4 w-4" />

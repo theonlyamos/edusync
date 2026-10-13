@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
 
 interface SafeCodeRunnerProps {
   code: string;
@@ -51,20 +52,16 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
     body {
       margin: 0;
       padding: 0;
-      overflow: hidden;
+      overflow: auto;
       background: #ffffff;
       color: #0f172a;
       font-family: Arial, sans-serif;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
     }
     canvas { 
       display: block; 
       max-width: 100%;
-      max-height: 100%;
     }
     .error {
       padding: 20px;
@@ -77,7 +74,9 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
     .container {
       padding: 20px;
     }
+    ${SANDBOX_RESPONSIVE_STYLES}
   </style>
+  <script>${SANDBOX_RESPONSIVE_SCRIPT}</script>
 </head>
 <body>`;
 
@@ -192,7 +191,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   }, [code, library]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full min-w-0">
       {isLoading && <VisualizationSkeleton />}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-red-50 rounded">
@@ -202,10 +201,10 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       <iframe
         ref={iframeRef}
         title="Code Preview"
-        className="w-full h-full border border-gray-200 rounded bg-transparent"
+        className="block w-full h-full min-w-0 border border-gray-200 rounded bg-transparent"
         sandbox="allow-scripts"
         allow={library === 'p5' ? 'accelerometer; gyroscope; magnetometer' : undefined}
-        style={{ display: isLoading || error ? 'none' : 'block' }}
+        style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
     </div>
   );

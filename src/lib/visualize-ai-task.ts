@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server'
+import { buildVisualizationLayoutPrompt, type VisualizationDimensions } from '@/lib/visualization-layout'
 
 interface OpenAIConfig {
   baseURL: string
@@ -78,9 +79,6 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 - **p5.js** — simple 2D animated sketches where a canvas loop is the most natural fit.
 - **CRITICAL SPEED RULE:** Your code MUST be as short as possible to render instantly. Do not over-engineer. Maximize use of available UI components instead of custom CSS. The code string should rarely exceed 80 lines.
 
-### Sizing
-Subtract 96px from provided width and height for your canvas or root element to prevent overflow.
-
 ### React Rules (Sandboxed Environment)
 - **NO** \`import\` or \`export\` statements. All dependencies are injected globally.
 - **NO** JSX. Use \`React.createElement()\` exclusively.
@@ -139,7 +137,7 @@ const displayVisualAidFunctionDeclaration = {
 
 export type VisualizeGenerationInput = {
   task_description: string
-  panel_dimensions?: { width: number; height: number }
+  panel_dimensions?: VisualizationDimensions
   theme?: string
   theme_colors?: Record<string, string>
 }
@@ -246,9 +244,7 @@ export async function runVisualizeGeneration(input: VisualizeGenerationInput): P
     throw new Error('task_description is required')
   }
 
-  const dimensionsInfo = panel_dimensions
-    ? `\n\nVisualization Panel Dimensions: ${panel_dimensions.width}px wide × ${panel_dimensions.height}px tall\nEnsure your visualization fits within these exact dimensions.`
-    : ''
+  const dimensionsInfo = buildVisualizationLayoutPrompt(panel_dimensions)
 
   const themeInfo =
     theme && theme_colors

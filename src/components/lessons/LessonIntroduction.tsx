@@ -5,6 +5,7 @@ import { ImageIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { StudentSafeArtifact } from '@/lib/lesson-artifacts/domain';
+import { LearningImage } from './LearningImage';
 
 async function readJson(response: Response) {
   const data = await response.json().catch(() => ({}));
@@ -51,12 +52,7 @@ function Introduction({ lessonId }: { lessonId: string }) {
         {loading ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading introduction…</p> : error ? (
           <div role="alert" className="space-y-3"><p className="text-sm text-destructive">{error}</p><Button variant="outline" size="sm" onClick={() => { setError(undefined); setVisual(null); setLoading(true); setAttempt((value) => value + 1); }}>Try again</Button></div>
         ) : visual ? (
-          <figure>
-            {/* Signed private URLs must bypass Next image optimization. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={visual.url} alt={visual.alt} className="max-h-[640px] w-full rounded-xl object-contain" onError={() => setError('The introduction image could not be displayed')} />
-            <figcaption className="mt-3 text-sm text-muted-foreground">{visual.caption}</figcaption>
-          </figure>
+          <LearningImage key={visual.url} src={visual.url} alt={visual.alt} caption={visual.caption} onError={() => setError('The introduction image could not be displayed')} />
         ) : null}
       </CardContent>
     </Card>

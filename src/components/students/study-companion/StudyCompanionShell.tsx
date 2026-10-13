@@ -7,11 +7,14 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import type { LessonContext } from '@/hooks/useAudioStreaming';
 import { useObjectiveLearning } from '@/hooks/useObjectiveLearning';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import type { VisualizationDimensions } from '@/lib/visualization-layout';
 import {
   MAX_EXPLANATION_LENGTH,
   MAX_INTERACTIVE_CODE_LENGTH,
@@ -72,6 +75,7 @@ export function StudyCompanionShell() {
   const [mode, setMode] = useState<StudyMode>('companion');
   const [intent, setIntent] = useState<StudyIntent>('general');
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(true);
+  const [isMobileContextOpen, setIsMobileContextOpen] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [outageNotice, setOutageNotice] = useState<OutageNotice | null>(null);
   const [localSendCount, setLocalSendCount] = useState(0);
@@ -85,6 +89,13 @@ export function StudyCompanionShell() {
   const objectiveLearning = useObjectiveLearning({ lessonId: selectedLesson, mode: 'tutor' });
   const introductionInstanceId = objectiveLearning.artifacts[0]?.instanceId;
   const { data: studentProfile } = useStudentProfile(session?.user?.id);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1280px)');
+    const closeOnDesktop = () => { if (desktop.matches) setIsMobileContextOpen(false); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
 
   useEffect(() => {
     if (introductionInstanceId) introductionRef.current?.scrollIntoView({ block: 'start' });
@@ -258,7 +269,7 @@ export function StudyCompanionShell() {
   // a functional update + persists the merged result, so a concurrent message append can't clobber
   // it and the saved copy always matches what's shown.
   const handleRegenerateElement = useCallback(
-    async (element: InteractiveElement): Promise<InteractiveElementUpdate> => {
+    async (element: InteractiveElement, panelDimensions?: VisualizationDimensions): Promise<InteractiveElementUpdate> => {
       const msgs = messagesRef.current;
       const hostIndex = msgs.findIndex((message) =>
         message.interactiveElements?.some((el) => el.id === element.id),
@@ -289,7 +300,7 @@ export function StudyCompanionShell() {
         latestUserContent,
       });
 
-      const result = await requestVisualizationFromGenAi({ taskDescription });
+      const result = await requestVisualizationFromGenAi({ taskDescription, panelDimensions });
       const update: InteractiveElementUpdate = {
         code: result.code.slice(0, MAX_INTERACTIVE_CODE_LENGTH),
         library: result.library,
@@ -470,6 +481,7 @@ export function StudyCompanionShell() {
           mode: requestMode,
           intent: requestIntent,
           learningRunId: objectiveLearning.runId,
+          panelDimensions: readVisualizationPanelDimensions(),
         }),
       });
 
@@ -581,16 +593,42 @@ export function StudyCompanionShell() {
   if (!session) {
     return (
       <DashboardLayout fullBleed>
-        <div className="flex min-h-screen items-center justify-center">
+        <div className="flex h-full items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       </DashboardLayout>
     );
   }
 
+  const contextPanels = (
+    <>
+      <div className="shrink-0 p-4">
+        <LessonContextPanel
+          gradeLevel={gradeLevel}
+          lessons={lessons}
+          selectedLesson={selectedLesson}
+          disabled={isLoading || objectiveLearning.loading}
+          onLessonChange={startNewChat}
+          objectives={objectiveLearning.objectives}
+          selectedObjectiveId={objectiveLearning.activeObjective?.id}
+          onObjectiveChange={objectiveLearning.selectObjective}
+        />
+      </div>
+      <ChatHistoryPanel
+        chats={chatHistory}
+        lessons={lessons}
+        onLoadChat={(chatId) => {
+          void loadChat(chatId);
+          setIsMobileContextOpen(false);
+        }}
+        onDeleteChat={deleteChat}
+      />
+    </>
+  );
+
   return (
     <DashboardLayout fullBleed>
-      <div className="relative flex h-[100vh]">
+      <div className="relative flex h-full min-h-0">
         {/* Hanging open button: floats over the top-right of the page when the context panel is
             closed, so it never shifts the chat layout. */}
         {!isContextPanelOpen && (
@@ -598,7 +636,7 @@ export function StudyCompanionShell() {
             ref={openPanelButtonRef}
             variant="outline"
             size="sm"
-            className="absolute right-4 top-4 z-20 h-9 w-9 p-0 shadow-md"
+            className="absolute right-4 top-4 z-20 hidden h-9 w-9 p-0 shadow-md xl:inline-flex"
             aria-label="Show study context panel"
             title="Show study context"
             onClick={() => setIsContextPanelOpen(true)}
@@ -606,8 +644,29 @@ export function StudyCompanionShell() {
             <ChevronLeft className="h-4 w-4" />
           </Button>
         )}
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex-1 overflow-y-auto p-6">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b p-3 xl:hidden">
+            <span className="text-sm font-semibold">Study companion</span>
+            <Dialog open={isMobileContextOpen} onOpenChange={setIsMobileContextOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-11">Study context</Button>
+              </DialogTrigger>
+              <DialogContent className="flex h-[min(44rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] max-w-sm flex-col gap-0 overflow-hidden p-0 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
+                <div className="shrink-0 border-b p-4 pr-16">
+                  <DialogTitle>Study context</DialogTitle>
+                  <DialogDescription className="sr-only">Choose a lesson or open a previous study session.</DialogDescription>
+                  <Button variant="outline" size="sm" className="mt-3 h-11" disabled={isLoading} onClick={() => {
+                    void startNewChat();
+                    setIsMobileContextOpen(false);
+                  }}><Plus className="mr-2 h-4 w-4" />New Study Session</Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div className="flex min-h-full flex-col">{contextPanels}</div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <div data-visualization-viewport className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-6">
             {selectedLesson && <div ref={introductionRef} className="mx-auto mb-6 max-w-3xl">
               {objectiveLearning.loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading objective introduction...</p>}
               {objectiveLearning.error && <div role="alert" className="space-y-2"><p className="text-sm text-destructive">{objectiveLearning.error}</p><Button variant="outline" size="sm" onClick={() => void objectiveLearning.initialize(objectiveLearning.activeObjective?.id)}>Try again</Button></div>}
@@ -624,7 +683,7 @@ export function StudyCompanionShell() {
             ) : (
               <div className="mx-auto grid max-w-3xl gap-6">
                 <Card>
-                  <CardContent className="space-y-4 p-6">
+                  <CardContent className="space-y-4 p-4 sm:p-6">
                     <div>
                       <h2 className="text-xl font-semibold">What are we studying today?</h2>
                       <p className="mt-2 text-sm text-muted-foreground">
@@ -634,7 +693,7 @@ export function StudyCompanionShell() {
                     <QuickActions actions={quickActions} disabled={isLoading} onAction={selectAction} />
                     <div className="flex flex-wrap gap-2">
                       {starterPrompts.map((prompt) => (
-                        <Button key={prompt} variant="secondary" size="sm" onClick={() => setInput(prompt)} disabled={isLoading}>
+                        <Button key={prompt} variant="secondary" size="sm" className="h-auto min-h-11 whitespace-normal text-left xl:min-h-8" onClick={() => setInput(prompt)} disabled={isLoading}>
                           {prompt}
                         </Button>
                       ))}
@@ -645,7 +704,7 @@ export function StudyCompanionShell() {
             )}
           </div>
 
-          <div className="border-t p-4">
+          <div className="max-h-[60%] shrink-0 overflow-y-auto border-t p-3 sm:p-4">
             <div className="mx-auto max-w-3xl space-y-4">
               {outageNotice && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
@@ -727,7 +786,7 @@ export function StudyCompanionShell() {
 
         <aside
           aria-hidden={!isContextPanelOpen}
-          className={`shrink-0 overflow-hidden border-l bg-card transition-all duration-300 ease-in-out ${
+          className={`hidden shrink-0 overflow-hidden border-l bg-card transition-all duration-300 ease-in-out xl:block ${
             isContextPanelOpen ? 'w-80 opacity-100' : 'w-0 border-l-0 opacity-0'
           }`}
         >
@@ -755,24 +814,7 @@ export function StudyCompanionShell() {
                   New Study Session
                 </Button>
               </div>
-              <div className="shrink-0 p-4">
-                <LessonContextPanel
-                  gradeLevel={gradeLevel}
-                  lessons={lessons}
-                  selectedLesson={selectedLesson}
-                  disabled={isLoading || objectiveLearning.loading}
-                  onLessonChange={startNewChat}
-                  objectives={objectiveLearning.objectives}
-                  selectedObjectiveId={objectiveLearning.activeObjective?.id}
-                  onObjectiveChange={objectiveLearning.selectObjective}
-                />
-              </div>
-              <ChatHistoryPanel
-                chats={chatHistory}
-                lessons={lessons}
-                onLoadChat={loadChat}
-                onDeleteChat={deleteChat}
-              />
+              {contextPanels}
             </div>
           )}
         </aside>

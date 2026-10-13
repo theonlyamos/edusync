@@ -222,9 +222,9 @@ export function PracticeExercise({
             className="space-y-3"
           >
             {currentQuestion.options?.map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <RadioGroupItem value={option} id={`option-${index}`} />
-                <Label htmlFor={`option-${index}`}>{option}</Label>
+              <div key={index} className="flex items-center gap-3">
+                <RadioGroupItem value={option} id={`option-${index}`} className="shrink-0" />
+                <Label htmlFor={`option-${index}`} className="min-h-11 xl:min-h-0 min-w-0 flex-1 cursor-pointer py-3 xl:py-0 break-words leading-relaxed">{option}</Label>
               </div>
             ))}
           </RadioGroup>
@@ -234,13 +234,14 @@ export function PracticeExercise({
         return (
           <div className="space-y-3">
             {currentQuestion.options?.map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
+              <div key={index} className="flex items-center gap-3">
                 <Checkbox 
                   id={`option-${index}`} 
+                  className="shrink-0"
                   checked={isOptionChecked(option)}
                   onCheckedChange={(checked) => handleMultipleAnswerSelect(option, !!checked)}
                 />
-                <Label htmlFor={`option-${index}`}>{option}</Label>
+                <Label htmlFor={`option-${index}`} className="min-h-11 xl:min-h-0 min-w-0 flex-1 cursor-pointer py-3 xl:py-0 break-words leading-relaxed">{option}</Label>
               </div>
             ))}
           </div>
@@ -254,9 +255,9 @@ export function PracticeExercise({
             className="space-y-3"
           >
             {["True", "False"].map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <RadioGroupItem value={option} id={`option-${index}`} />
-                <Label htmlFor={`option-${index}`}>{option}</Label>
+              <div key={index} className="flex items-center gap-3">
+                <RadioGroupItem value={option} id={`option-${index}`} className="shrink-0" />
+                <Label htmlFor={`option-${index}`} className="min-h-11 xl:min-h-0 min-w-0 flex-1 cursor-pointer py-3 xl:py-0 break-words leading-relaxed">{option}</Label>
               </div>
             ))}
           </RadioGroup>
@@ -271,7 +272,7 @@ export function PracticeExercise({
               value={selectedAnswers[currentQuestionIndex] as string}
               onChange={(e) => handleSingleAnswerSelect(e.target.value)}
               placeholder="Type your answer here..."
-              className="w-full min-h-[120px]"
+              className="w-full min-h-[120px] text-base xl:text-sm"
             />
           </div>
         );
@@ -301,14 +302,14 @@ export function PracticeExercise({
     };
 
     return (
-      <Card className="w-full">
-        <CardHeader>
+      <Card className="w-full min-w-0 break-words">
+        <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-2xl text-center">Practice Completed</CardTitle>
           <CardDescription className="text-center">
             {subject} - {topic}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 px-4 sm:px-6">
           {/* Score Summary */}
           <div className="p-6 bg-muted rounded-lg text-center">
             <h3 className="text-4xl font-bold mb-2">{results.percentage}%</h3>
@@ -328,7 +329,7 @@ export function PracticeExercise({
                 const isRevealed = revealedAnswers.has(result.question.id);
                 return (
                   <Card key={`incorrect-${index}`} className="border-red-200">
-                    <CardContent className="pt-4 space-y-3">
+                    <CardContent className="px-4 sm:px-6 pt-4 space-y-3">
                       <p className="font-medium">{result.question.question}</p>
                       
                       <div>
@@ -344,7 +345,7 @@ export function PracticeExercise({
                       <div className="mb-1">
                         <Button 
                           variant="link" 
-                          className="p-0 h-auto text-xs mb-1"
+                          className="p-0 h-auto min-h-11 xl:min-h-0 text-xs mb-1"
                           onClick={() => toggleRevealAnswer(result.question.id)}
                         >
                           {isRevealed ? "Hide Answer" : "Show Answer"}
@@ -375,9 +376,9 @@ export function PracticeExercise({
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex flex-col sm:flex-row justify-center gap-4">
-          <Button onClick={onRetry} variant="outline">Retry Practice</Button>
-          <Button onClick={onGenerateNew}>Generate New Practice</Button>
+        <CardFooter className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-4 sm:px-6">
+          <Button onClick={onRetry} variant="outline" className="w-full sm:w-auto min-h-11 xl:min-h-0">Retry Practice</Button>
+          <Button onClick={onGenerateNew} className="w-full sm:w-auto min-h-11 xl:min-h-0">Generate New Practice</Button>
         </CardFooter>
       </Card>
     );
@@ -389,29 +390,30 @@ export function PracticeExercise({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+    <Card className="w-full min-w-0 break-words">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span>
             Question {currentQuestionIndex + 1} of {questions.length}
           </span>
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className="min-w-0 text-sm font-normal text-muted-foreground">
             {subject} - {topic}
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 px-4 sm:px-6">
         <div className="text-lg font-medium">{currentQuestion.question}</div>
         
         {renderQuestionContent()}
 
         <div className="flex justify-end gap-4 pt-4">
           {!isLastQuestion ? (
-            <Button onClick={handleNext} disabled={!isAnswerSelected()}>
+            <Button onClick={handleNext} disabled={!isAnswerSelected()} className="w-full sm:w-auto min-h-11 xl:min-h-0">
               Next Question
             </Button>
           ) : (
             <Button 
+              className="w-full sm:w-auto min-h-11 xl:min-h-0"
               onClick={handleSubmit} 
               disabled={!isAnswerSelected() || submitting}
             >
@@ -429,4 +431,4 @@ export function PracticeExercise({
       </CardContent>
     </Card>
   );
-} 
+}

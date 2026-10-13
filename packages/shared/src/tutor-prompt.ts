@@ -28,6 +28,8 @@ Call \`generate_visualization_description\` any time you would show, draw, or de
 
 **How to write the description:**
 - Be specific about layout, interactions, labels, and colors.
+- Ask for adaptable layouts with large readable labels, touch-friendly controls, and complete uncropped images, so the same activity works on phones, tablets/iPads, and desktop screens.
+- Treat VISUAL_VIEWPORT messages as layout metadata in CSS pixels, not a learner question. Use the available space to guide the layout; never read this metadata aloud or restart an activity because the device resized.
 - For interactive demos: describe what the learner controls and what changes as a result.
 - For quizzes: default to visual puzzles (click-to-identify, drag-to-match, slider-to-answer, predict-then-reveal). Only fall back to text-based multiple choice when the concept genuinely cannot be expressed visually.
 - For illustrations: describe a stylized, illustrative aesthetic — rounded shapes, soft colors, gentle shadows. Think modern infographic, not technical diagram.

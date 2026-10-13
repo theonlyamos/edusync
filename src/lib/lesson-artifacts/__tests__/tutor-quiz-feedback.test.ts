@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const database = vi.fn();
 const feedback = vi.fn();
 const completion = vi.fn();
+const visualize = vi.fn();
+const resolveArtifact = vi.fn();
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase.server', () => ({ createSSRUserSupabase: database, createServerSupabase: vi.fn() }));
 vi.mock('@/lib/rate-limiter', () => ({ rateLimit: vi.fn().mockResolvedValue(null) }));
 vi.mock('@/lib/lesson-artifacts/quiz-feedback-server', () => ({ getQuizTutorFeedback: feedback }));
-vi.mock('@/lib/lesson-artifacts/learning-server', () => ({ retrieveLearningGrounding: vi.fn().mockResolvedValue([]), resolveNextLearningArtifact: vi.fn() }));
+vi.mock('@/lib/lesson-artifacts/learning-server', () => ({ retrieveLearningGrounding: vi.fn().mockResolvedValue([]), resolveNextLearningArtifact: resolveArtifact }));
 vi.mock('@/lib/ai', () => ({ generateAICompletion: completion }));
-vi.mock('@/lib/visualize-ai-task', () => ({ runVisualizeGeneration: vi.fn() }));
+vi.mock('@/lib/visualize-ai-task', () => ({ runVisualizeGeneration: visualize }));
 vi.mock('@/lib/study-companion', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/study-companion')>(),
   assertLessonAccess: vi.fn().mockResolvedValue({ title: 'Fractions', subject: 'Math', objectives: 'Add fractions' }),
@@ -48,6 +50,34 @@ beforeEach(() => {
 });
 
 describe('text tutor quiz evidence', () => {
+  it('uses measured dimensions for a typed freeform visualization request', async () => {
+    harness();
+    completion.mockResolvedValueOnce(JSON.stringify({
+      content: 'Compare the forces.', interactiveElementRequest: { kind: 'visualization', taskDescription: 'Compare forces.' },
+    }));
+    visualize.mockResolvedValueOnce({ library: 'react', code: 'function App(){}', explanation: 'Compare forces.' });
+    expect((await send({ lessonId: null, learningRunId: null, panelDimensions: { width: 296, height: 420 } })).status).toBe(200);
+    expect(visualize).toHaveBeenCalledWith(expect.objectContaining({ panel_dimensions: { width: 296, height: 420 } }));
+  });
+
+  it('passes measured dimensions through approved-first objective resolution', async () => {
+    harness();
+    resolveArtifact.mockResolvedValueOnce({
+      instanceId: chatId, source: 'session_generated', exhausted: true,
+      artifact: { id: lessonId, kind: 'interactive_visualization', payload: {} },
+    });
+    expect((await send({ intent: 'quiz', panelDimensions: { width: 768, height: 620 } })).status).toBe(200);
+    expect(resolveArtifact).toHaveBeenCalledWith(expect.objectContaining({ panelDimensions: { width: 768, height: 620 } }));
+    expect(visualize).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid dimensions before saving a typed turn or calling AI', async () => {
+    const writes = harness();
+    expect((await send({ panelDimensions: { width: -1, height: 9000 } })).status).toBe(400);
+    expect(writes).not.toHaveBeenCalled();
+    expect(completion).not.toHaveBeenCalled();
+  });
+
   it('reads feedback for the effective chat lesson and adds it to the tutor prompt', async () => {
     const writes = harness(lessonId);
     const response = await send({ chatId, lessonId: '00000000-0000-4000-8000-000000000004' });

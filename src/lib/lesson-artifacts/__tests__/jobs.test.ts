@@ -87,6 +87,24 @@ describe('content job generation', () => {
     expect(payload.questions).toHaveLength(5);
   });
 
+  it('requests an introduction image that stays readable on small screens without changing its format', async () => {
+    let imagePrompt = '';
+    const payload = await generateArtifactPayload({ ...baseJob, jobType: 'generate_image' }, {
+      visualize: async () => { throw new Error('not used'); },
+      generateText: async () => '',
+      generateImage: async (prompt) => {
+        imagePrompt = prompt;
+        return { assetId: '00000000-0000-4000-8000-000000000001', altText: 'Forces', caption: 'Compare forces.' };
+      },
+    });
+
+    expect(imagePrompt).toContain('4:3 introductory educational image');
+    expect(imagePrompt).toContain('320px');
+    expect(imagePrompt).toContain('large, sparse labels');
+    expect(imagePrompt).toContain('no tiny text or dense legends');
+    expect(payload).toMatchObject({ kind: 'generated_image', introductionFor: 'objective', aspectRatio: '4:3' });
+  });
+
   it('rejects generated structured quizzes that do not contain exactly five questions', async () => {
     const questions = Array.from({ length: 4 }, (_, index) => ({
       id: `q${index + 1}`, type: 'true_false', prompt: `Question ${index + 1}`,

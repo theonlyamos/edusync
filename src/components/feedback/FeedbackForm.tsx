@@ -109,7 +109,7 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
   // Show success message if submitted
   if (isSubmitted) {
     const successContent = (
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md max-h-[90dvh] overflow-y-auto">
         <CardContent className="flex flex-col items-center justify-center py-8 px-6 text-center">
           <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
           <h2 className="text-xl font-semibold mb-2">Thank you!</h2>
@@ -138,7 +138,7 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
   }
 
   const formContent = (
-    <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <Card className="w-full max-w-lg max-h-[90dvh] overflow-y-auto">
       <CardHeader>
         <div>
           <CardTitle>How was your experience?</CardTitle>
@@ -152,7 +152,7 @@ export function FeedbackForm({ isOpen, onClose, onSubmit, trigger, noOverlay = f
           {/* Overall Rating */}
           <div className="space-y-3">
             <Label className="text-sm font-medium">Overall, how was your experience?</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 [&>button]:min-h-11">
               <Button
                 type="button"
                 variant={rating === 'positive' ? 'default' : 'outline'}

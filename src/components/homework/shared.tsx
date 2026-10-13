@@ -164,7 +164,7 @@ export function HomeworkHeader({
 }) {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 mb-7">
-      <div>
+      <div className="min-w-0 break-words">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
           {eyebrow}
         </p>
@@ -173,7 +173,7 @@ export function HomeworkHeader({
           <p className="text-muted-foreground max-w-2xl">{description}</p>
         )}
       </div>
-      <div className="flex gap-2 flex-wrap">{actions}</div>
+      <div className="flex w-full gap-2 flex-wrap sm:w-auto [&>*]:min-h-11 xl:[&>*]:min-h-0">{actions}</div>
     </header>
   );
 }
@@ -186,7 +186,7 @@ export function HomeworkPanel({
 }) {
   return (
     <section
-      className={`rounded-lg border bg-card text-card-foreground p-5 sm:p-6 min-w-0 ${className}`}
+      className={`rounded-lg border bg-card text-card-foreground p-4 sm:p-6 min-w-0 break-words [&_button]:min-h-11 xl:[&_button]:min-h-0 ${className}`}
     >
       {children}
     </section>
@@ -206,7 +206,7 @@ export function Field({
     </label>
   );
 }
-export const fieldClass = "input-field w-full min-w-0";
+export const fieldClass = "input-field w-full min-w-0 text-base xl:text-sm";
 export function Notice({
   children,
   error = false,
@@ -217,7 +217,7 @@ export function Notice({
   return (
     <div
       role={error ? "alert" : undefined}
-      className={`border-l-4 rounded-r-md px-4 py-3 text-sm my-4 ${error ? "border-destructive bg-destructive/10" : "border-primary bg-primary/10"}`}
+      className={`border-l-4 rounded-r-md px-4 py-3 text-sm my-4 break-words ${error ? "border-destructive bg-destructive/10" : "border-primary bg-primary/10"}`}
     >
       {children}
     </div>
@@ -304,9 +304,9 @@ export function StatRow({
   items: { label: string; value: string | number; detail?: string }[];
 }) {
   return (
-    <div className="grid grid-cols-3 gap-3 border-y py-5 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-3 border-y py-5 mb-6">
       {items.map((i) => (
-        <div key={i.label} className="min-w-0">
+        <div key={i.label} className="min-w-0 break-words">
           <p className="text-xs text-muted-foreground">{i.label}</p>
           <p className="text-2xl sm:text-3xl font-medium font-serif my-1">
             {i.value}
@@ -474,9 +474,9 @@ export function QuestionResponse({
     ? attachments.filter((a) => value.includes(a.id))
     : [];
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 break-words">
       <div className="flex gap-3 justify-between">
-        <h2 className="text-xl sm:text-2xl">{question.prompt}</h2>
+        <h2 className="min-w-0 break-words text-xl sm:text-2xl">{question.prompt}</h2>
         <Badge variant="secondary" className="shrink-0 self-start">
           {question.points} marks
         </Badge>
@@ -548,7 +548,7 @@ export function QuestionResponse({
           {question.options.map((option) => (
             <label
               key={option}
-              className={`flex gap-3 p-3 border rounded-md text-sm ${(Array.isArray(value) ? value.includes(option) : value === option) ? "bg-primary/10 border-primary" : ""}`}
+              className={`flex min-h-11 gap-3 p-3 border rounded-md text-sm ${(Array.isArray(value) ? value.includes(option) : value === option) ? "bg-primary/10 border-primary" : ""}`}
             >
               <input
                 type={
@@ -573,9 +573,9 @@ export function QuestionResponse({
                     );
                   }
                 }}
-                className="accent-primary"
+                className="accent-primary shrink-0 self-start mt-1"
               />
-              {option}
+              <span className="min-w-0 break-words">{option}</span>
             </label>
           ))}
         </fieldset>

@@ -131,7 +131,7 @@ function HomeworkBrief({ data }: { data: HomeworkDetail }) {
           },
         ]}
       />
-      <p className="whitespace-pre-wrap mb-6">
+      <p className="whitespace-pre-wrap break-words mb-6">
         {h.instructions ||
           "Work through the questions, then review your answers before submitting."}
       </p>
@@ -228,7 +228,7 @@ function StudentWork({
           <p className="mt-2">Due {formatHomeworkDate(due, h.timezone)}</p>
         </Notice>
       )}
-      <div className="flex flex-wrap gap-3 items-center justify-between border-y py-4 mb-5">
+      <div className="flex flex-wrap gap-3 items-center justify-between border-y py-4 mb-5 [&>button]:min-h-11 xl:[&>button]:min-h-0">
         <p role="status" aria-live="polite" className="text-sm">
           {draft.status}
         </p>
@@ -277,7 +277,7 @@ function StudentWork({
           your teacher for an extension.
         </Notice>
       )}
-      <nav aria-label="Homework stages" className="flex gap-2 mb-6">
+      <nav aria-label="Homework stages" className="flex flex-wrap gap-2 mb-6 [&>button]:min-h-11 xl:[&>button]:min-h-0">
         <Button
           variant={tab === "brief" ? "default" : "outline"}
           onClick={() => setTab("brief")}
@@ -351,12 +351,12 @@ function StudentWork({
           </Button>
         </div>
       ) : (
-        <div className="grid lg:grid-cols-[190px_1fr] gap-5 items-start">
+        <div className="grid lg:grid-cols-[190px_minmax(0,1fr)] gap-5 items-start">
           <HomeworkPanel className="!p-4">
             <h2 className="text-base mb-3">Your progress</h2>
             <nav
               aria-label="Questions"
-              className="grid grid-cols-5 lg:grid-cols-2 gap-2"
+              className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-2 gap-2"
             >
               {h.questions.map((question, i) => (
                 <Button
@@ -524,7 +524,7 @@ function StudentWork({
       )}
       {data.attempts.some((a) => a.submitted_at) && (
         <Button
-          className="mt-5"
+          className="mt-5 max-w-full h-auto min-h-11 xl:min-h-0 whitespace-normal"
           variant="outline"
           onClick={() => setHistory(true)}
         >
@@ -584,7 +584,7 @@ function StudentWork({
               Assigned lesson version {reference?.version}
             </DialogDescription>
           </DialogHeader>
-          <div className="prose dark:prose-invert max-w-none">
+          <div className="prose dark:prose-invert max-w-none break-words [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
             <ReactMarkdown skipHtml>{reference?.content ?? ""}</ReactMarkdown>
           </div>
         </DialogContent>
@@ -653,7 +653,7 @@ function StudentSubmitted({ data }: { data: HomeworkDetail }) {
         <label className="grid gap-2 mt-5 text-sm">
           Attempt history
           <select
-            className="input-field"
+            className="input-field text-base xl:text-sm min-h-11 xl:min-h-0"
             value={a.id}
             onChange={(e) => setAttemptId(e.target.value)}
           >

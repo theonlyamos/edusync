@@ -126,6 +126,7 @@ export function HomeworkList({
                 key={f}
                 variant={filter === f ? "default" : "outline"}
                 size="sm"
+                className="min-h-11 xl:min-h-0"
                 aria-pressed={filter === f}
                 onClick={() => setFilter(f)}
               >
@@ -144,7 +145,7 @@ export function HomeworkList({
               {filtered.map((i) => (
                 <article
                   key={i.homework.id}
-                  className="py-5 flex flex-wrap items-center justify-between gap-4"
+                  className="py-5 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex gap-2 flex-wrap mb-3">
@@ -171,7 +172,7 @@ export function HomeworkList({
                     <h2 className="text-2xl mb-2 break-words">
                       {i.homework.title}
                     </h2>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground break-words">
                       From {i.homework.lesson_title} · Lesson v
                       {i.homework.publication_version}
                     </p>
@@ -183,7 +184,7 @@ export function HomeworkList({
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-col sm:items-end gap-3">
+                  <div className="flex min-w-0 flex-col sm:items-end gap-3">
                     <p className="text-xs text-muted-foreground">
                       Due{" "}
                       {formatHomeworkDate(
@@ -198,7 +199,7 @@ export function HomeworkList({
                         marks
                       </span>
                     )}
-                    <Button variant="outline" asChild>
+                    <Button variant="outline" className="min-h-11 xl:min-h-0" asChild>
                       <Link
                         href={`${base}/${i.homework.id}${teacher && i.homework.status === "draft" ? "/edit" : ""}`}
                       >
@@ -214,7 +215,7 @@ export function HomeworkList({
               ))}
             </div>
           )}
-          <div className="flex justify-between mt-6">
+          <div className="flex flex-wrap justify-between gap-2 mt-6 [&>button]:min-h-11 xl:[&>button]:min-h-0">
             <Button
               variant="ghost"
               disabled={page === 0 || loading}

@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useContext } from 'react';
+import { useEffect, useContext, useState } from 'react';
+import { Menu } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Sidebar } from './Sidebar';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
 export interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -16,6 +20,14 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
   const session = useContext(SupabaseSessionContext);
   const { user: appUser, loading, error } = useContext(AppUserContext);
   const pathname = usePathname();
+  const [navigationOpen, setNavigationOpen] = useState(false);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnDesktop = () => { if (desktop.matches) setNavigationOpen(false); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
 
   useEffect(() => {
     if (session === null) {
@@ -45,13 +57,32 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
     : null;
 
   return (
-    <div className="flex h-screen bg-background">
-      {role && <Sidebar role={role} />}
-      <main className="flex-1 overflow-y-auto">
+    <div className={cn('flex h-dvh min-h-0 bg-background', role === 'student' && 'flex-col lg:flex-row')}>
+      {role === 'student' ? (
+        <>
+          <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3 lg:hidden">
+            <Dialog open={navigationOpen} onOpenChange={setNavigationOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Open student navigation">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none p-0 sm:rounded-none [&>button]:h-11 [&>button]:w-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center">
+                <DialogTitle className="sr-only">Student navigation</DialogTitle>
+                <DialogDescription className="sr-only">Choose a page in your student portal.</DialogDescription>
+                <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} />
+              </DialogContent>
+            </Dialog>
+            <span className="text-sm font-semibold">Student Portal</span>
+          </header>
+          <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>
+        </>
+      ) : role && <Sidebar role={role} />}
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {fullBleed ? (
           children
         ) : (
-          <div className="container mx-auto py-6 px-4">
+          <div className="container mx-auto px-3 py-4 sm:px-4 sm:py-6">
             {children}
           </div>
         )}

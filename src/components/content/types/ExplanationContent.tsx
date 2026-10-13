@@ -36,8 +36,8 @@ interface ExplanationContentProps {
 
 export function ExplanationContent({ content }: ExplanationContentProps) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0 break-words">
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{content.title}</CardTitle>
         <CardDescription>{content.description}</CardDescription>
         {content.prerequisites && content.prerequisites.length > 0 && (
@@ -51,11 +51,11 @@ export function ExplanationContent({ content }: ExplanationContentProps) {
           </div>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3 sm:px-6">
         <Tabs defaultValue={content.sections[0]?.id} className="w-full">
-          <TabsList className="w-full justify-start">
+          <TabsList className="h-auto min-h-10 w-full flex-wrap justify-start gap-1">
             {content.sections.map((section) => (
-              <TabsTrigger key={section.id} value={section.id}>
+              <TabsTrigger key={section.id} value={section.id} className="min-h-11 xl:min-h-0 min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere] text-left">
                 {section.title}
               </TabsTrigger>
             ))}
@@ -70,7 +70,7 @@ export function ExplanationContent({ content }: ExplanationContentProps) {
                 />
               )}
               
-              <div className="prose max-w-none">
+              <div className="prose max-w-none break-words">
                 <p>{section.content}</p>
               </div>
 
@@ -119,4 +119,4 @@ export function ExplanationContent({ content }: ExplanationContentProps) {
       </CardContent>
     </Card>
   );
-} 
+}

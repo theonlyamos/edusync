@@ -32,12 +32,12 @@ const MessageBubble = memo(function MessageBubble({
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[80%] rounded-lg p-4 ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+      <div className={`min-w-0 max-w-full rounded-lg p-3 sm:max-w-[80%] sm:p-4 ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
         <div className="mb-2 flex flex-wrap gap-2">
           {message.mode && !isUser && <Badge variant="secondary">{message.mode === 'tutor' ? 'Tutor' : 'Companion'}</Badge>}
           {message.intent && message.intent !== 'general' && !isUser && <Badge variant="outline">{message.intent}</Badge>}
         </div>
-        <div className="prose prose-sm max-w-none dark:prose-invert">
+        <div className="prose prose-sm max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           {message.voiceVizPlaceholderId ? (
             <div className="flex items-center gap-2 text-muted-foreground not-prose">
               <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
@@ -66,7 +66,7 @@ const MessageBubble = memo(function MessageBubble({
                 key={`${action.intent}-${action.label}`}
                 variant="outline"
                 size="sm"
-                className="bg-background text-foreground"
+                className="h-auto min-h-11 max-w-full whitespace-normal bg-background text-left text-foreground xl:min-h-8"
                 onClick={() => onSuggestedAction(action)}
               >
                 <Sparkles className="mr-2 h-3 w-3" />
@@ -78,7 +78,7 @@ const MessageBubble = memo(function MessageBubble({
                 key={question}
                 variant="outline"
                 size="sm"
-                className="bg-background text-foreground"
+                className="h-auto min-h-11 max-w-full whitespace-normal bg-background text-left text-foreground xl:min-h-8"
                 onClick={() => onSuggestedAction({ label: question, intent: 'general', prompt: question })}
               >
                 {question}

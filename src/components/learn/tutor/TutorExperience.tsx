@@ -16,6 +16,7 @@ import { vizReducer, initialVizState, Visualization } from '@/reducers/visualiza
 import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -208,12 +209,7 @@ export const TutorExperience = ({
 
     if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
     const current = visualizations[currentVizIndex];
-    const panelElement = vizOnlyRef.current || vizRef.current;
-    let panelDimensions = { width: 800, height: 600 };
-    if (panelElement) {
-      const rect = panelElement.getBoundingClientRect();
-      panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
-    }
+    const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
     try {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
       setError(''); // Clear previous error when regenerating
@@ -312,17 +308,7 @@ export const TutorExperience = ({
     if (name === 'generate_visualization_description') {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
       try {
-        // Get panel dimensions
-        const panelElement = vizOnlyRef.current || vizRef.current;
-        let panelDimensions = { width: 800, height: 600 }; // Default dimensions
-
-        if (panelElement) {
-          const rect = panelElement.getBoundingClientRect();
-          panelDimensions = {
-            width: Math.floor(rect.width),
-            height: Math.floor(rect.height)
-          };
-        }
+        const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
 
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
@@ -696,10 +682,10 @@ export const TutorExperience = ({
   }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
 
   const lessonIndicator = (
-    <div className="absolute top-4 left-4 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-4 py-2 shadow-md border">
+    <div className="absolute top-3 left-3 right-3 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-md border sm:top-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-4">
       <div className="flex items-center gap-2">
-        <BookOpen className="w-4 h-4 text-primary" />
-        <div>
+        <BookOpen className="w-4 h-4 shrink-0 text-primary" />
+        <div className="min-w-0 break-words">
           <p className="text-sm font-medium">{lessonContext?.title}</p>
           {lessonContext?.subject && (
             <p className="text-xs text-muted-foreground">
@@ -734,17 +720,17 @@ export const TutorExperience = ({
   const activityError = objectiveLearning?.error || error;
   const objectiveActivityControls = objectiveLearning?.runId ? (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Button size="sm" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
+      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
         <Presentation className="mr-2 h-4 w-4" /> Show next visual
       </Button>
-      <Button size="sm" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
+      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
         <CircleHelp className="mr-2 h-4 w-4" /> Start knowledge check
       </Button>
     </div>
   ) : null;
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
+    <div className="flex h-dvh min-h-0 min-w-0 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
       {/* Lesson context indicator (student) */}
       {lessonContext?.title && !voiceActive && lessonIndicator}
 
@@ -771,10 +757,10 @@ export const TutorExperience = ({
           )}
         </div>
       )}
-      <div className="flex-1 flex flex-col ml-0 lg:min-w-0 overflow-y-auto" ref={vizRef}>
+      <div data-visualization-viewport className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]" ref={vizRef}>
         {currentObjectiveArtifact ? (
           <Card className="flex-1 overflow-y-auto rounded-none border-0 bg-background/95 shadow-none">
-            <CardHeader className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
+            <CardHeader className="sticky top-0 z-10 border-b bg-background/90 p-4 backdrop-blur sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Objective activity</CardTitle>
@@ -783,7 +769,7 @@ export const TutorExperience = ({
                 {objectiveActivityControls}
               </div>
             </CardHeader>
-            <CardContent className="mx-auto w-full max-w-5xl p-6 pb-28">
+            <CardContent className="mx-auto w-full max-w-5xl p-3 sm:p-6">
               {objectiveLearning?.activityLoading && <div className="mb-4 flex items-center gap-2 rounded-xl border bg-muted/50 p-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Preparing activity...</div>}
               {activityError && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{activityError}</div>}
               <LearningArtifactCard key={currentObjectiveArtifact.instanceId} attachment={currentObjectiveArtifact} />
@@ -792,8 +778,8 @@ export const TutorExperience = ({
         ) : code && library ? (
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
-              <div className="absolute left-0 px-8 w-full z-10 flex items-center justify-end">
-                <div className="flex items-center gap-2">
+              <div className="relative w-full z-10 flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {debugMode && (
                     <ToggleGroup
                       type="single"
@@ -810,14 +796,16 @@ export const TutorExperience = ({
                         size="icon"
                         variant="ghost"
                         title="Regenerate visualization"
+                        aria-label="Regenerate visualization"
+                        className="h-11 w-11"
                         onClick={() => handleRegenerateVisualization()}
                       >
                         <RefreshCw className="w-4 h-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
+                      <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization" aria-label="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization">
+                      <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization" aria-label="Next visualization">
                         <ChevronRight className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
                     </div>
@@ -826,10 +814,11 @@ export const TutorExperience = ({
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col p-0 relative">
-              <div className="flex-1 p-6 space-y-4">
+              <div className="min-w-0 flex-1 p-3 space-y-4 sm:p-6">
                 {!preparingActivity && (
                   <div
                     ref={vizOnlyRef}
+                    data-visualization-panel
                     className="h-full w-full flex justify-center items-center"
                     style={{ display: show === 'render' ? 'flex' : 'none' }}
                   >
@@ -864,7 +853,7 @@ export const TutorExperience = ({
               <CardHeader>
                 {emptyStateHeader}
               </CardHeader>
-              <CardContent className="flex-1 flex flex-col items-center justify-center">
+              <CardContent data-visualization-panel className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6">
                 <Loader2 className="w-10 h-10 animate-spin mr-2" />
                 <div className="text-center text-muted-foreground">
                   <div className="text-lg mb-2">Preparing activity...</div>
@@ -876,7 +865,7 @@ export const TutorExperience = ({
               <CardHeader>
                 {emptyStateHeader}
               </CardHeader>
-              <CardContent className="flex-1 flex items-center justify-center">
+              <CardContent data-visualization-panel className="flex-1 flex items-center justify-center p-3 sm:p-6">
                 <div className="text-center text-muted-foreground">
                   {activityError && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{activityError}</div>}
                   <div className="text-lg mb-2">Ready for this objective</div>
@@ -888,9 +877,10 @@ export const TutorExperience = ({
           )
         )}
       </div>
-      <div className={`fixed bottom-0 left-0 right-0 z-50 flex justify-center w-full`}>
+      <div className="absolute bottom-0 left-0 right-0 z-20 flex justify-center w-full pb-[env(safe-area-inset-bottom)]">
         <VoiceControl
           active={voiceActive}
+          viewportRef={vizRef}
           sessionId={currentSessionId}
           topic={topic}
           lessonContext={lessonContext}
@@ -906,7 +896,7 @@ export const TutorExperience = ({
       </div>
 
       {voiceActive && connectionStatus === 'connected' && (
-        <div className={`fixed bottom-0 left-0 right-0 z-50`}>
+        <div className="absolute bottom-0 left-0 right-0 z-20 pb-[env(safe-area-inset-bottom)]">
           <div className="flex flex-col items-center py-3 px-4">
             {/* Controls */}
             <div className="flex items-center gap-4">
@@ -917,6 +907,7 @@ export const TutorExperience = ({
                 className="rounded-full bg-red-500 hover:bg-red-600 text-white w-12 h-12"
                 onClick={handleVoiceStop}
                 title="Disconnect"
+                aria-label="Disconnect"
               >
                 <X className="w-6 h-6" />
               </Button>
@@ -931,7 +922,7 @@ export const TutorExperience = ({
       {/* Feedback Form - positioned relative to main content only */}
       {
         showFeedbackForm && feedbackTrigger && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-10 p-4 lg:left-20">
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
             <FeedbackForm
               isOpen={showFeedbackForm}
               onClose={handleFeedbackClose}
@@ -945,7 +936,7 @@ export const TutorExperience = ({
       {/* Credit Warning (embed only) */}
       {
         creditsEnabled && showCreditWarning && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="absolute top-4 left-1/2 w-[calc(100%-1.5rem)] max-w-md transform -translate-x-1/2 z-50">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 shadow-lg max-w-md">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-yellow-600" />

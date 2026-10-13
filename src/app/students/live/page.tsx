@@ -58,7 +58,7 @@ export default function StudentLiveClassesPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-3xl mx-auto space-y-6">
+      <div className="p-3 sm:p-6 max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-semibold">Live classes</h1>
           <p className="text-muted-foreground text-sm mt-1 max-w-xl">
@@ -94,7 +94,7 @@ export default function StudentLiveClassesPage() {
               <li key={ev.id}>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">{ev.title}</CardTitle>
+                    <CardTitle className="text-lg break-words">{ev.title}</CardTitle>
                     <CardDescription>
                       {ev.grade_level ? <span className="block">Grade: {ev.grade_level}</span> : null}
                       {lt ? <span className="block">Lesson: {lt}</span> : null}
@@ -108,11 +108,11 @@ export default function StudentLiveClassesPage() {
                   <CardContent className="flex flex-col gap-2">
                     <div>
                       {joinAllowed ? (
-                        <Button asChild size="sm">
+                        <Button asChild size="sm" className="min-h-11 xl:min-h-0">
                           <Link href={`/students/live/${ev.id}`}>Join live session</Link>
                         </Button>
                       ) : (
-                        <Button size="sm" disabled title={joinHint}>
+                        <Button size="sm" className="min-h-11 xl:min-h-0" disabled title={joinHint}>
                           Join live session
                         </Button>
                       )}

@@ -1,6 +1,5 @@
 /** Client-side wrapper for `/api/genai/visualize` (Study Companion voice, future regenerate). */
-
-export const STUDY_COMPANION_VIZ_PANEL = { width: 704, height: 504 } as const;
+import { readVisualizationPanelDimensions } from './visualization-viewport';
 
 export type GenAiVisualizeLibrary = 'p5' | 'three' | 'react';
 
@@ -19,7 +18,7 @@ export async function requestVisualizationFromGenAi(options: {
 }): Promise<GenAiVisualizeResult> {
     const {
         taskDescription,
-        panelDimensions = STUDY_COMPANION_VIZ_PANEL,
+        panelDimensions = readVisualizationPanelDimensions(),
         theme = 'dark',
         theme_colors,
         signal,

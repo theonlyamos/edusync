@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 
 import {
   appendUniqueArtifact,
@@ -151,7 +152,7 @@ export function useObjectiveLearning(options: {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind, requestId, ...(taskDescription?.trim() ? { taskDescription: taskDescription.trim() } : {}) }),
+          body: JSON.stringify({ kind, requestId, panelDimensions: readVisualizationPanelDimensions(), ...(taskDescription?.trim() ? { taskDescription: taskDescription.trim() } : {}) }),
         },
       ))) as ObjectiveLearningArtifact;
       if (!scopeGuardRef.current.isCurrent(token)) throw new Error('The active objective has changed');

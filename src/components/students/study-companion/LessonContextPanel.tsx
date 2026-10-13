@@ -40,8 +40,8 @@ export function LessonContextPanel({
             </div>
           )}
           {selectedLessonTitle && (
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4" />
+            <div className="flex min-w-0 items-center gap-2">
+              <BookOpen className="h-4 w-4 shrink-0" />
               <span className="truncate">Lesson: {selectedLessonTitle}</span>
             </div>
           )}
@@ -49,7 +49,7 @@ export function LessonContextPanel({
       </div>
 
       <Select value={selectedLesson || 'general'} onValueChange={(value) => onLessonChange(value === 'general' ? undefined : value)} disabled={disabled}>
-        <SelectTrigger>
+        <SelectTrigger className="h-11 min-w-0 xl:h-9 [&>span]:truncate">
           <SelectValue placeholder="Select a lesson" />
         </SelectTrigger>
         <SelectContent>
@@ -69,7 +69,7 @@ export function LessonContextPanel({
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Active objective</p>
           <Select value={selectedObjectiveId ?? objectives[0].id} onValueChange={onObjectiveChange} disabled={disabled}>
-            <SelectTrigger><SelectValue placeholder="Select an objective" /></SelectTrigger>
+            <SelectTrigger className="h-11 min-w-0 xl:h-9 [&>span]:truncate"><SelectValue placeholder="Select an objective" /></SelectTrigger>
             <SelectContent>
               {objectives.map((objective) => <SelectItem key={objective.id} value={objective.id}>{objective.position + 1}. {objective.text}</SelectItem>)}
             </SelectContent>

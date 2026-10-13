@@ -157,9 +157,9 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             className="space-y-3"
           >
             {currentQuestion.options?.map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <RadioGroupItem value={option} id={`option-${index}`} />
-                <Label htmlFor={`option-${index}`}>{option}</Label>
+              <div key={index} className="flex items-center gap-3">
+                <RadioGroupItem value={option} id={`option-${index}`} className="shrink-0" />
+                <Label htmlFor={`option-${index}`} className="min-h-11 xl:min-h-0 min-w-0 flex-1 cursor-pointer py-3 xl:py-0 break-words leading-relaxed">{option}</Label>
               </div>
             ))}
           </RadioGroup>
@@ -172,13 +172,13 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             onValueChange={handleAnswerSelect}
             className="space-y-3"
           >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="true" id="true" />
-              <Label htmlFor="true">True</Label>
+            <div className="flex items-center gap-3">
+              <RadioGroupItem value="true" id="true" className="shrink-0" />
+              <Label htmlFor="true" className="min-h-11 xl:min-h-0 flex-1 cursor-pointer py-3 xl:py-0 leading-relaxed">True</Label>
             </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="false" id="false" />
-              <Label htmlFor="false">False</Label>
+            <div className="flex items-center gap-3">
+              <RadioGroupItem value="false" id="false" className="shrink-0" />
+              <Label htmlFor="false" className="min-h-11 xl:min-h-0 flex-1 cursor-pointer py-3 xl:py-0 leading-relaxed">False</Label>
             </div>
           </RadioGroup>
         );
@@ -186,6 +186,7 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
       case 'short_answer':
         return (
           <Input
+            className="min-h-11 xl:min-h-0 text-base xl:text-sm"
             value={answers[currentQuestion._id] || ''}
             onChange={(e) => handleAnswerSelect(e.target.value)}
             placeholder="Enter your answer..."
@@ -198,22 +199,22 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
   };
 
   return (
-    <div className="container max-w-3xl mx-auto p-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
+    <div className="container max-w-3xl mx-auto p-3 sm:p-6">
+      <Card className="min-w-0 break-words">
+        <CardHeader className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+            <div className="min-w-0">
               <CardTitle>{assessment.title}</CardTitle>
               <CardDescription>{assessment.description}</CardDescription>
             </div>
-            <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="flex shrink-0 items-center space-x-2 text-muted-foreground">
               <Timer className="h-4 w-4" />
               <span>{formatTime(timeLeft)}</span>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex justify-between items-center text-sm text-muted-foreground">
+        <CardContent className="space-y-6 px-4 sm:px-6">
+          <div className="flex flex-wrap gap-2 justify-between items-center text-sm text-muted-foreground">
             <span>
               Question {currentQuestionIndex + 1} of {assessment.questions.length}
             </span>
@@ -225,7 +226,7 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             {renderQuestion()}
           </div>
 
-          <div className="flex justify-between pt-4">
+          <div className="flex flex-col-reverse sm:flex-row justify-between gap-3 pt-4 [&>button]:min-h-11 xl:[&>button]:min-h-0">
             <Button
               variant="outline"
               onClick={handlePrevious}
@@ -257,7 +258,7 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             )}
           </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="px-4 sm:px-6">
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-primary h-2 rounded-full transition-all"
@@ -270,7 +271,7 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
       </Card>
 
       <AlertDialog open={showTimeWarning} onOpenChange={setShowTimeWarning}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto">
           <AlertDialogHeader>
             <AlertDialogTitle>Time Warning</AlertDialogTitle>
             <AlertDialogDescription>
@@ -278,10 +279,10 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction>Continue</AlertDialogAction>
+            <AlertDialogAction className="min-h-11 xl:min-h-0">Continue</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
-} 
+}

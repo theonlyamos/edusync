@@ -104,7 +104,7 @@ export default function LessonContentPage({
   if (!lesson) {
     return (
       <DashboardLayout>
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           <h2 className="text-2xl font-bold mb-4">Lesson not found</h2>
           <Button onClick={() => window.location.assign('/students/lessons')}>
             Back to Lessons
@@ -116,17 +116,17 @@ export default function LessonContentPage({
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mb-6">
           <Button 
             variant="outline" 
             onClick={() => router.push(`/students/lessons/${resolvedParams.lessonId}`)}
-            className="mb-4"
+            className="mb-4 min-h-11 xl:min-h-0"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Lesson
           </Button>
-          <h2 className="text-2xl font-bold">
+          <h2 className="text-2xl font-bold break-words">
             {lesson.title} - {resolvedParams.type.charAt(0).toUpperCase() + resolvedParams.type.slice(1)}s
           </h2>
           <p className="text-muted-foreground">
@@ -137,13 +137,13 @@ export default function LessonContentPage({
         <div className="space-y-6">
           {contents.map((content) => (
             <Card key={content._id}>
-              <CardHeader>
-                <CardTitle>{content.content.title}</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="break-words">{content.content.title}</CardTitle>
                 <CardDescription>
                   Added {new Date(content.createdAt).toLocaleDateString()}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="min-w-0 overflow-x-auto px-4 sm:px-6 break-words">
                 <ContentDisplay
                   type={content.type}
                   content={content.content}
@@ -169,4 +169,4 @@ export default function LessonContentPage({
       </div>
     </DashboardLayout>
   );
-} 
+}

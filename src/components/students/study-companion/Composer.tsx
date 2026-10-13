@@ -273,8 +273,8 @@ export function Composer({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span>{modeCopy[mode]}</span>
           {intent !== 'general' && <span className="capitalize">{intent}</span>}
         </div>
@@ -283,7 +283,8 @@ export function Composer({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground"
+            className="h-11 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground xl:h-8"
+            aria-expanded={quickActionsToggle.expanded}
             onClick={quickActionsToggle.onToggle}
           >
             {quickActionsToggle.expanded ? (
@@ -300,10 +301,10 @@ export function Composer({
           </Button>
         ) : null}
       </div>
-      {quickActionsToggle?.expanded && quickActions ? <div>{quickActions}</div> : null}
+      {quickActionsToggle?.expanded && quickActions ? <div className="max-h-[min(16rem,35dvh)] overflow-y-auto">{quickActions}</div> : null}
       <div
         className={cn(
-          'flex items-end gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2 shadow-sm backdrop-blur-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-md dark:bg-muted/15',
+          'flex flex-wrap items-end gap-2 rounded-2xl border border-border/70 bg-muted/25 p-2 shadow-sm backdrop-blur-sm transition-[box-shadow,border-color] focus-within:border-primary/35 focus-within:shadow-md dark:bg-muted/15 sm:flex-nowrap',
           voice.isStreaming && 'border-primary/30',
         )}
       >
@@ -313,7 +314,7 @@ export function Composer({
           placeholder={intentCopy[intent]}
           disabled={disabled || isLoading}
           rows={1}
-          className="max-h-[200px] min-h-[52px] min-w-0 flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2.5 text-[15px] leading-relaxed shadow-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="max-h-[200px] min-h-[52px] min-w-0 flex-1 basis-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2.5 text-base leading-relaxed shadow-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden focus-visible:ring-0 focus-visible:ring-offset-0 sm:basis-auto xl:text-[15px]"
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
@@ -321,7 +322,7 @@ export function Composer({
             }
           }}
         />
-        <div className="flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-0.5 pr-0.5">
           {voice.isStreaming ? (
             <LiveWaveformStrip
               analyser={voice.getMicAnalyser?.() ?? null}
