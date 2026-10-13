@@ -1,13 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { VisualizationSkeleton } from '@/components/lessons/VisualizationSkeleton';
-import { STUDY_COMPANION_VIZ_PANEL } from '@/lib/request-visualization';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import type { VisualizationDimensions } from '@/lib/visualization-layout';
 import type { InteractiveElement, InteractiveElementUpdate, InteractiveLibrary } from './types';
 
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then((m) => m.ReactRenderer), {
@@ -25,10 +26,11 @@ export function InteractiveElementCard({
 }: {
   element: InteractiveElement;
   /** Generates a replacement (grade/lesson-grounded) and persists it; resolves with the new viz. */
-  onRegenerate?: (element: InteractiveElement) => Promise<InteractiveElementUpdate>;
+  onRegenerate?: (element: InteractiveElement, panelDimensions?: VisualizationDimensions) => Promise<InteractiveElementUpdate>;
   onReady?: () => void;
 }) {
   const { toast } = useToast();
+  const panelRef = useRef<HTMLDivElement>(null);
   const [code, setCode] = useState(element.code);
   const [library, setLibrary] = useState<InteractiveLibrary>(element.library);
   const [explanation, setExplanation] = useState(element.explanation);
@@ -48,7 +50,7 @@ export function InteractiveElementCard({
     if (isRegenerating || !onRegenerate) return;
     setIsRegenerating(true);
     try {
-      const updated = await onRegenerate(element);
+      const updated = await onRegenerate(element, readVisualizationPanelDimensions(panelRef.current));
       setCode(updated.code);
       setLibrary(updated.library);
       setExplanation(updated.explanation);
@@ -67,8 +69,8 @@ export function InteractiveElementCard({
 
   return (
     <Card className="mt-4 overflow-hidden border-muted">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
+      <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium">Interactive visualization</CardTitle>
           <div className="flex shrink-0 items-center gap-1">
             {explanation ? (
@@ -76,7 +78,7 @@ export function InteractiveElementCard({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground"
+                className="h-11 w-11 text-muted-foreground xl:h-7 xl:w-7"
                 aria-expanded={showExplanation}
                 aria-label={showExplanation ? 'Hide explanation' : 'Show explanation'}
                 title={showExplanation ? 'Hide explanation' : 'Show explanation'}
@@ -90,7 +92,7 @@ export function InteractiveElementCard({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground"
+                className="h-11 w-11 text-muted-foreground xl:h-7 xl:w-7"
                 aria-label={isRegenerating ? 'Regenerating visualization' : 'Regenerate visualization'}
                 aria-busy={isRegenerating}
                 title="Regenerate visualization"
@@ -106,13 +108,13 @@ export function InteractiveElementCard({
           <CardDescription className="text-xs leading-relaxed">{explanation}</CardDescription>
         ) : null}
       </CardHeader>
-      <CardContent className="pt-0">
-        {/* Concrete height (single source of truth: the generation panel height) so the child
-            `h-full` renderer + iframe resolve to a real height instead of collapsing to the
-            iframe's intrinsic 150px default. */}
+      <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+        {/* A definite adaptive height gives the sandbox its actual drawable viewport. */}
         <div
+          ref={panelRef}
+          data-visualization-panel
           className="relative w-full overflow-hidden rounded-md border bg-background"
-          style={{ height: STUDY_COMPANION_VIZ_PANEL.height }}
+          style={{ height: 'clamp(240px, 65dvh, 720px)' }}
         >
           {isRegenerating ? (
             <VisualizationSkeleton />

@@ -6,6 +6,7 @@ import { generateAICompletion } from '@/lib/ai';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { runVisualizeGeneration } from '@/lib/visualize-ai-task';
+import type { VisualizationDimensions } from '@/lib/visualization-layout';
 
 import { toStudentSafeArtifact, type LessonArtifactRecord } from './domain';
 import { parseLearningFallbackLimit } from './fallback-policy';
@@ -43,6 +44,7 @@ export async function generateSessionArtifact(input: {
   studentId: string;
   kind: 'visualization' | 'quiz';
   taskDescription?: string;
+  panelDimensions?: VisualizationDimensions;
 }) {
   const instanceId = randomUUID();
   const job: ContentJobRecord = {
@@ -66,7 +68,7 @@ export async function generateSessionArtifact(input: {
   const payload = await generateArtifactPayload(job, {
     visualize: (taskDescription) => runVisualizeGeneration({
       task_description: taskDescription,
-      panel_dimensions: { width: 704, height: 504 },
+      panel_dimensions: input.panelDimensions,
       theme: 'light',
     }),
     generateText: async (systemPrompt, userPrompt) => {
@@ -97,6 +99,7 @@ export async function resolveNextLearningArtifact(input: {
   kind: LearningArtifactKind;
   requestId: string;
   taskDescription?: string;
+  panelDimensions?: VisualizationDimensions;
 }) {
   const { session, supabase, run } = await requireOwnedLearningRun(input.runId);
   const { data: existing } = await supabase.from('learning_events').select('payload').eq('run_id', run.id).eq('request_id', input.requestId).maybeSingle();
@@ -156,6 +159,7 @@ export async function resolveNextLearningArtifact(input: {
       studentId: session.user.id,
       kind: input.kind,
       taskDescription: input.taskDescription,
+      panelDimensions: input.panelDimensions,
     });
     instanceId = generated.instanceId;
     studentArtifact = generated.studentArtifact;

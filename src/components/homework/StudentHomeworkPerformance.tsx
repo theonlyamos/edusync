@@ -84,8 +84,8 @@ export function StudentHomeworkPerformance() {
                 <h2 className="text-2xl mb-5">Learning objectives</h2>
                 <div className="grid sm:grid-cols-2 gap-6">
                   {data.objectives.map((o) => (
-                    <div key={o.id}>
-                      <p className="mb-2">{o.text}</p>
+                    <div key={o.id} className="min-w-0">
+                      <p className="mb-2 break-words">{o.text}</p>
                       <div className="h-2 rounded bg-muted overflow-hidden">
                         <div
                           className="h-full bg-primary"
@@ -113,14 +113,14 @@ export function StudentHomeworkPerformance() {
                       href={`/students/homework/${item.homeworkId}`}
                       className="flex flex-wrap gap-4 justify-between py-4 hover:text-primary"
                     >
-                      <div>
+                      <div className="min-w-0 break-words">
                         <h3 className="text-lg">{item.title}</h3>
                         <p className="text-sm text-muted-foreground">
                           {item.subject} · Attempt {item.attempt} · Released{" "}
                           {formatHomeworkDate(item.releasedAt)}
                         </p>
                       </div>
-                      <span className="font-serif text-2xl">
+                      <span className="shrink-0 font-serif text-2xl">
                         {item.earned}/{item.possible}
                       </span>
                     </Link>

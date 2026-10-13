@@ -52,6 +52,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
         onClick={onStart}
         size="lg"
         className="w-24 h-24 rounded-full"
+        aria-label={isConnecting ? 'Connecting' : 'Start Learning'}
         disabled={isConnecting}
       >
         {isConnecting ? (

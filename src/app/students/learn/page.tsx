@@ -59,7 +59,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
   if (loading) {
     return (
       <DashboardLayout role="student">
-        <div className="flex h-[calc(100vh-100px)] items-center justify-center">
+        <div className="flex min-h-[calc(100dvh-9rem)] items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
             <p className="text-muted-foreground">Loading lessons...</p>
@@ -71,10 +71,10 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
 
   return (
     <DashboardLayout role="student">
-      <div className="container mx-auto py-8 px-4 max-w-4xl">
+      <div className="mx-auto max-w-4xl py-2 sm:py-8 sm:px-4">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2 flex items-center justify-center gap-2">
-            <Sparkles className="w-8 h-8 text-primary" />
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 flex items-center justify-center gap-2">
+            <Sparkles className="w-7 h-7 shrink-0 text-primary sm:w-8 sm:h-8" />
             Learn with AI
           </h1>
           <p className="text-muted-foreground">
@@ -84,10 +84,10 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
 
         {/* Freeform learning option */}
         <Card className="mb-6 border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 shrink-0 rounded-full bg-primary/20 flex items-center justify-center">
                   <Sparkles className="w-6 h-6 text-primary" />
                 </div>
                 <div>
@@ -97,7 +97,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
                   </p>
                 </div>
               </div>
-              <Button onClick={handleStartWithoutLesson}>
+              <Button className="min-h-11 w-full shrink-0 sm:w-auto" onClick={handleStartWithoutLesson}>
                 Start Learning
               </Button>
             </div>
@@ -111,7 +111,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
             placeholder="Search lessons..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="h-11 pl-10 text-base sm:text-sm"
           />
         </div>
 
@@ -132,19 +132,19 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
                 onClick={() => handleSelectLesson(lesson)}
               >
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="w-10 h-10 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
                         <BookOpen className="w-5 h-5 text-primary" />
                       </div>
-                      <div>
+                      <div className="min-w-0 break-words">
                         <h3 className="font-medium">{lesson.title}</h3>
                         <p className="text-sm text-muted-foreground">
                           {lesson.subject} {lesson.gradelevel && `• ${lesson.gradelevel}`}
                         </p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" className="min-h-11 shrink-0">
                       Learn
                     </Button>
                   </div>
@@ -175,7 +175,7 @@ function StudentLearnPageContent() {
 export default function StudentLearnPage() {
   return (
     <Suspense fallback={
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-dvh items-center justify-center">
         <Loader2 className="w-12 h-12 animate-spin" />
       </div>
     }>

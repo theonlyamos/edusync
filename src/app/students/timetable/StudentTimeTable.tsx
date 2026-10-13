@@ -90,22 +90,22 @@ export function StudentTimeTable() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Class Time Table</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Class Time Table</h1>
         <p className="text-muted-foreground mt-2">View your class schedule and assigned lessons</p>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 sm:p-6">
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-orange-500" />
             <span>Weekly Schedule</span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-4 sm:px-6">
+          <p className="mb-3 text-xs text-muted-foreground lg:hidden">Scroll across to see the full week.</p>
+            <Table className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Weekly class timetable">
               <TableHeader>
                 <TableRow>
                   <TableHead>Time</TableHead>
@@ -146,7 +146,7 @@ export function StudentTimeTable() {
                               <div className="flex items-center gap-1 text-blue-600" title='Lesson'>
                                 <BookOpen className="h-4 w-4" />
                                 {timeTable[day][period.id].lessonId ? (
-                                  <Link href={`/students/lessons/${timeTable[day][period.id].lessonId}`}>
+                                  <Link className="inline-flex min-h-11 xl:min-h-0 items-center break-words" href={`/students/lessons/${timeTable[day][period.id].lessonId}`}>
                                     {timeTable[day][period.id].lessonTitle}
                                   </Link>
                                 ) : (
@@ -162,9 +162,8 @@ export function StudentTimeTable() {
                 ))}
               </TableBody>
             </Table>
-          </div>
         </CardContent>
       </Card>
     </div>
   );
-} 
+}

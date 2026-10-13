@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Exercise async hook transitions without adding a DOM or renderer dependency.
 const hooks = vi.hoisted(() => ({ slots: [] as unknown[], index: 0 }));
@@ -41,7 +41,23 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('objective introduction startup', () => {
+  it('sends the current activity content area when requesting generated content', async () => {
+    vi.stubGlobal('window', { getComputedStyle: () => ({ paddingLeft: '12px', paddingRight: '12px' }) });
+    const panel = { getBoundingClientRect: () => ({ width: 320, height: 420 }), clientWidth: 300, clientHeight: 420 };
+    vi.stubGlobal('document', { querySelectorAll: () => [panel], querySelector: () => null });
+    vi.mocked(fetch).mockResolvedValueOnce(runResponse('one'));
+    await RenderHook().initialize();
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(introduction('activity')));
+    await RenderHook().requestArtifact('visualization', 'phone-request');
+    const request = vi.mocked(fetch).mock.calls[1][1];
+    expect(JSON.parse(request?.body as string)).toMatchObject({
+      requestId: 'phone-request', panelDimensions: { width: 276, height: 420 },
+    });
+  });
+
   it('starts with the approved introduction and appends later activities after it', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(runResponse('one'));
     await RenderHook().initialize();

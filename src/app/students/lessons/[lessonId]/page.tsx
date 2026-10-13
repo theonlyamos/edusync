@@ -223,16 +223,16 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   if (practicing) {
     return (
       <DashboardLayout>
-        <div className="p-6 max-w-4xl mx-auto">
+        <div className="p-3 sm:p-6 max-w-4xl mx-auto">
           <div className="mb-6">
             <Button 
               variant="outline" 
               onClick={() => setPracticing(false)}
-              className="mb-4"
+              className="mb-4 min-h-11 xl:min-h-0"
             >
               Back to Lesson
             </Button>
-            <h2 className="text-2xl font-bold">{lesson.title} - Practice</h2>
+            <h2 className="text-2xl font-bold break-words">{lesson.title} - Practice</h2>
           </div>
           {questions.length > 0 ? (
             <PracticeExercise
@@ -256,36 +256,36 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <Card>
-          <CardHeader>
-            <CardTitle>{lesson.title}</CardTitle>
-            <Button variant="outline" onClick={()=>router.push(`/students/homework?lessonId=${resolvedParams.lessonId}`)}>View lesson homework</Button>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="break-words">{lesson.title}</CardTitle>
+            <Button variant="outline" className="min-h-11 xl:min-h-0 whitespace-normal" onClick={()=>router.push(`/students/homework?lessonId=${resolvedParams.lessonId}`)}>View lesson homework</Button>
             <CardDescription>
               {lesson.subject} • Grade {lesson.gradeLevel}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <Tabs defaultValue="overview" className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="content">Content</TabsTrigger>
-                <TabsTrigger value="resources">Resources</TabsTrigger>
-                <TabsTrigger value="practice">Practice</TabsTrigger>
+              <TabsList className="grid h-auto xl:h-10 w-full grid-cols-2 sm:inline-flex sm:w-auto">
+                <TabsTrigger value="overview" className="min-h-11 xl:min-h-0">Overview</TabsTrigger>
+                <TabsTrigger value="content" className="min-h-11 xl:min-h-0">Content</TabsTrigger>
+                <TabsTrigger value="resources" className="min-h-11 xl:min-h-0">Resources</TabsTrigger>
+                <TabsTrigger value="practice" className="min-h-11 xl:min-h-0">Practice</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6">
                 <LessonIntroduction lessonId={resolvedParams.lessonId} />
                 <section className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white shadow-sm">
-                  <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-end">
-                    <div>
-                      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-lime-300">
-                        <Target className="h-4 w-4" /> Objective roadmap
+                  <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <div className="min-w-0">
+                      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-lime-300">
+                        <Target className="h-4 w-4 shrink-0" /> Objective roadmap
                       </div>
                       <h3 className="max-w-2xl text-2xl font-semibold leading-tight">Learn one clear outcome at a time.</h3>
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Each tutor session stays focused on one objective and uses your teacher&apos;s reviewed activities before creating anything new.</p>
                     </div>
-                    <Button className="bg-lime-300 text-slate-950 hover:bg-lime-200" onClick={() => handleLearnWithAI()} disabled={!lessonDetail?.objectives.length}>
+                    <Button className="min-h-11 xl:min-h-0 bg-lime-300 text-slate-950 hover:bg-lime-200" onClick={() => handleLearnWithAI()} disabled={!lessonDetail?.objectives.length}>
                       <Play className="mr-2 h-4 w-4 fill-current" /> Start lesson with AI
                     </Button>
                   </div>
@@ -294,16 +294,16 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                 <div className="space-y-3">
                   {lessonDetail?.objectives.map((objective, index) => (
                     <Card key={objective.id} className="group overflow-hidden transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md dark:hover:border-emerald-700">
-                      <CardContent className="grid gap-4 p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+                      <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-lime-300 shadow-sm dark:bg-lime-300 dark:text-slate-950">{String(index + 1).padStart(2, '0')}</div>
                         <div className="min-w-0">
-                          <p className="font-medium leading-6 text-foreground">{objective.text}</p>
+                          <p className="font-medium leading-6 text-foreground break-words">{objective.text}</p>
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><Presentation className="h-3.5 w-3.5" />{objective.artifactCounts.visualizations} visual{objective.artifactCounts.visualizations === 1 ? '' : 's'}</span>
                             <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><CircleHelp className="h-3.5 w-3.5" />{objective.artifactCounts.quizzes} quiz{objective.artifactCounts.quizzes === 1 ? '' : 'zes'}</span>
                           </div>
                         </div>
-                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => handleLearnWithAI(objective.id)}>
+                        <Button variant="outline" className="min-h-11 xl:min-h-0 w-full md:w-auto" onClick={() => handleLearnWithAI(objective.id)}>
                           <Sparkles className="mr-2 h-4 w-4" /> Start AI tutor
                         </Button>
                       </CardContent>
@@ -314,7 +314,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                 {lesson.content && (
                   <div>
                     <h3 className="font-semibold mb-2">Content</h3>
-                    <div className="prose prose-sm max-w-none">
+                    <div className="prose prose-sm max-w-none break-words [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
                       <ReactMarkdown>{typeof lesson.content === 'string' ? lesson.content : JSON.stringify(lesson.content)}</ReactMarkdown>
                     </div>
                   </div>
@@ -366,17 +366,17 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                 {resources.map((resource) => (
                   <Card key={resource._id}>
                     <CardContent className="pt-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-lg font-semibold mb-2">{resource.title}</h3>
-                          <p className="text-muted-foreground mb-4">{resource.description}</p>
+                      <div className="flex justify-between items-start min-w-0">
+                        <div className="min-w-0 w-full">
+                          <h3 className="text-lg font-semibold mb-2 break-words">{resource.title}</h3>
+                          <p className="text-muted-foreground mb-4 break-words">{resource.description}</p>
                           {resource.type === 'file' && resource.fileUrl && (
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4" />
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-4 w-4 shrink-0" />
                               <Link 
                                 href={resource.fileUrl} 
                                 target="_blank"
-                                className="text-primary hover:underline"
+                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
                               >
                                 {resource.filename}
                                 <ExternalLink className="h-3 w-3 inline ml-1" />
@@ -384,12 +384,12 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                             </div>
                           )}
                           {resource.type === 'url' && resource.url && (
-                            <div className="flex items-center gap-2">
-                              <LinkIcon className="h-4 w-4" />
+                            <div className="flex items-center gap-2 min-w-0">
+                              <LinkIcon className="h-4 w-4 shrink-0" />
                               <Link 
                                 href={resource.url} 
                                 target="_blank"
-                                className="text-primary hover:underline"
+                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
                               >
                                 {resource.originalUrl || 'View Resource'}
                                 <ExternalLink className="h-3 w-3 inline ml-1" />
@@ -424,6 +424,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                   </CardHeader>
                   <CardContent>
                     <Button 
+                      className="h-auto min-h-11 xl:min-h-0 max-w-full whitespace-normal"
                       onClick={() => handleStartPractice()}
                       disabled={generatingPractice}
                     >

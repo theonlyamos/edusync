@@ -61,7 +61,7 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
                 <Button
                   key={index}
                   variant={selectedAnswers[question.id] === option ? "secondary" : "outline"}
-                  className="w-full justify-start"
+                  className="w-full h-auto min-h-11 xl:min-h-9 justify-start whitespace-normal [overflow-wrap:anywhere] text-left"
                   onClick={() => handleAnswerSelect(question.id, option)}
                   disabled={showAnswers}
                 >
@@ -76,7 +76,7 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
         return (
           <div className="space-y-2">
             <p className="font-medium">{question.question}</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 [&>button]:min-h-11 xl:[&>button]:min-h-0">
               <Button
                 variant={selectedAnswers[question.id] === true ? "secondary" : "outline"}
                 onClick={() => handleAnswerSelect(question.id, true)}
@@ -100,7 +100,8 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
           <div className="space-y-2">
             <p className="font-medium">{question.question}</p>
             <textarea
-              className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-base xl:text-sm"
+              aria-label={question.question}
               placeholder="Enter your answer..."
               value={selectedAnswers[question.id] || ''}
               onChange={(e) => handleAnswerSelect(question.id, e.target.value)}
@@ -112,20 +113,21 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0 break-words">
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{content.title}</CardTitle>
         <CardDescription>{content.description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 px-3 sm:px-6">
         {content.questions.map((question, index) => (
-          <div key={question.id} className="space-y-4 p-4 rounded-lg border">
-            <div className="flex justify-between items-start">
+          <div key={question.id} className="space-y-4 p-3 sm:p-4 rounded-lg border">
+            <div className="flex flex-wrap gap-2 justify-between items-start">
               <span className="text-sm text-muted-foreground">Question {index + 1}</span>
               {showAnswers && (
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="min-h-11 xl:min-h-0"
                   onClick={() => toggleExplanation(question.id)}
                 >
                   Show Explanation
@@ -148,9 +150,9 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
           </div>
         ))}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="px-3 sm:px-6">
         <Button
-          className="w-full"
+          className="w-full min-h-11 xl:min-h-0"
           onClick={() => setShowExplanations({})}
           disabled={!showAnswers}
         >
@@ -159,4 +161,4 @@ export function QuizContent({ content, showAnswers = false }: QuizContentProps) 
       </CardFooter>
     </Card>
   );
-} 
+}

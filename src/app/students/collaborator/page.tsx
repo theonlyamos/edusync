@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
-import { PenTool, Eraser, TextCursor, Send, Trash2, MousePointer, Square, ChevronUp, ChevronDown } from 'lucide-react';
+import { PenTool, Eraser, TextCursor, Send, Trash2, MousePointer, Square, ChevronUp, ChevronDown, History } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import TextareaAutosize from 'react-textarea-autosize';
 // @ts-ignore: axios types installed but not recognized
 import axios from 'axios';
@@ -68,6 +69,13 @@ export default function CollaboratorPage() {
   });
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const attachCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    canvasRef.current = canvas;
+    setCanvasElement(canvas);
+  }, []);
+  const sceneSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const drawingRef = useRef(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [penColor, setPenColor] = useState('#000000');
   const [tool, setTool] = useState<'pencil' | 'eraser' | 'text' | 'select' | 'box'>('select');
@@ -226,53 +234,13 @@ export default function CollaboratorPage() {
       clientY = e.clientY;
     }
 
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const scene = sceneSizeRef.current ?? rect;
+    const x = (clientX - rect.left) * scene.width / (rect.width || 1);
+    const y = (clientY - rect.top) * scene.height / (rect.height || 1);
 
     return { x, y };
   };
 
-  // Effect to resize canvas and set initial background, accounting for device pixel ratio
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const handleResizeOrThemeChange = () => {
-        const pixelRatio = window.devicePixelRatio || 1;
-        const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
-        
-        canvas.width = cssWidth * pixelRatio;
-        canvas.height = cssHeight * pixelRatio;
-
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Reset transform before applying scale, to avoid cumulative scaling on resize/theme change
-          ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-        }
-        redrawCanvas(); // Redraw with new dimensions/theme
-      };
-
-      handleResizeOrThemeChange(); // Initial setup
-
-      const observer = new MutationObserver(() => {
-        handleResizeOrThemeChange(); // Re-setup and redraw on theme change
-      });
-      
-      observer.observe(document.documentElement, { 
-        attributes: true, 
-        attributeFilter: ['class'] 
-      });
-      
-      // Also listen for resize events
-      window.addEventListener('resize', handleResizeOrThemeChange);
-
-      return () => {
-        observer.disconnect();
-        window.removeEventListener('resize', handleResizeOrThemeChange);
-      };
-    }
-  // Ensure redrawCanvas is available and baseLayerImage changes trigger re-evaluation if canvas wasn't ready.
-  }, [baseLayerImage]); 
-  
   // Function to redraw the entire canvas from the shapes array
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
@@ -280,36 +248,30 @@ export default function CollaboratorPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 1. Setup canvas dimensions and clear
-    // This part is crucial and should reflect the setup in the mount useEffect
     const pixelRatio = window.devicePixelRatio || 1;
     const { width: cssWidth, height: cssHeight } = canvas.getBoundingClientRect();
+    if (!cssWidth || !cssHeight || drawingRef.current) return;
+    // Keep one scene size so images, annotations, and pointer input scale together.
+    const scene = sceneSizeRef.current ??= { width: cssWidth, height: cssHeight };
+    const pixelWidth = Math.round(cssWidth * pixelRatio);
+    const pixelHeight = Math.round(cssHeight * pixelRatio);
 
-    // Ensure internal size is correct for the current display
-    // Check if canvas dimensions match CSS * pixelRatio, adjust if not
-    if (canvas.width !== cssWidth * pixelRatio || canvas.height !== cssHeight * pixelRatio) {
-        canvas.width = cssWidth * pixelRatio;
-        canvas.height = cssHeight * pixelRatio;
-        // Ensure transform is reset and then scaled
-        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0); 
-    } else {
-        // If dimensions are already correct, just ensure transform is set correctly for this redraw
-        // Reset transform before applying scale, to avoid cumulative scaling
-        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
     }
+    ctx.setTransform(pixelWidth / scene.width, 0, 0, pixelHeight / scene.height, 0, 0);
     
-    // Clear the canvas using CSS dimensions (since context is scaled)
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
+    ctx.clearRect(0, 0, scene.width, scene.height);
 
     // 2. Draw base layer (AI image or background color)
     if (baseLayerImage) {
-      // Draw the AI image, ensuring it covers the canvas (using cssWidth, cssHeight as it's scaled)
-      ctx.drawImage(baseLayerImage, 0, 0, cssWidth, cssHeight);
+      ctx.drawImage(baseLayerImage, 0, 0, scene.width, scene.height);
     } else {
       // Fill with background color if no base image
       const bgColor = getThemeBackgroundColor();
       ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, cssWidth, cssHeight);
+      ctx.fillRect(0, 0, scene.width, scene.height);
     }
 
     // 3. Draw all user shapes on top
@@ -351,6 +313,37 @@ export default function CollaboratorPage() {
     // Reset composite operation to default after drawing everything
     ctx.globalCompositeOperation = 'source-over';
   };
+
+  const handleResizeOrThemeChange = useEffectEvent(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const { width, height } = canvas.getBoundingClientRect();
+    if (!width || !height) return;
+    const scene = sceneSizeRef.current ??= { width, height };
+    const style = canvas.parentElement?.style;
+    style?.setProperty('--canvas-scene-width', `${scene.width}px`);
+    style?.setProperty('--canvas-scene-height', `${scene.height}px`);
+    style?.setProperty('--canvas-scale-x', String(width / scene.width));
+    style?.setProperty('--canvas-scale-y', String(height / scene.height));
+    // CSS can resize an active stroke without resetting its bitmap or preview snapshot.
+    redrawCanvas();
+  });
+
+  useEffect(() => {
+    const canvas = canvasElement;
+    if (!canvas) return;
+    handleResizeOrThemeChange();
+    const observer = new MutationObserver(handleResizeOrThemeChange);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    const resizeObserver = new ResizeObserver(handleResizeOrThemeChange);
+    resizeObserver.observe(canvas);
+    window.addEventListener('resize', handleResizeOrThemeChange);
+    return () => {
+      observer.disconnect();
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResizeOrThemeChange);
+    };
+  }, [canvasElement]);
 
   // Effect to redraw canvas whenever shapes or selection changes
   useEffect(() => {
@@ -396,6 +389,7 @@ export default function CollaboratorPage() {
     if (tool === 'box') {
       // Box start logic: still need preview
       setBoxDrawStartCoords(coords);
+      drawingRef.current = true;
       setIsDrawing(true);
       // Save snapshot *before* drawing preview on it
       setCanvasSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
@@ -411,6 +405,7 @@ export default function CollaboratorPage() {
       setCurrentShapeStyle({ penColor, toolSize, tool }); 
       // Save snapshot for path preview
       setCanvasSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height)); 
+      drawingRef.current = true;
       setIsDrawing(true);
     }
   };
@@ -538,6 +533,7 @@ export default function CollaboratorPage() {
       setCanvasSnapshot(null); // Clear snapshot for path too
     }
 
+    drawingRef.current = false;
     setIsDrawing(false); // Set drawing false for all tools
   };
 
@@ -643,11 +639,12 @@ export default function CollaboratorPage() {
 
   return (
     <DashboardLayout fullBleed>
-      <div className="relative flex-1 w-full h-full bg-background text-foreground overflow-hidden"> {/* Prevent scrollbars on main container */}
+      <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground sm:block">
+        <div className="relative min-h-0 flex-1 sm:h-full">
         {/* Canvas takes full space */}
         <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full cursor-crosshair"
+          ref={attachCanvas}
+          className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -655,16 +652,17 @@ export default function CollaboratorPage() {
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
+          onTouchCancel={() => stopDrawing()}
         />
         
         {/* Image Open Button - show only when currentImageUrl exists */}
         {currentImageUrl && (
-          <div className="absolute top-4 right-4 z-40">
+          <div className="absolute right-2 top-2 z-40 sm:right-4 sm:top-4">
             <Button 
               onClick={openImageInNewTab}
               variant="secondary"
               size="sm"
-              className="bg-card/80 backdrop-blur-sm"
+              className="h-11 bg-card/80 backdrop-blur-sm xl:h-8"
             >
               Open Image in New Tab
             </Button>
@@ -672,6 +670,11 @@ export default function CollaboratorPage() {
         )}
         
         {/* Render Text Boxes Overlay using TextareaAutosize */}
+        <div className="pointer-events-none absolute left-0 top-0 origin-top-left" style={{
+          width: 'var(--canvas-scene-width, 100%)',
+          height: 'var(--canvas-scene-height, 100%)',
+          transform: 'scale(var(--canvas-scale-x, 1), var(--canvas-scale-y, 1))',
+        }}>
         {textBoxes.map(box => (
           <div
             key={box.id}
@@ -682,7 +685,7 @@ export default function CollaboratorPage() {
               width: `${box.width}px`,
             }}
             className={cn(
-              "absolute z-20 group",
+              "pointer-events-auto absolute z-20 group",
               tool === 'select' && "cursor-pointer",
               selectedTextBoxId === box.id && "border-2 border-blue-500 p-0.5" // Selection indicator
             )}
@@ -711,53 +714,58 @@ export default function CollaboratorPage() {
                 // setFocusedTextBoxId(null); \
               }}
               style={{ width: '100%' }}
-              className="w-full bg-transparent border-0 ring-0 outline-none focus:ring-0 focus:border-0 focus:outline-none focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 p-1 text-sm text-foreground overflow-hidden resize-none"
+              className="w-full bg-transparent border-0 ring-0 outline-none focus:ring-0 focus:border-0 focus:outline-none focus:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 p-1 text-base xl:text-sm text-foreground overflow-hidden resize-none"
               minRows={1}
             />
           </div>
         ))}
+        </div>
+        </div>
         
         {/* Toolbar Overlay - Top Left */}
-        <div className="absolute top-4 left-4 z-30 flex flex-col items-start bg-card/80 text-card-foreground backdrop-blur-sm p-3 rounded-lg shadow-md space-y-3 border"> {/* Increased z-index */}
-          <div className="flex items-center space-x-2 w-full">
-            <Button variant={tool === 'select' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select">
+        <div className="z-30 order-first flex shrink-0 flex-col items-start gap-2 border bg-card/80 p-2 text-card-foreground shadow-md backdrop-blur-sm sm:absolute sm:left-4 sm:top-4 sm:gap-3 sm:rounded-lg sm:p-3">
+          <div className="flex w-full flex-wrap items-center gap-1 sm:gap-2">
+            <Button variant={tool === 'select' ? 'secondary' : 'ghost'} size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={() => setTool('select')} aria-label="Select" title="Select">
               <MousePointer className="h-5 w-5" />
             </Button>
-            <Button variant={tool === 'pencil' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('pencil')} title="Pencil">
+            <Button variant={tool === 'pencil' ? 'secondary' : 'ghost'} size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={() => setTool('pencil')} aria-label="Pencil" title="Pencil">
               <PenTool className="h-5 w-5" />
             </Button>
-            <Button variant={tool === 'eraser' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('eraser')} title="Eraser">
+            <Button variant={tool === 'eraser' ? 'secondary' : 'ghost'} size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={() => setTool('eraser')} aria-label="Eraser" title="Eraser">
               <Eraser className="h-5 w-5" />
             </Button>
-            <Button variant={tool === 'text' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('text')} title="Text">
+            <Button variant={tool === 'text' ? 'secondary' : 'ghost'} size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={() => setTool('text')} aria-label="Text" title="Text">
               <TextCursor className="h-5 w-5" />
             </Button>
-            <Button variant={tool === 'box' ? 'secondary' : 'ghost'} size="icon" onClick={() => setTool('box')} title="Draw Box">
+            <Button variant={tool === 'box' ? 'secondary' : 'ghost'} size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={() => setTool('box')} aria-label="Draw Box" title="Draw Box">
               <Square className="h-5 w-5" />
             </Button>
             <input
               type="color"
               value={penColor}
               onChange={e => setPenColor(e.target.value)}
-              className="w-8 h-8 p-0 border-none cursor-pointer rounded overflow-hidden"
+              className="h-11 w-11 cursor-pointer overflow-hidden rounded border-none p-0 xl:h-8 xl:w-8"
+              aria-label="Select color"
               title="Select Color"
             />
-            <Button variant="ghost" size="icon" onClick={handleDelete} title="Delete Selected / Clear All">
+            <Button variant="ghost" size="icon" className="h-11 w-11 xl:h-9 xl:w-9" onClick={handleDelete} aria-label="Delete selected or clear all" title="Delete Selected / Clear All">
               <Trash2 className="h-5 w-5" />
             </Button>
+            <CheckpointsBar compact checkpoints={checkpoints} onRevert={revertToCheckpoint} onClearHistory={clearCheckpoints} />
           </div>
           
           {/* Size Slider - Show for pencil, eraser, and box */}
           {(tool === 'pencil' || tool === 'eraser' || tool === 'box') && (
-            <div className="flex items-center w-full space-x-2">
-              <span className="text-xs capitalize">{tool} Size: {toolSize}px</span>
-              <div className="w-32">
+            <div className="flex min-h-11 w-full items-center gap-2 xl:min-h-0">
+              <span className="shrink-0 text-xs capitalize">{tool} Size: {toolSize}px</span>
+              <div className="min-w-0 flex-1 sm:w-32 sm:flex-none">
                 <Slider
                   value={[toolSize]}
                   min={1}
                   max={20}
                   step={1}
                   onValueChange={(value) => setToolSize(value[0])}
+                  aria-label={`${tool} size`}
                 />
               </div>
             </div>
@@ -773,29 +781,28 @@ export default function CollaboratorPage() {
 
         {/* Chat Overlay - Bottom Right */}
         <div className={cn(
-          "absolute bottom-4 right-4 z-30 w-80 bg-card/90 text-card-foreground backdrop-blur-sm border rounded-lg shadow-lg flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
-          "max-h-[85vh]" // Limit overall growth, height determined by content
+          "z-30 flex min-h-[6.625rem] max-h-[40%] w-full shrink-0 flex-col overflow-hidden border bg-card/90 text-card-foreground shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out sm:absolute sm:bottom-4 sm:right-4 sm:max-h-[85%] sm:w-80 sm:rounded-lg"
         )}>
           {/* Always visible Header */}
-          <div className="flex items-center justify-between p-3 border-b cursor-pointer" onClick={() => setIsChatExpanded(!isChatExpanded)}>
-            <h3 className="text-lg font-semibold">AI Chat</h3>
-            <Button variant="ghost" size="icon" className="h-6 w-6">
+          <button type="button" className="flex min-h-11 shrink-0 items-center justify-between border-b p-2 text-left sm:p-3" aria-expanded={isChatExpanded} aria-controls="collaborator-messages" onClick={() => setIsChatExpanded(!isChatExpanded)}>
+            <span className="text-lg font-semibold">AI Chat</span>
+            <span className="flex h-6 w-6 items-center justify-center">
               {isChatExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />} 
-            </Button>
-          </div>
+            </span>
+          </button>
           
           {/* Conditionally rendered Message List */}
           <div className={cn(
-            "overflow-y-auto p-3 space-y-3 transition-all duration-300 ease-in-out", // Removed flex-1 for now
-            isChatExpanded 
-              ? "opacity-100 max-h-[calc(80vh-8rem)]" // Max height when expanded, allow scrolling
+            "min-h-0 overflow-y-auto space-y-3 transition-all duration-300 ease-in-out",
+            isChatExpanded && messages.length > 0
+              ? "p-3 opacity-100 max-h-[calc(80dvh-8rem)]"
               : "opacity-0 max-h-0 p-0 m-0" // Collapse fully
-          )}>
+          )} id="collaborator-messages">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
                 className={cn(
-                  "p-2 rounded-md text-sm",
+                  "p-2 rounded-md break-words [overflow-wrap:anywhere] text-sm",
                   msg.role === 'assistant'
                     ? "bg-primary/10 text-primary-foreground self-start"
                     : "bg-muted text-muted-foreground self-end"
@@ -807,15 +814,16 @@ export default function CollaboratorPage() {
           </div>
 
           {/* Always visible Input Form */}
-          <form onSubmit={handleSubmit(onSubmit)} className="p-3 border-t">
+          <form onSubmit={handleSubmit(onSubmit)} className="shrink-0 border-t p-2 sm:p-3">
             <div className="flex items-center space-x-2">
               <Input
                 {...register('message')}
                 placeholder="Ask AI..."
-                className="flex-1"
+                className="h-11 min-w-0 flex-1 text-base xl:h-9 xl:text-sm"
+                aria-label="Message AI collaborator"
                 disabled={chatMutation.status === 'pending'}
               />
-              <Button type="submit" size="icon" disabled={chatMutation.status === 'pending'} title="Send">
+              <Button type="submit" size="icon" className="h-11 w-11 shrink-0 xl:h-9 xl:w-9" disabled={chatMutation.status === 'pending'} aria-label="Send message" title="Send">
                 {chatMutation.status === 'pending'
                   ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
                   : <Send className="h-4 w-4" />
@@ -834,25 +842,28 @@ export default function CollaboratorPage() {
 const CheckpointsBar = ({ 
   checkpoints, 
   onRevert, 
-  onClearHistory 
+  onClearHistory,
+  compact = false,
 }: { 
   checkpoints: CanvasCheckpoint[], 
   onRevert: (id: string) => void, 
   onClearHistory: () => void 
+  compact?: boolean
 }) => {
   if (checkpoints.length === 0) {
     return null; // Don't render the bar if there are no checkpoints
   }
 
-  return (
-    <div className="absolute top-1/2 left-4 transform -translate-y-1/2 z-30 bg-card/90 text-card-foreground backdrop-blur-sm p-3 rounded-lg shadow-md border flex flex-col space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto w-36">
-      <div className="flex items-center justify-between sticky top-0 bg-card/90 py-1 mb-1">
+  const historyContent = (
+    <>
+      <div className="sticky top-0 mb-1 flex items-center justify-between bg-card/90 py-1">
         <h4 className="text-sm font-semibold text-center flex-grow">History</h4>
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={onClearHistory} 
-          className="h-6 w-6 p-0 -mr-1" // Adjust styling for tight fit
+          className="-mr-1 h-11 w-11 p-0 xl:h-6 xl:w-6"
+          aria-label="Clear canvas history"
           title="Clear History"
         >
           <Trash2 className="h-4 w-4" />
@@ -875,6 +886,19 @@ const CheckpointsBar = ({
           <p className="text-xs text-muted-foreground truncate">{new Date(cp.timestamp).toLocaleTimeString()}</p>
         </button>
       ))}
-    </div>
+    </>
   );
-}; 
+
+  return compact ? (
+    <Dialog>
+      <DialogTrigger asChild><Button variant="ghost" size="icon" className="h-11 w-11 sm:hidden" aria-label="Open canvas history" title="History"><History className="h-5 w-5" /></Button></DialogTrigger>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center">
+        <DialogTitle>Canvas history</DialogTitle>
+        <DialogDescription>Restore an earlier drawing.</DialogDescription>
+        <div className="space-y-2">{historyContent}</div>
+      </DialogContent>
+    </Dialog>
+  ) : (
+    <div className="absolute left-4 top-1/2 z-30 hidden max-h-[calc(100%-8rem)] w-36 -translate-y-1/2 flex-col space-y-2 overflow-y-auto rounded-lg border bg-card/90 p-3 text-card-foreground shadow-md backdrop-blur-sm sm:flex">{historyContent}</div>
+  );
+};

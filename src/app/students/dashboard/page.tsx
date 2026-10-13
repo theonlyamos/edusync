@@ -36,18 +36,18 @@ export default function StudentDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold text-foreground">Welcome back, {displayName}!</h2>
+          <h2 className="break-words text-2xl sm:text-3xl font-bold text-foreground">Welcome back, {displayName}!</h2>
           <p className="text-muted-foreground">Here's an overview of your learning journey</p>
-          <Button className="mt-4" onClick={()=>router.push('/students/homework')}>Open my homework</Button>
+          <Button className="mt-4 min-h-11 xl:min-h-0" onClick={()=>router.push('/students/homework')}>Open my homework</Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
           {/* Current Lessons Card */}
           <Card className="dashboard-card border-t-4 border-t-primary">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-primary">
+              <CardTitle className="flex items-center gap-2 text-primary break-words">
                 <BookOpen className="h-5 w-5" />
                 My Lessons
               </CardTitle>
@@ -69,7 +69,7 @@ export default function StudentDashboard() {
             </CardContent>
             <CardFooter>
               <Button
-                className="w-full"
+                className="w-full min-h-11 xl:min-h-0"
                 onClick={() => router.push('/students/lessons')}
               >
                 View Lessons
@@ -80,7 +80,7 @@ export default function StudentDashboard() {
           {/* Practice Exercises Card */}
           <Card className="dashboard-card border-t-4 border-t-secondary">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-secondary">
+              <CardTitle className="flex items-center gap-2 text-secondary break-words">
                 <Brain className="h-5 w-5" />
                 Practice Exercises
               </CardTitle>
@@ -103,7 +103,7 @@ export default function StudentDashboard() {
             <CardFooter>
               <Button
                 variant="secondary"
-                className="w-full"
+                className="w-full min-h-11 xl:min-h-0"
                 onClick={() => router.push('/students/practice')}
               >
                 Start Practice
@@ -114,7 +114,7 @@ export default function StudentDashboard() {
           {/* Study Companion Card */}
           <Card className="dashboard-card border-t-4 border-t-accent">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-accent">
+              <CardTitle className="flex items-center gap-2 text-accent break-words">
                 <MessagesSquare className="h-5 w-5" />
                 Study Companion
               </CardTitle>
@@ -137,7 +137,7 @@ export default function StudentDashboard() {
             <CardFooter>
               <Button
                 variant="outline"
-                className="w-full"
+                className="w-full min-h-11 xl:min-h-0"
                 onClick={() => router.push('/students/tutor')}
               >
                 Open Study Companion
@@ -151,29 +151,29 @@ export default function StudentDashboard() {
           <h3 className="text-xl font-semibold mb-4">Recent Activity</h3>
           <div className="bg-card border rounded-lg p-4">
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="bg-primary/10 p-2 rounded-full">
+              <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                <div className="bg-primary/10 p-2 rounded-full shrink-0">
                   <BookOpen className="h-4 w-4 text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0 break-words">
                   <p className="font-medium">Completed Lesson: Introduction to Algebra</p>
                   <p className="text-sm text-muted-foreground">2 hours ago</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="bg-secondary/10 p-2 rounded-full">
+              <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                <div className="bg-secondary/10 p-2 rounded-full shrink-0">
                   <Brain className="h-4 w-4 text-secondary" />
                 </div>
-                <div>
+                <div className="min-w-0 break-words">
                   <p className="font-medium">Practice Quiz: Quadratic Equations</p>
                   <p className="text-sm text-muted-foreground">Yesterday</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="bg-accent/10 p-2 rounded-full">
+              <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                <div className="bg-accent/10 p-2 rounded-full shrink-0">
                   <MessagesSquare className="h-4 w-4 text-accent" />
                 </div>
-                <div>
+                <div className="min-w-0 break-words">
                   <p className="font-medium">Study Companion Session: Understanding Derivatives</p>
                   <p className="text-sm text-muted-foreground">2 days ago</p>
                 </div>

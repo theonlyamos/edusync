@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const { chatId, content, mode, intent } = parsedBody.data;
+        const { chatId, content, mode, intent, panelDimensions } = parsedBody.data;
         const gradeLevel = student?.grade ?? "the student's current level";
 
         let existingChat: ChatRow | null = null;
@@ -253,6 +253,7 @@ export async function POST(req: NextRequest) {
                         kind: artifactKind,
                         requestId: `tutor:${persistedChatId}:${randomUUID()}`,
                         taskDescription: vizReq?.taskDescription || userMessage.content,
+                        panelDimensions,
                     });
                     if ('artifact' in attachment) {
                         tutorMessage.learningArtifacts = [attachment];
@@ -272,7 +273,7 @@ export async function POST(req: NextRequest) {
                 try {
                     const vizResult = await runVisualizeGeneration({
                         task_description: taskDescription,
-                        panel_dimensions: { width: 704, height: 504 },
+                        panel_dimensions: panelDimensions,
                         theme: 'dark',
                     });
                     const code = vizResult.code?.slice(0, MAX_INTERACTIVE_CODE_LENGTH) ?? '';

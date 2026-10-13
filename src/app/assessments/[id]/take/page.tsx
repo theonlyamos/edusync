@@ -107,7 +107,7 @@ export default function TakeAssessmentPage({
     <DashboardLayout>
       {showStartDialog ? (
         <AlertDialog open={showStartDialog} onOpenChange={setShowStartDialog}>
-          <AlertDialogContent>
+          <AlertDialogContent className="w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto break-words">
             <AlertDialogHeader>
               <AlertDialogTitle>Start Assessment</AlertDialogTitle>
               <AlertDialogDescription className="space-y-2">
@@ -120,7 +120,7 @@ export default function TakeAssessmentPage({
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
+            <AlertDialogFooter className="[&>button]:min-h-11 xl:[&>button]:min-h-0">
               <AlertDialogCancel onClick={handleCancelAssessment}>
                 Cancel
               </AlertDialogCancel>
@@ -135,4 +135,4 @@ export default function TakeAssessmentPage({
       )}
     </DashboardLayout>
   );
-} 
+}

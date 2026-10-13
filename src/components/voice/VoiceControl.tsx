@@ -2,10 +2,12 @@ import { useAudioStreaming, LessonContext } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 
 interface VoiceControlProps {
   /** Whether mic streaming should be active */
   active: boolean;
+  viewportRef?: React.RefObject<HTMLElement | null>;
   sessionId?: string | null;
   topic?: string | null;
   lessonContext?: LessonContext;
@@ -21,7 +23,7 @@ interface VoiceControlProps {
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
 }
 
-export function VoiceControl({ active, sessionId, topic, lessonContext, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -172,20 +174,47 @@ export function VoiceControl({ active, sessionId, topic, lessonContext, onError,
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
+    let previous = '';
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const send = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const panel = viewportRef?.current?.querySelector('[data-visualization-panel]');
+      const { width, height } = readVisualizationPanelDimensions(panel ?? viewportRef?.current);
       const dpr = window.devicePixelRatio || 1;
+      const dimensions = `${width}:${height}:${dpr}`;
+      if (dimensions === previous) return;
+      previous = dimensions;
       sendViewport(width, height, dpr);
     };
     send();
     const resizeHandler = () => {
-      clearTimeout((resizeHandler as any)._t);
-      (resizeHandler as any)._t = setTimeout(send, 300);
+      clearTimeout(timer);
+      timer = setTimeout(send, 300);
     };
+    const observer = new ResizeObserver(resizeHandler);
+    if (viewportRef?.current) observer.observe(viewportRef.current);
+    let observedPanel: Element | null = null;
+    const observePanel = () => {
+      const panel = viewportRef?.current?.querySelector('[data-visualization-panel]') ?? null;
+      if (panel === observedPanel) return;
+      if (observedPanel) observer.unobserve(observedPanel);
+      observedPanel = panel;
+      if (panel) observer.observe(panel);
+      resizeHandler();
+    };
+    observePanel();
+    // Activity replacement can change its drawable area while the outer viewport stays fixed.
+    const mutationObserver = new MutationObserver(observePanel);
+    if (viewportRef?.current) mutationObserver.observe(viewportRef.current, { childList: true, subtree: true });
     window.addEventListener('resize', resizeHandler);
-    return () => window.removeEventListener('resize', resizeHandler);
-  }, [connectionStatus, sendViewport]);
+    window.visualViewport?.addEventListener('resize', resizeHandler);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('resize', resizeHandler);
+      window.visualViewport?.removeEventListener('resize', resizeHandler);
+    };
+  }, [connectionStatus, sendViewport, viewportRef]);
 
   useEffect(() => {
     const handler = (e: Event) => {

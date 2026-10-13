@@ -186,8 +186,8 @@ function ParticipantSidebarInner({
   return (
     <aside
       className={cn(
-        'border-l bg-card/80 backdrop-blur-sm flex flex-col transition-all duration-300 ease-out overflow-hidden',
-        visible ? 'w-64 min-w-[16rem]' : 'w-0 min-w-0 border-l-0',
+        'absolute inset-y-0 right-0 z-10 border-l bg-card/95 backdrop-blur-sm flex flex-col transition-all duration-300 ease-out overflow-hidden md:relative md:inset-auto md:bg-card/80',
+        visible ? 'w-64 max-w-[calc(100%-3rem)] shrink-0 md:min-w-[16rem]' : 'w-0 min-w-0 border-l-0',
       )}
     >
       {visible && (

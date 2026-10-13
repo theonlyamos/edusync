@@ -11,7 +11,7 @@ export interface SummaryContentType {
 
 export function SummaryContent({ content }: { content: SummaryContentType }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 break-words">
       <h2 className="text-xl font-semibold">{content.title}</h2>
       <p className="text-muted-foreground">{content.description}</p>
 
@@ -30,4 +30,4 @@ export function SummaryContent({ content }: { content: SummaryContentType }) {
       </div>
     </div>
   );
-} 
+}

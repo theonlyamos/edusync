@@ -17,16 +17,16 @@ export default function DemoPage() {
 
   if (!demoApiKey) {
     return (
-      <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex h-dvh w-full flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 text-center">
         <p className="text-lg font-medium text-indigo-700">Demo is not configured.</p>
-        <p className="mt-2 text-sm text-indigo-500">Set NEXT_PUBLIC_DEMO_EMBED_API_KEY to enable this page.</p>
+        <p className="mt-2 max-w-full break-words text-sm text-indigo-500">Set NEXT_PUBLIC_DEMO_EMBED_API_KEY to enable this page.</p>
       </div>
     );
   }
 
   if (!iframeUrl) {
     return (
-      <div className="w-full h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="flex h-dvh w-full flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 text-center">
         <div className="relative">
           <Loader2 className="h-16 w-16 animate-spin" />
         </div>
@@ -36,8 +36,8 @@ export default function DemoPage() {
   }
 
   return (
-    <div className='w-full h-screen'>
-      <iframe src={iframeUrl} width="100%" height="100%" allow="microphone"></iframe>
+    <div className="h-dvh w-full">
+      <iframe className="block h-full w-full border-0" src={iframeUrl} title="Insyte AI live demo" allow="microphone"></iframe>
     </div>
   );
 }

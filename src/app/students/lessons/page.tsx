@@ -5,7 +5,6 @@ import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvi
 
 export const dynamic = 'force-dynamic';
 import Link from 'next/link';
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BookOpen, FileText, Library } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 
 interface Lesson {
@@ -50,9 +49,9 @@ export default function StudentLessonsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold text-foreground">My Lessons</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">My Lessons</h2>
           <p className="text-muted-foreground">Access your assigned lessons and learning materials</p>
         </div>
 
@@ -64,13 +63,13 @@ export default function StudentLessonsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {lessons.map((lesson) => (
-              <Link href={`/students/lessons/${lesson.id}`} key={lesson.id}>
+              <Link href={`/students/lessons/${lesson.id}`} key={lesson.id} className="min-w-0">
                 <Card className="cursor-pointer hover:shadow-lg transition-shadow h-full">
                   <CardHeader>
-                    <CardTitle>{lesson.title}</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="break-words">{lesson.title}</CardTitle>
+                    <CardDescription className="break-words">
                       {lesson.subject} • Grade {lesson.gradelevel}
                     </CardDescription>
                   </CardHeader>
@@ -79,14 +78,14 @@ export default function StudentLessonsPage() {
                       {lesson.objectives}
                     </p>
                   </CardContent>
-                  <CardFooter className="flex justify-between items-center">
+                  <CardFooter className="flex flex-wrap justify-between items-center gap-2">
                     <p className="text-sm text-muted-foreground">
                       Added: {new Date(lesson.created_at).toLocaleDateString()}
                     </p>
-                    <Button variant="ghost" size="sm">
+                    <span className="inline-flex min-h-11 xl:min-h-0 xl:h-8 items-center rounded-md px-3 text-xs font-medium">
                       <BookOpen className="h-4 w-4 mr-2" />
                       View Lesson
-                    </Button>
+                    </span>
                   </CardFooter>
                 </Card>
               </Link>
@@ -106,4 +105,4 @@ export default function StudentLessonsPage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

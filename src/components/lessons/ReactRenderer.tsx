@@ -7,6 +7,7 @@ import {
   type ReactSandboxSourceText,
 } from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
 
 let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
 const loadReactSandboxSources = () => {
@@ -184,15 +185,11 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
       width: 100%;
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
     }
     #root {
       width: 100%;
       min-height: 100vh;
       padding: 0;
-      display: flex;
-      justify-content: center;
     }
     .error {
       padding: 20px;
@@ -202,7 +199,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       border-radius: 4px;
       margin: 20px;
     }
+    ${SANDBOX_RESPONSIVE_STYLES}
   </style>
+  <script nonce="${nonce}">${SANDBOX_RESPONSIVE_SCRIPT}</script>
 </head>
 <body>
   <div id="root"></div>
@@ -716,7 +715,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   }, [code, runtimeSources]); // onError/onReady are tracked via refs
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-w-0">
       {isLoading && <VisualizationSkeleton />}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-red-50 rounded-lg border border-red-200">
@@ -729,9 +728,9 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       <iframe
         ref={iframeRef}
         title="React Component Preview"
-        className="w-full h-full border-0 rounded-lg bg-transparent"
+        className="block w-full h-full min-w-0 border-0 rounded-lg bg-transparent"
         sandbox="allow-scripts"
-        style={{ display: isLoading || error ? 'none' : 'block' }}
+        style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
     </div>
   );

@@ -223,7 +223,7 @@ export default function PracticePage() {
   if (practicing) {
     return (
       <DashboardLayout>
-        <div className="p-6 max-w-4xl mx-auto">
+        <div className="p-3 sm:p-6 max-w-4xl mx-auto">
           <PracticeExercise
             subject={subject}
             topic={topic}
@@ -237,27 +237,27 @@ export default function PracticePage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
+      <div className="p-3 sm:p-6">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold text-foreground">Practice Exercises</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Practice Exercises</h2>
           <p className="text-muted-foreground">
             Choose a category to start practicing
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {practiceCategories.map((category) => (
             <Card
               key={category.title}
               className="cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
               onClick={() => handleCategorySelect(category.type)}
             >
-              <CardHeader>
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-xl ${category.bgColor}`}>
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+                  <div className={`shrink-0 p-3 rounded-xl ${category.bgColor}`}>
                     <category.icon className={`h-6 w-6 ${category.color}`} />
                   </div>
-                  <div>
+                  <div className="min-w-0 break-words">
                     <CardTitle>{category.title}</CardTitle>
                     <CardDescription>{category.description}</CardDescription>
                   </div>
@@ -314,7 +314,7 @@ export default function PracticePage() {
 
         {/* Setup Dialog */}
         <Dialog open={showSetup} onOpenChange={setShowSetup}>
-          <DialogContent>
+          <DialogContent className="w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Practice Setup</DialogTitle>
               <DialogDescription>
@@ -325,7 +325,7 @@ export default function PracticePage() {
               <div className="space-y-2">
                 <Label>Subject</Label>
                 <Select value={subject} onValueChange={setSubject}>
-                  <SelectTrigger>
+                  <SelectTrigger className="min-h-11">
                     <SelectValue placeholder="Select a subject" />
                   </SelectTrigger>
                   <SelectContent>
@@ -345,7 +345,7 @@ export default function PracticePage() {
                   onValueChange={setTopic}
                   disabled={!subject}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="min-h-11">
                     <SelectValue placeholder="Select a topic" />
                   </SelectTrigger>
                   <SelectContent>
@@ -359,7 +359,7 @@ export default function PracticePage() {
                 </Select>
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 [&>button]:min-h-11 xl:[&>button]:min-h-0">
               <Button variant="outline" onClick={() => setShowSetup(false)}>
                 Cancel
               </Button>
@@ -382,4 +382,4 @@ export default function PracticePage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

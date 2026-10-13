@@ -13,6 +13,7 @@ import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle,
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
+import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -57,6 +58,7 @@ function HomeComponent() {
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
+  const vizOnlyRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [replay, setReplay] = useState<{ conversationUrl?: string | null; userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
@@ -233,12 +235,7 @@ function HomeComponent() {
       setError(errMsg);
       if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
       setGeneratingVisualization(true);
-      const panelElement = vizRef.current;
-      let panelDimensions = { width: 800, height: 600 };
-      if (panelElement) {
-        const rect = panelElement.getBoundingClientRect();
-        panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
-      }
+      const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
       const taskDescription = visualizations[currentVizIndex]?.taskDescription;
       if (!taskDescription) return;
       const response = await fetch('/api/genai/visualize', {
@@ -284,17 +281,7 @@ function HomeComponent() {
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
       try {
-        // Get panel dimensions
-        const panelElement = vizRef.current;
-        let panelDimensions = { width: 800, height: 600 }; // Default dimensions
-
-        if (panelElement) {
-          const rect = panelElement.getBoundingClientRect();
-          panelDimensions = {
-            width: Math.floor(rect.width),
-            height: Math.floor(rect.height)
-          };
-        }
+        const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
 
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
@@ -685,6 +672,7 @@ function HomeComponent() {
                     {mode === 'record' && (
                       <VoiceControl
                         active={voiceActive}
+                        viewportRef={vizRef}
                         sessionId={currentSessionId || sessionIdFromUrl}
                         topic={topic}
                         onError={setError}
@@ -746,7 +734,7 @@ function HomeComponent() {
             </div>
 
             {/* Right Panel - Preview/Code Editor */}
-            <div className="flex-1 flex flex-col ml-0 lg:min-w-0 overflow-y-auto" ref={vizRef}>
+            <div data-visualization-viewport className="min-w-0 flex-1 flex flex-col ml-0 overflow-y-auto" ref={vizRef}>
               {code && library ? (
                 <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                   <CardHeader>
@@ -793,12 +781,7 @@ function HomeComponent() {
                           onClick={async () => {
                             if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
                             const current = visualizations[currentVizIndex];
-                            const panelElement = vizRef.current;
-                            let panelDimensions = { width: 800, height: 600 };
-                            if (panelElement) {
-                              const rect = panelElement.getBoundingClientRect();
-                              panelDimensions = { width: Math.floor(rect.width), height: Math.floor(rect.height) };
-                            }
+                            const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
                             try {
                               setGeneratingVisualization(true);
                               const response = await fetch('/api/genai/visualize', {
@@ -854,7 +837,7 @@ function HomeComponent() {
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col p-0 relative">
-                    <div className="flex-1 p-6">
+                    <div ref={vizOnlyRef} data-visualization-panel className="min-w-0 flex-1 p-3 sm:p-6">
                       {show === 'render' && (
                         !generatingVisualization ? (
                           <div className="h-full">
@@ -924,7 +907,7 @@ function HomeComponent() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="flex-1 flex flex-col items-center justify-center">
+                    <CardContent data-visualization-panel className="min-w-0 flex-1 flex flex-col items-center justify-center p-3 sm:p-6">
                       <Loader2 className="w-10 h-10 animate-spin mr-2" />
                       <div className="text-center text-muted-foreground">
                         <div className="text-lg mb-2">Generating visualization...</div>
@@ -961,7 +944,7 @@ function HomeComponent() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="flex-1 flex items-center justify-center">
+                    <CardContent data-visualization-panel className="min-w-0 flex-1 flex items-center justify-center p-3 sm:p-6">
                       <div className="text-center text-muted-foreground">
                         <div className="text-lg mb-2">No visualization yet</div>
                         <div className="text-sm">Ask a question to generate a visualization, quiz, or interactive component</div>

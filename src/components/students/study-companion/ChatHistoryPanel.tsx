@@ -38,12 +38,12 @@ export function ChatHistoryPanel({
               const lessonTitle = lessons.find((lesson) => getLessonId(lesson) === chat.lessonId)?.title;
 
               return (
-                <Card key={chatId} className="group cursor-pointer hover:bg-accent" onClick={() => onLoadChat(chatId)}>
-                  <CardContent className="relative p-3">
-                    <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                <Card key={chatId} className="group hover:bg-accent">
+                  <CardContent className="relative p-0">
+                    <div className="absolute right-2 top-2 opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(event) => event.stopPropagation()}>
+                          <Button variant="ghost" size="sm" className="h-11 w-11 p-0 xl:h-8 xl:w-8" aria-label={`Delete ${chat.title}`} onClick={(event) => event.stopPropagation()}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </AlertDialogTrigger>
@@ -63,9 +63,11 @@ export function ChatHistoryPanel({
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
-                    <p className="truncate pr-8 text-sm font-medium">{chat.title}</p>
-                    {lessonTitle && <p className="truncate text-xs text-muted-foreground">{lessonTitle}</p>}
-                    <p className="text-xs text-muted-foreground">Updated: {new Date(chat.updatedAt).toLocaleDateString()}</p>
+                    <button type="button" className="block w-full rounded-lg p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onLoadChat(chatId)}>
+                      <span className="block truncate pr-12 text-sm font-medium xl:pr-8">{chat.title}</span>
+                      {lessonTitle && <span className="block truncate pr-12 text-xs text-muted-foreground xl:pr-0">{lessonTitle}</span>}
+                      <span className="block text-xs text-muted-foreground">Updated: {new Date(chat.updatedAt).toLocaleDateString()}</span>
+                    </button>
                   </CardContent>
                 </Card>
               );
@@ -74,7 +76,7 @@ export function ChatHistoryPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="w-full text-muted-foreground"
+              className="h-11 w-full text-muted-foreground xl:h-8"
               onClick={() => setVisibleCount((current) => current + SESSIONS_PAGE_SIZE)}
             >
               Show more

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ImageIcon, Loader2, ShieldCheck, Sparkles } from 'lucide-react';
 
+import { LearningImage } from '@/components/lessons/LearningImage';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,12 +23,14 @@ async function json(response: Response) {
 function PrivateAsset({
   assetId,
   alt,
+  caption,
   mimeType,
   filename,
   onConsumed,
 }: {
   assetId: string;
   alt: string;
+  caption?: string;
   mimeType?: string;
   filename?: string;
   onConsumed: () => void;
@@ -50,8 +53,7 @@ function PrivateAsset({
     return <a href={url} target="_blank" rel="noreferrer" onClick={onConsumed} className="flex min-h-36 flex-col items-center justify-center rounded-lg border bg-muted/40 p-5 text-center"><span className="text-sm font-medium">{filename || alt}</span><span className="mt-1 text-xs text-muted-foreground">Open lesson resource</span></a>;
   }
   return url ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={alt} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} className="aspect-[4/3] w-full rounded-lg object-contain" />
+    <LearningImage key={url} src={url} alt={alt} caption={caption} onLoad={onConsumed} onError={() => setError('The resource could not be displayed')} />
   ) : <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-muted"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 }
 
@@ -131,8 +133,8 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
   if (retryAttachment) return <LearningArtifactCard attachment={retryAttachment} />;
 
   return (
-    <Card className="mt-4 overflow-hidden border-slate-200 bg-background shadow-sm">
-      <CardHeader className="border-b bg-slate-50/70 pb-3">
+    <Card className="mt-4 min-w-0 overflow-hidden border-slate-200 bg-background shadow-sm">
+      <CardHeader className="border-b bg-slate-50/70 p-3 sm:p-6 sm:pb-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -144,11 +146,11 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
           <Badge variant={attachment.source === 'teacher_approved' ? 'success' : 'secondary'} className="gap-1"><ShieldCheck className="h-3 w-3" />{sourceLabel}</Badge>
         </div>
       </CardHeader>
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4 [&_button]:min-h-11 xl:[&_button]:min-h-0">
         {submissionError && <p role="alert" className="mb-3 text-sm text-destructive">{submissionError}</p>}
         {interactiveElement && <InteractiveElementCard element={interactiveElement} onReady={artifact.kind === 'interactive_visualization' ? recordRendered : undefined} />}
-        {artifact.kind === 'generated_image' && <PrivateAsset assetId={payload.assetId} alt={payload.altText} onConsumed={recordRendered} />}
-        {artifact.kind === 'uploaded_media' && <PrivateAsset assetId={payload.assetId} alt={payload.title} mimeType={payload.mimeType} filename={payload.originalFilename} onConsumed={recordRendered} />}
+        {artifact.kind === 'generated_image' && <PrivateAsset assetId={payload.assetId} alt={payload.altText} caption={payload.caption} onConsumed={recordRendered} />}
+        {artifact.kind === 'uploaded_media' && <PrivateAsset assetId={payload.assetId} alt={payload.title} caption={payload.caption} mimeType={payload.mimeType} filename={payload.originalFilename} onConsumed={recordRendered} />}
         {isStructured && (
           <div className="space-y-4">
             {payload.questions.map((question: any, index: number) => {

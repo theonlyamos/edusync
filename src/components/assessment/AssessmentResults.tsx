@@ -101,20 +101,20 @@ export function AssessmentResults({
   });
 
   const StatCard = ({ title, value, icon: Icon }: any) => (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card className="min-w-0 break-words">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-2 sm:p-6 sm:pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <Icon className="shrink-0 h-4 w-4 text-muted-foreground" />
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 sm:px-6">
         <div className="text-2xl font-bold">{value}</div>
       </CardContent>
     </Card>
   );
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-6 min-w-0">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total Submissions"
           value={statistics.totalSubmissions}
@@ -138,44 +138,46 @@ export function AssessmentResults({
       </div>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="individual">Individual Results</TabsTrigger>
-          <TabsTrigger value="questions">Question Analysis</TabsTrigger>
+        <TabsList className="grid h-auto xl:h-10 w-full grid-cols-1 sm:grid-cols-3 xl:inline-flex xl:w-auto">
+          <TabsTrigger value="overview" className="min-h-11 xl:min-h-0">Overview</TabsTrigger>
+          <TabsTrigger value="individual" className="min-h-11 xl:min-h-0 whitespace-normal">Individual Results</TabsTrigger>
+          <TabsTrigger value="questions" className="min-h-11 xl:min-h-0 whitespace-normal">Question Analysis</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 sm:p-6">
               <CardTitle>Score Distribution</CardTitle>
               <CardDescription>
                 Distribution of scores across all submissions
               </CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={scoreDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="range" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#3b82f6" />
-                </BarChart>
-              </ResponsiveContainer>
+            <CardContent className="h-[300px] overflow-x-auto px-3 sm:px-6" tabIndex={0} role="region" aria-label="Score distribution chart">
+              <div className="h-full min-w-[360px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={scoreDistribution}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="range" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="individual">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 sm:p-6">
               <CardTitle>Individual Results</CardTitle>
               <CardDescription>
                 Detailed results for each submission
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Table>
+            <CardContent className="px-3 sm:px-6">
+              <Table className="min-w-[560px]" tabIndex={0} aria-label="Individual assessment results">
                 <TableHeader>
                   <TableRow>
                     {userRole !== 'student' && <TableHead>Student</TableHead>}
@@ -221,35 +223,37 @@ export function AssessmentResults({
 
         <TabsContent value="questions">
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 sm:p-6">
               <CardTitle>Question Analysis</CardTitle>
               <CardDescription>
                 Performance breakdown by question
               </CardDescription>
             </CardHeader>
-            <CardContent className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={questionAnalysis}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" domain={[0, 100]} />
-                  <YAxis
-                    type="category"
-                    dataKey="question"
-                    width={150}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip />
-                  <Bar dataKey="correctPercentage" fill="#3b82f6" />
-                </BarChart>
-              </ResponsiveContainer>
+            <CardContent className="h-[400px] overflow-x-auto px-3 sm:px-6" tabIndex={0} role="region" aria-label="Assessment question analysis chart">
+              <div className="h-full min-w-[440px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={questionAnalysis}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" domain={[0, 100]} />
+                    <YAxis
+                      type="category"
+                      dataKey="question"
+                      width={150}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="correctPercentage" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
   );
-} 
+}

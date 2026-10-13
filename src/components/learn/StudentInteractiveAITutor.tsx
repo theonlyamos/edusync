@@ -74,7 +74,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
 
   if (lessonLoading || objectiveLearning.loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700">
+      <div className="flex h-dvh items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading lesson...</p>
@@ -86,12 +86,12 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const blockingError = lessonError || objectiveLearning.error;
   if (lessonIdFromUrl && blockingError && !lessonContext?.learningRunId) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 p-6 text-white">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950 p-3 text-white sm:p-6">
         <div className="w-full max-w-md rounded-3xl border border-amber-300/20 bg-white/5 p-7 text-center shadow-2xl">
           <AlertTriangle className="mx-auto h-10 w-10 text-amber-300" />
           <h1 className="mt-4 text-xl font-semibold">Tutor session unavailable</h1>
           <p className="mt-2 text-sm leading-6 text-slate-300">{blockingError}</p>
-          <div className="mt-6 flex justify-center gap-3">
+          <div className="mt-6 flex flex-wrap justify-center gap-3 [&>button]:min-h-11">
             <Button onClick={() => window.location.reload()}>Try again</Button>
             <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => window.location.assign(`/students/lessons/${lessonIdFromUrl}`)}>Back to lesson</Button>
           </div>
@@ -117,7 +117,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
 
 export default function StudentInteractiveAITutor(props: StudentInteractiveAITutorProps) {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin" /></div>}>
+    <Suspense fallback={<div className="flex h-dvh items-center justify-center"><Loader2 className="w-12 h-12 animate-spin" /></div>}>
       <StudentInteractiveAITutorComponent {...props} />
     </Suspense>
   );

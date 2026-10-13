@@ -104,10 +104,10 @@ export default function AssessmentsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">Assessments</h1>
+      <div className="p-3 sm:p-6">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold">Assessments</h1>
             <p className="text-muted-foreground">
               {appUser?.role === 'student'
                 ? 'View and take available assessments'
@@ -122,14 +122,14 @@ export default function AssessmentsPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
           <Select
             value={filters.subject}
             onValueChange={(value) =>
               setFilters((prev) => ({ ...prev, subject: value }))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-h-11 xl:min-h-0">
               <SelectValue placeholder="Filter by Subject" />
             </SelectTrigger>
             <SelectContent>
@@ -144,7 +144,7 @@ export default function AssessmentsPage() {
               setFilters((prev) => ({ ...prev, gradeLevel: value }))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-h-11 xl:min-h-0">
               <SelectValue placeholder="Filter by Grade Level" />
             </SelectTrigger>
             <SelectContent>
@@ -159,7 +159,7 @@ export default function AssessmentsPage() {
               setFilters((prev) => ({ ...prev, type: value }))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className="min-h-11 xl:min-h-0">
               <SelectValue placeholder="Filter by Type" />
             </SelectTrigger>
             <SelectContent>
@@ -171,10 +171,10 @@ export default function AssessmentsPage() {
           </Select>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
           {assessments.map((assessment) => (
-            <Card key={assessment._id}>
-              <CardHeader>
+            <Card key={assessment._id} className="min-w-0 break-words">
+              <CardHeader className="p-4 sm:p-6">
                 <CardTitle>{assessment.title}</CardTitle>
                 <CardDescription>{assessment.description}</CardDescription>
               </CardHeader>
@@ -204,7 +204,7 @@ export default function AssessmentsPage() {
                   )}
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between">
+              <CardFooter className="flex justify-between [&>button]:min-h-11 xl:[&>button]:min-h-0">
                 {appUser?.role === 'student' ? (
                   <Button
                     className="w-full"
@@ -233,4 +233,4 @@ export default function AssessmentsPage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

@@ -140,17 +140,17 @@ export default function AssessmentResultsPage({
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-3 sm:p-6">
         <Link
           href="/assessments"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
+          className="inline-flex min-h-11 xl:min-h-0 items-center text-sm text-muted-foreground hover:text-foreground mb-6"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Assessments
         </Link>
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">{assessment.title}</h1>
+        <div className="mb-6 break-words">
+          <h1 className="text-2xl sm:text-3xl font-bold">{assessment.title}</h1>
           <p className="text-muted-foreground">{assessment.description}</p>
         </div>
 
@@ -163,4 +163,4 @@ export default function AssessmentResultsPage({
       </div>
     </DashboardLayout>
   );
-} 
+}

@@ -61,8 +61,8 @@ export function WorksheetContent({ content, showSolutions = false }: WorksheetCo
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0 break-words">
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{content.title}</CardTitle>
         <CardDescription>
           {content.description}
@@ -79,12 +79,12 @@ export function WorksheetContent({ content, showSolutions = false }: WorksheetCo
           </div>
         )}
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 px-3 sm:px-6">
         {content.problems.map((problem, index) => (
-          <div key={problem.id} className="space-y-4 p-4 rounded-lg border">
-            <div className="flex justify-between items-start">
+          <div key={problem.id} className="space-y-4 p-3 sm:p-4 rounded-lg border">
+            <div className="flex flex-wrap gap-2 justify-between items-start">
               <span className="text-sm text-muted-foreground">Problem {index + 1}</span>
-              <div className="space-x-2">
+              <div className="flex flex-wrap gap-2 [&>button]:min-h-11 xl:[&>button]:min-h-0">
                 {problem.hints && problem.hints.length > 0 && (
                   <Button
                     variant="ghost"
@@ -130,7 +130,8 @@ export function WorksheetContent({ content, showSolutions = false }: WorksheetCo
               )}
 
               <textarea
-                className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-base xl:text-sm"
+                aria-label={problem.question}
                 placeholder="Enter your solution..."
                 value={answers[problem.id] || ''}
                 onChange={(e) => handleAnswerChange(problem.id, e.target.value)}
@@ -152,11 +153,11 @@ export function WorksheetContent({ content, showSolutions = false }: WorksheetCo
           </div>
         ))}
       </CardContent>
-      <CardFooter>
-        <Button className="w-full">
+      <CardFooter className="px-3 sm:px-6">
+        <Button className="w-full min-h-11 xl:min-h-0">
           {showSolutions ? 'Print Worksheet' : 'Submit Answers'}
         </Button>
       </CardFooter>
     </Card>
   );
-} 
+}

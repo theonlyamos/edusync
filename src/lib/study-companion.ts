@@ -146,6 +146,7 @@ export const tutorRequestSchema = z.object({
     content: z.string().trim().min(1).max(MAX_CONTENT_LENGTH),
     lessonId: z.string().uuid().optional().nullable(),
     learningRunId: z.string().uuid().optional().nullable(),
+    panelDimensions: z.object({ width: z.number().finite().positive().max(4096), height: z.number().finite().positive().max(4096) }).optional(),
     mode: studyModeSchema.catch('companion'),
     intent: studyIntentSchema.catch('general'),
 });

@@ -9,6 +9,7 @@ const schema = z.object({
   kind: z.enum(['visualization', 'quiz']),
   requestId: z.string().trim().min(1).max(160),
   taskDescription: z.string().trim().min(1).max(500).optional(),
+  panelDimensions: z.object({ width: z.number().finite().positive().max(4096), height: z.number().finite().positive().max(4096) }).optional(),
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {

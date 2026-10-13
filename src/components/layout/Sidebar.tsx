@@ -206,9 +206,11 @@ const studentLinks: SidebarLink[] = [
 
 interface SidebarProps {
   role: 'admin' | 'teacher' | 'student';
+  mobile?: boolean;
+  onNavigate?: () => void;
 }
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = useContext(SupabaseBrowserClientContext);
@@ -234,6 +236,11 @@ export function Sidebar({ role }: SidebarProps) {
     const initial = (saved === 'light' || saved === 'dark') ? saved : 'dark';
     setTheme(initial);
     document.documentElement.classList.toggle('dark', initial === 'dark');
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
   }, []);
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -259,15 +266,16 @@ export function Sidebar({ role }: SidebarProps) {
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(href + '/');
   };
+  const isCollapsed = !mobile && collapsed;
 
   return (
-    <div className={cn("h-screen bg-card border-r flex flex-col transition-all duration-200 ease-in-out", collapsed ? "w-16" : "w-64")}>
-      <div>
-        <div className="p-6">
-          <h1 className={cn("text-2xl font-bold gradient-text", { 'text-center': collapsed })}>
-            EduSync
+    <div className={cn("h-full min-h-0 shrink-0 bg-card border-r flex flex-col transition-all duration-200 ease-in-out", mobile ? "w-full" : isCollapsed ? "w-16" : "w-64")}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className={cn('p-6', isCollapsed && 'px-2')}>
+          <h1 title="EduSync" className={cn("text-2xl font-bold gradient-text", { 'text-center': isCollapsed })}>
+            {isCollapsed ? 'E' : 'EduSync'}
           </h1>
-          {!collapsed && (
+          {!isCollapsed && (
             <p className="text-sm text-muted-foreground mt-1">
               {role.charAt(0).toUpperCase() + role.slice(1)} Portal
             </p>
@@ -276,9 +284,9 @@ export function Sidebar({ role }: SidebarProps) {
 
         <div className="px-3 py-2">
           {/* collapse toggle */}
-          <Button variant="ghost" onClick={toggleCollapse} className={cn("w-full p-2 mb-2", collapsed ? "justify-center" : "justify-end")}>
-            {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-          </Button>
+          {!mobile && <Button variant="ghost" onClick={toggleCollapse} aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'} className={cn("w-full p-2 mb-2", isCollapsed ? "justify-center" : "justify-end")}>
+            {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+          </Button>}
           <div className="space-y-1">
             {links.map((link: SidebarLink) => {
               const Icon = link.icon.type as React.FC<any>;
@@ -286,20 +294,20 @@ export function Sidebar({ role }: SidebarProps) {
                 <div key={link.href}>
                   <Button
                     variant={isActive(link.href) ? "secondary" : "ghost"}
-                    size={collapsed ? 'icon' : 'default'}
+                    size={isCollapsed ? 'icon' : 'default'}
                     asChild
-                    className={cn("w-full", {
-                      'justify-center': collapsed,
-                      'justify-start': !collapsed,
+                    className={cn("w-full min-h-11", {
+                      'justify-center': isCollapsed,
+                      'justify-start': !isCollapsed,
                       'mb-1': link.submenu
                     })}
                   >
-                    <Link href={link.href} className="flex items-center w-full">
-                      <Icon className={collapsed ? 'h-8 w-8 p-1' : 'h-5 w-5 mr-3'} />
-                      {!collapsed && <span className="ml-3">{link.label}</span>}
+                    <Link href={link.href} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
+                      <Icon className={isCollapsed ? 'h-8 w-8 p-1' : 'h-5 w-5 mr-3'} />
+                      {!isCollapsed && <span className="ml-3">{link.label}</span>}
                     </Link>
                   </Button>
-                  {!collapsed && link.submenu && (
+                  {!isCollapsed && link.submenu && (
                     <div className="ml-6 space-y-1">
                       {link.submenu.map((sublink: SidebarLink) => {
                         const SubIcon = sublink.icon.type as React.FC<any>;
@@ -307,11 +315,11 @@ export function Sidebar({ role }: SidebarProps) {
                           <Button
                             key={sublink.href}
                             variant={isActive(sublink.href) ? "secondary" : "ghost"}
-                            size={collapsed ? 'icon' : 'default'}
+                            size={isCollapsed ? 'icon' : 'default'}
                             asChild
                             className="w-full justify-start"
                           >
-                            <Link href={sublink.href} className="flex items-center w-full">
+                            <Link href={sublink.href} onClick={onNavigate} className="flex items-center w-full">
                               <SubIcon className="h-5 w-5 mr-3" />
                               <span>{sublink.label}</span>
                             </Link>
@@ -327,37 +335,39 @@ export function Sidebar({ role }: SidebarProps) {
         </div>
       </div>
 
-      <div className="mt-auto p-3 space-y-2">
+      <div className="shrink-0 border-t p-3 space-y-2">
         <Button
           variant="ghost"
-          size={collapsed ? 'icon' : 'default'}
-          className={cn("w-full", { "justify-center": collapsed, "justify-start": !collapsed })}
+          size={isCollapsed ? 'icon' : 'default'}
+          aria-label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          className={cn("w-full min-h-11", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
           onClick={toggleTheme}
         >
           {theme === 'dark'
-            ? collapsed
+            ? isCollapsed
               ? <Sun className="h-8 w-8" />
               : <Sun className="h-5 w-5 mr-3" />
-            : collapsed
+            : isCollapsed
               ? <Moon className="h-8 w-8" />
               : <Moon className="h-5 w-5 mr-3" />
           }
-          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+          {!isCollapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
         </Button>
         <Button
           variant="ghost"
-          size={collapsed ? 'icon' : 'default'}
-          className={cn("w-full text-red-500 hover:text-red-500", { "justify-center": collapsed, "justify-start": !collapsed })}
+          size={isCollapsed ? 'icon' : 'default'}
+          aria-label="Logout"
+          className={cn("w-full min-h-11 text-red-500 hover:text-red-500", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
           onClick={async () => {
             await supabase?.auth.signOut();
             router.replace(`/login`);
           }}
         >
-          {collapsed
+          {isCollapsed
             ? <LogOut className="h-8 w-8" />
             : <LogOut className="h-5 w-5 mr-3" />
           }
-          {!collapsed && <span className="ml-3">Logout</span>}
+          {!isCollapsed && <span className="ml-3">Logout</span>}
         </Button>
       </div>
     </div>
