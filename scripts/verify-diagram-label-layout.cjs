@@ -403,7 +403,7 @@ function readEdgeGeometry() {
       const covers = point => point.x > rect.left + .5 && point.x < rect.right - .5 && point.y > rect.top + .5 && point.y < rect.bottom - .5;
       const enlargedUnshifted = point => point.x > rect.left - shiftX + .5 && point.x < rect.right - shiftX - .5 && point.y > rect.top - shiftY + .5 && point.y < rect.bottom - shiftY - .5;
       return { id: label.id, rect: rect.toJSON(), authoredX: label.getAttribute('x'), authoredY: label.getAttribute('y'),
-        authoredFont: label.getAttribute('font-size'), transform: label.getAttribute('transform'), movement: Math.hypot(shiftX, shiftY),
+        authoredFont: label.getAttribute('font-size'), font: label.style.fontSize, transform: label.getAttribute('transform'), movement: Math.hypot(shiftX, shiftY),
         fontSize: parseFloat(getComputedStyle(label).fontSize) * Math.min(Math.hypot(labelMatrix.a, labelMatrix.b), Math.hypot(labelMatrix.c, labelMatrix.d)),
         covered: endpoints.filter(covers).map(({ edgeId, side }) => ({ edgeId, side })),
         enlargedUnshiftedCovered: endpoints.filter(enlargedUnshifted).map(({ edgeId, side }) => ({ edgeId, side })),
@@ -424,6 +424,9 @@ function assertEdgeGeometry(values, stage) {
     { id: 'edge-marker-start', tag: 'line', tips: [['start', 100, 40]], transform: null },
     { id: 'edge-path', tag: 'path', tips: [['start', 10, 75], ['end', 100, 40]], transform: null, startLabel: ['30', '80'] },
     { id: 'edge-polyline-ctm', tag: 'polyline', tips: [['start', 40, 90], ['end', 100, 40]], transform: 'translate(30 20)', startLabel: ['60', '95'] },
+    { id: 'css-only-line', tag: 'line', tips: [['start', 10, 75], ['end', 100, 40]], transform: null, startLabel: ['30', '80'] },
+    { id: 'css-only-path', tag: 'path', tips: [['start', 10, 75], ['end', 100, 40]], transform: null, startLabel: ['30', '80'] },
+    { id: 'css-only-polyline', tag: 'polyline', tips: [['start', 40, 90], ['end', 100, 40]], transform: 'translate(30 20)', startLabel: ['60', '95'] },
   ];
   assert.equal(values.length, expected.length, `${stage}: endpoint fixture SVG count`);
   for (const control of expected) {
@@ -433,6 +436,10 @@ function assertEdgeGeometry(values, stage) {
     assert.equal(svg.edges.length, 1, `${stage}: missing edge in ${control.id}`);
     assert.equal(svg.edges[0].tag, control.tag, `${stage}: edge type changed in ${control.id}`);
     assert.equal(svg.edges[0].transform, control.transform, `${stage}: authored edge transform changed in ${control.id}`);
+    if (control.id.startsWith('css-only-')) {
+      assert.equal(svg.edges[0].attributes['marker-start'], null, `${stage}: CSS-only start acquired a marker attribute`);
+      assert.equal(svg.edges[0].attributes['marker-end'], null, `${stage}: CSS-only end acquired a marker attribute`);
+    }
     for (const [side, x, y] of control.tips) {
       const tip = svg.endpoints.find(value => value.side === side);
       assert(tip, `${stage}: missing ${side} endpoint in ${control.id}`);
@@ -461,6 +468,82 @@ function assertEdgeGeometry(values, stage) {
       }
     }
   }
+}
+
+async function cssMarkerTransitions(frame, item) {
+  item.cssMarkerTransitions = [];
+  for (const kind of ['edge-style', 'edge-class', 'svg-style', 'svg-class', 'ancestor-style', 'ancestor-class']) {
+    const change = async enabled => frame.evaluate(({ kind, enabled }) => {
+      const svgs = Array.from(document.querySelectorAll('svg[data-edge-case^="css-only-"]'));
+      const host = document.getElementById('css-marker-host');
+      svgs.forEach(svg => {
+        const edge = svg.querySelector('line[id], path[id], polyline[id]');
+        if (kind === 'edge-style') {
+          edge.style.markerStart = enabled ? '' : 'none';
+          edge.style.markerEnd = enabled ? '' : 'none';
+        }
+        if (kind === 'edge-class') edge.setAttribute('class', enabled ? 'css-only-edge' : '');
+        if (kind === 'svg-style') {
+          if (enabled) svg.style.removeProperty('--css-edge-marker');
+          else svg.style.setProperty('--css-edge-marker', 'none');
+        }
+        if (kind === 'svg-class') svg.setAttribute('class', enabled ? 'css-only-svg' : '');
+      });
+      if (kind === 'ancestor-style') {
+        if (enabled) host.style.removeProperty('--css-edge-marker');
+        else host.style.setProperty('--css-edge-marker', 'none');
+      }
+      if (kind === 'ancestor-class') host.setAttribute('class', enabled ? 'css-marker-host' : '');
+    }, { kind, enabled });
+    const entry = { kind, assertionsPassed: false };
+    item.cssMarkerTransitions.push(entry);
+    await change(false);
+    await settle(frame);
+    const without = (await frame.evaluate(readEdgeGeometry)).filter(svg => svg.id.startsWith('css-only-'));
+    assert.equal(without.length, 3, `${kind}: missing CSS-only controls`);
+    for (const svg of without) {
+      assert.equal(svg.endpoints.length, 0, `${kind}: CSS marker removal did not remove actual endpoints`);
+      for (const label of svg.labels) {
+        assert.equal(label.font, '', `${kind}: CSS marker removal retained injected font for ${label.id}`);
+        assert.equal(label.transform, null, `${kind}: CSS marker removal retained injected transform for ${label.id}`);
+        assert(Math.abs(label.fontSize - 8 * svg.scale) < .01, `${kind}: CSS marker removal changed authored size for ${label.id}`);
+      }
+      assert.equal(svg.edges[0].attributes['marker-start'], null, `${kind}: acquired start marker attribute`);
+      assert.equal(svg.edges[0].attributes['marker-end'], null, `${kind}: acquired end marker attribute`);
+    }
+    entry.off = without.map(svg => ({ id: svg.id, endpoints: svg.endpoints.length, fonts: svg.labels.map(label => label.fontSize), authoredLayoutRestored: true }));
+    await change(true);
+    await settle(frame);
+    const restored = await frame.evaluate(readEdgeGeometry);
+    assertEdgeGeometry(restored, `${kind}: CSS markers restored automatically`);
+    assert.deepEqual(restored, item.scaled, `${kind}: CSS marker restoration changed stable layout`);
+    entry.restoredEndpoints = restored.reduce((sum, svg) => sum + svg.endpoints.length, 0);
+    entry.assertionsPassed = true;
+  }
+  item.postCssTransitionMeasurements = await frame.evaluate(async () => {
+    let measurements = 0;
+    const saved = Array.from(document.querySelectorAll('svg[data-edge-case] text')).map(label => ({
+      label, measure: label.getBoundingClientRect, own: Object.prototype.hasOwnProperty.call(label, 'getBoundingClientRect'),
+    }));
+    saved.forEach(({ label, measure }) => { label.getBoundingClientRect = () => { measurements++; return measure.call(label); }; });
+    const timer = document.createElement('span');
+    timer.style.cssText = 'position:fixed;width:1px;height:1px';
+    try {
+      for (let index = 0; index < 8; index++) await new Promise(resolve => requestAnimationFrame(resolve));
+      const idle = measurements;
+      document.getElementById('root').append(timer);
+      for (let index = 0; index < 8; index++) {
+        timer.textContent = String(index);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+      return { idle, htmlTimer: measurements - idle };
+    } finally {
+      timer.remove();
+      saved.forEach(({ label, measure, own }) => { if (own) label.getBoundingClientRect = measure; else delete label.getBoundingClientRect; });
+    }
+  });
+  assert.equal(item.postCssTransitionMeasurements.idle, 0, 'CSS marker transitions triggered own-write layout feedback');
+  assert.equal(item.postCssTransitionMeasurements.htmlTimer, 0, 'HTML timer relaid out labels after CSS marker transitions');
 }
 
 async function endpointCase(context, html, report, outputDir) {
@@ -499,6 +582,7 @@ async function endpointCase(context, html, report, outputDir) {
     assertEdgeGeometry(item.scaled, `${opposite.width}px non-unit CTM scale ${item.scale}`);
     assert.deepEqual(authoredEdges(item.scaled), authoredEdges(item.before), 'Authored edge geometry changed under non-unit CTM');
     await page.screenshot({ path: path.join(outputDir, `${item.name}-scaled.png`), fullPage: true });
+    await cssMarkerTransitions(frame, item);
     item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
     item.repeatedResizeDrift = false;
     item.assertionsPassed = true;
