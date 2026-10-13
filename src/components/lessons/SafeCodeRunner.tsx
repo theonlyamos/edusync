@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+import { LearningActivityView } from './LearningActivityView';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
 
 interface SafeCodeRunnerProps {
@@ -191,6 +192,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   }, [code, library]);
 
   return (
+    <LearningActivityView>
     <div className="relative h-full w-full min-w-0">
       {isLoading && <VisualizationSkeleton />}
       {error && (
@@ -207,6 +209,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
         style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
     </div>
+    </LearningActivityView>
   );
 });
 

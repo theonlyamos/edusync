@@ -7,6 +7,7 @@ import {
   type ReactSandboxSourceText,
 } from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+import { LearningActivityView } from './LearningActivityView';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
 
 let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
@@ -715,6 +716,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   }, [code, runtimeSources]); // onError/onReady are tracked via refs
 
   return (
+    <LearningActivityView>
     <div className="relative w-full h-full min-w-0">
       {isLoading && <VisualizationSkeleton />}
       {error && (
@@ -733,6 +735,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
     </div>
+    </LearningActivityView>
   );
 });
 
