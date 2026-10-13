@@ -7,7 +7,7 @@ import {
   type ReactSandboxSourceText,
 } from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
-import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
+import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES, SANDBOX_SVG_LABEL_SCRIPT } from '@/lib/lesson-artifacts/sandbox-responsive';
 
 let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
 const loadReactSandboxSources = () => {
@@ -201,7 +201,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     }
     ${SANDBOX_RESPONSIVE_STYLES}
   </style>
-  <script nonce="${nonce}">${SANDBOX_RESPONSIVE_SCRIPT}</script>
+  <script nonce="${nonce}">${SANDBOX_RESPONSIVE_SCRIPT}${SANDBOX_SVG_LABEL_SCRIPT}</script>
 </head>
 <body>
   <div id="root"></div>
