@@ -9,9 +9,10 @@ interface StartButtonOverlayProps {
   remainingCredits?: number;
   creditsLoading?: boolean;
   hideCredits?: boolean;
+  error?: string;
 }
 
-export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error }: StartButtonOverlayProps) {
   const isConnecting = connectionStatus === 'connecting';
 
   // Skip credit loading check if hideCredits is true
@@ -52,7 +53,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
         onClick={onStart}
         size="lg"
         className="w-24 h-24 rounded-full"
-        aria-label={isConnecting ? 'Connecting' : 'Start Learning'}
+        aria-label={isConnecting ? 'Connecting' : error ? 'Try again' : 'Start Learning'}
         disabled={isConnecting}
       >
         {isConnecting ? (
@@ -62,8 +63,9 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
         )}
       </Button>
       <div className="mt-4 text-lg font-medium">
-        {isConnecting ? 'Connecting...' : 'Start Learning'}
+        {isConnecting ? 'Connecting...' : error ? 'Try again' : 'Start Learning'}
       </div>
+      {error && <div role="alert" className="mx-6 mt-4 max-w-md rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
     </div>
   );
 }

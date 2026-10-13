@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -70,15 +71,15 @@ export function AdminApiKeysTab({ organizationId }: AdminApiKeysTabProps) {
 
     const createApiKey = async () => {
         try {
-            const domains = newKeyData.allowed_domains
-                .split('\n')
-                .map(d => d.trim())
-                .filter(d => d.length > 0);
+            const domains = allowedDomainsSchema.safeParse(newKeyData.allowed_domains);
+            if (!domains.success) {
+              throw new Error(domains.error.issues[0].message);
+            }
 
             const payload: any = {
                 name: newKeyData.name,
                 description: newKeyData.description || null,
-                allowed_domains: domains.length > 0 ? domains : null,
+                allowed_domains: domains.data,
             };
 
             const response = await fetch(`/api/admin/organizations/${organizationId}/keys`, {
@@ -381,7 +382,7 @@ export function AdminApiKeysTab({ organizationId }: AdminApiKeysTabProps) {
                             />
                         </div>
                         <div>
-                            <Label htmlFor="api-key-domains">Allowed Domains (one per line, optional)</Label>
+                            <Label htmlFor="api-key-domains">Allowed Domains (comma or newline separated, optional)</Label>
                             <Textarea
                                 id="api-key-domains"
                                 value={newKeyData.allowed_domains}
@@ -390,7 +391,7 @@ export function AdminApiKeysTab({ organizationId }: AdminApiKeysTabProps) {
                                 rows={3}
                             />
                             <p className="text-xs text-muted-foreground mt-1">
-                                Leave empty to allow all domains.
+                                Leave empty to allow all domains. Use ASCII hostnames or *.example.com, without protocols, ports or paths.
                             </p>
                         </div>
                     </div>

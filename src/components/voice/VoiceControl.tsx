@@ -12,6 +12,7 @@ interface VoiceControlProps {
   topic?: string | null;
   lessonContext?: LessonContext;
   onError?: (error: string) => void;
+  onStartupFailed?: () => void;
   onToolCall?: (name: string, args: any, callId?: string) => void;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
@@ -23,7 +24,7 @@ interface VoiceControlProps {
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
 }
 
-export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -51,6 +52,8 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
   setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
+  const activationAttemptedRef = useRef(false);
+  const activationGenerationRef = useRef(0);
   const [audioData, setAudioData] = useState(new Float32Array(0));
   const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
   const [vadActive, setVadActive] = useState(false);
@@ -83,19 +86,29 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
   // React to `active` prop changes
   useEffect(() => {
     const manage = async () => {
+      if (!active) {
+        if (activationAttemptedRef.current) activationGenerationRef.current += 1;
+        activationAttemptedRef.current = false;
+        if (isStreaming) stopStreaming();
+        return;
+      }
+      if (activationAttemptedRef.current) {
+        if (!isStreaming && _streamingError) onStartupFailed?.();
+        return;
+      }
+      activationAttemptedRef.current = true;
+      const generation = ++activationGenerationRef.current;
       try {
-        if (active && !isStreaming) {
-          await startStreaming();
-        } else if (!active && isStreaming) {
-          stopStreaming();
-        }
+        await startStreaming();
       } catch (err: any) {
+        if (generation !== activationGenerationRef.current) return;
         console.error('VoiceControl streaming error:', err);
         onError?.(err.message || 'Voice streaming failed');
+        onStartupFailed?.();
       }
     };
     void manage();
-  }, [active, isStreaming, startStreaming, stopStreaming, onError]);
+  }, [active, isStreaming, _streamingError, startStreaming, stopStreaming, onError, onStartupFailed]);
 
   // Register tool call listener
   useEffect(() => {

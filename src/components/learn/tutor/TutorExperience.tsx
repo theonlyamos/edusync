@@ -95,6 +95,7 @@ export const TutorExperience = ({
   } | null>(null);
   const previousSessionIdRef = useRef<string | null>(null);
   const lastEndedSessionIdRef = useRef<string | null>(null);
+  const handleVoiceStartupFailed = useCallback(() => setVoiceActive(false), []);
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -739,8 +740,10 @@ export const TutorExperience = ({
           {creditsEnabled ? (
             <StartButtonOverlay
               onStart={() => {
+                setError('');
                 setVoiceActive(true);
               }}
+              error={error}
               connectionStatus={connectionStatus}
               creditsLoading={creditsLoading}
               outOfCredits={credits !== null && credits <= 0}
@@ -749,8 +752,10 @@ export const TutorExperience = ({
           ) : (
             <StartButtonOverlay
               onStart={() => {
+                setError('');
                 setVoiceActive(true);
               }}
+              error={error}
               connectionStatus={connectionStatus}
               hideCredits={true}
             />
@@ -885,6 +890,7 @@ export const TutorExperience = ({
           topic={topic}
           lessonContext={lessonContext}
           onError={setError}
+          onStartupFailed={handleVoiceStartupFailed}
           onToolCall={handleToolCall}
           onConnectionStatusChange={setConnectionStatus}
           onCountdownEnd={handleCountdownEnd}

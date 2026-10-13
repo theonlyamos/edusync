@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +47,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
   });
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [domainError, setDomainError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchApiKeys();
@@ -66,15 +68,17 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
 
   const createApiKey = async () => {
     try {
-      const domains = newKeyData.allowed_domains
-        .split('\n')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
+      const domains = allowedDomainsSchema.safeParse(newKeyData.allowed_domains);
+      if (!domains.success) {
+        setDomainError(domains.error.issues[0].message);
+        return;
+      }
+      setDomainError(null);
 
       const payload: any = {
         name: newKeyData.name,
         description: newKeyData.description || null,
-        allowed_domains: domains.length > 0 ? domains : null,
+        allowed_domains: domains.data,
         organization_id: organizationId,
       };
 
@@ -87,7 +91,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
 
       setVisibleKeys(new Set([response.data.apiKey.id]));
     } catch (err: any) {
-      onError(err.response?.data?.error || 'Failed to create API key');
+      onError(err.response?.data?.error || err.message || 'Failed to create API key');
     }
   };
 
@@ -154,7 +158,10 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
               </CardDescription>
             </div>
             {isOwnerOrAdmin && (
-              <Button onClick={() => setShowNewKeyForm(true)}>
+              <Button onClick={() => {
+                setDomainError(null);
+                setShowNewKeyForm(true);
+              }}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create New Key
               </Button>
@@ -376,7 +383,10 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
         </CardContent>
       </Card>
 
-      <Dialog open={showNewKeyForm} onOpenChange={setShowNewKeyForm}>
+      <Dialog open={showNewKeyForm} onOpenChange={open => {
+        setShowNewKeyForm(open);
+        if (!open) setDomainError(null);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New API Key</DialogTitle>
@@ -404,22 +414,33 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
               />
             </div>
             <div>
-              <Label htmlFor="api-key-domains">Allowed Domains (one per line, optional)</Label>
+              <Label htmlFor="api-key-domains">Allowed Domains (comma or newline separated, optional)</Label>
               <Textarea
                 id="api-key-domains"
                 value={newKeyData.allowed_domains}
-                onChange={e => setNewKeyData({ ...newKeyData, allowed_domains: e.target.value })}
+                onChange={e => {
+                  setNewKeyData({ ...newKeyData, allowed_domains: e.target.value });
+                  setDomainError(null);
+                }}
                 placeholder="example.com&#10;*.example.com&#10;app.example.com"
                 rows={3}
+                aria-invalid={!!domainError}
+                aria-describedby={domainError ? 'api-key-domains-error' : undefined}
               />
+              {domainError && (
+                <p id="api-key-domains-error" role="alert" className="text-sm text-destructive mt-1">
+                  {domainError}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-1">
-                Leave empty to allow all domains. Use * for wildcards (e.g., *.example.com)
+                Leave empty to allow all domains. Use ASCII hostnames or *.example.com, without protocols, ports or paths.
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setShowNewKeyForm(false);
+              setDomainError(null);
               setNewKeyData({ name: '', description: '', allowed_domains: '' });
             }}>
               Cancel
