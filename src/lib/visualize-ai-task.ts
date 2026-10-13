@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server'
 import { buildVisualizationLayoutPrompt, type VisualizationDimensions } from '@/lib/visualization-layout'
+import { assertReactComponentSyntax } from '@/lib/lesson-artifacts/react-component-source'
 
 interface OpenAIConfig {
   baseURL: string
@@ -284,6 +285,7 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
       // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.
       const code = stripLeakedToolCalls(result.code)
       if (code.trim() && !codeLeaksToolName(code)) {
+        if (result.library === 'react') assertReactComponentSyntax(code)
         return { ...result, code }
       }
       console.warn(
