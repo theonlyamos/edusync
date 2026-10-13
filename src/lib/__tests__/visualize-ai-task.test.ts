@@ -42,4 +42,31 @@ describe('responsive visualization generation', () => {
       expect(prompt).toContain(requirement)
     }
   })
+
+  it.each([{ width: 296, height: 420 }, { width: 1280, height: 720 }])(
+    'requests readable diagram annotations without changing authored code at %j', async (panel_dimensions) => {
+      const code = `function App() {
+  return React.createElement('figure', null,
+    React.createElement('svg', { viewBox: '0 0 600 320' },
+      React.createElement('path', { d: 'M 80 160 L 520 160', markerEnd: 'url(#arrow)' }),
+      React.createElement('text', { x: 80, y: 90, fontSize: 28 }, 'Input')),
+    React.createElement('figcaption', { style: { fontSize: 16 } }, 'Energy flows from input to output.'));
+}`
+      complete.mockResolvedValueOnce({ choices: [{ message: { tool_calls: [{
+        type: 'function',
+        function: {
+          name: 'display_visual_aid',
+          arguments: JSON.stringify({ library: 'react', code, explanation: 'Trace the energy flow.' }),
+        },
+      }] } }] })
+
+      const result = await runVisualizeGeneration({ task_description: 'Trace the energy flow.', panel_dimensions })
+      expect(result.code).toBe(code)
+      const prompt = complete.mock.calls[0][0].messages[0].content
+      for (const requirement of [/short SVG labels/i, /annotation zones/i, /arrow shafts/i,
+        /arrow tips/i, /HTML caption or legend/i, /narrow widths/i]) {
+        expect(prompt).toMatch(requirement)
+      }
+    },
+  )
 })
