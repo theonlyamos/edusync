@@ -6,11 +6,11 @@ export async function editableHomeworkForUser(userId: string) {
   const { data, error } = await db
     .from("homework_attempts")
     .select(
-      "homework_id,submitted_at,revision_due_at,homeworks!inner(organization_id,status,due_at,close_at,accept_late)",
+      "homework_id,submitted_at,revision_due_at,homework_recipients!inner(homeworks!inner(organization_id,status,due_at,close_at,accept_late))",
     )
     .eq("student_id", userId)
     .is("submitted_at", null)
-    .eq("homeworks.status", "published");
+    .eq("homework_recipients.homeworks.status", "published");
   if (error) throw error;
   const { data: members, error: memberError } = await db
     .from("organization_members")
@@ -31,11 +31,14 @@ export async function editableHomeworkForUser(userId: string) {
   if (recipientError) throw recipientError;
   return (
     data.find((row) => {
-      const a = row as unknown as Attempt & { homeworks: Homework };
+      const a = row as unknown as Attempt & {
+        homework_recipients: { homeworks: Homework };
+      };
+      const homework = a.homework_recipients.homeworks;
       return (
-        organizations.has(a.homeworks.organization_id) &&
+        organizations.has(homework.organization_id) &&
         attemptIsEditable(
-          a.homeworks,
+          homework,
           a,
           recipients?.find((r) => r.homework_id === a.homework_id)
             ?.extension_at ?? null,

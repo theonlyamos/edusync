@@ -4,6 +4,7 @@ import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyM
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
 import { convertToWav } from '@/lib/audio/wav';
+import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 
@@ -80,6 +81,8 @@ export function useAudioStreaming(
 
     // Refs to hold mutable values that don't trigger re-renders
     const isStreamingRef = useRef(false);
+    const sessionGenerationRef = useRef(0);
+    const connectionGenerationRef = useRef(0);
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<AudioWorkletNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -94,7 +97,6 @@ export function useAudioStreaming(
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
     const onVadStateListenerRef = useRef<((active: boolean, rms: number) => void) | null>(null);
-    const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
     const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
     const lessonContextRef = useRef<LessonContext | undefined>(lessonContext);
@@ -381,6 +383,14 @@ export function useAudioStreaming(
 
     // Function to handle stopping the stream
     const stopStreaming = useCallback(() => {
+        const stoppedGeneration = ++sessionGenerationRef.current;
+        const userRecorder = userRecorderRef.current;
+        const aiRecorder = aiRecorderRef.current;
+        const userChunks = userChunksRef.current;
+        const aiChunks = aiChunksRef.current;
+        const stoppedSessionId = currentSessionIdRef.current;
+        const durationMs = Date.now() - (sessionStartedAtRef.current || Date.now());
+        sessionStartedAtRef.current = null;
         // Mark as manual disconnect to prevent automatic reconnection
         isManualDisconnectRef.current = true;
 
@@ -400,12 +410,12 @@ export function useAudioStreaming(
         cleanupAudioResources();
 
         const stopAndCollect = async () => {
-            const stopRecorder = (rec: MediaRecorder | null, chunksRef: React.MutableRefObject<Blob[]>) => new Promise<Blob | null>((resolve) => {
+            const stopRecorder = (rec: MediaRecorder | null, chunks: Blob[]) => new Promise<Blob | null>((resolve) => {
                 if (!rec) return resolve(null);
                 const handler = () => {
                     rec?.removeEventListener('stop', handler as any);
-                    const blob = chunksRef.current.length > 0 ? new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' }) : null;
-                    chunksRef.current = [];
+                    const blob = chunks.length > 0 ? new Blob(chunks, { type: rec.mimeType || 'audio/webm' }) : null;
+                    chunks.length = 0;
                     resolve(blob);
                 };
                 rec.addEventListener('stop', handler as any);
@@ -417,20 +427,16 @@ export function useAudioStreaming(
             });
 
             const [userBlob, aiBlob] = await Promise.all([
-                stopRecorder(userRecorderRef.current, userChunksRef),
-                stopRecorder(aiRecorderRef.current, aiChunksRef),
+                stopRecorder(userRecorder, userChunks),
+                stopRecorder(aiRecorder, aiChunks),
             ]);
 
-            userRecorderRef.current = null;
-            aiRecorderRef.current = null;
-
-            const started = sessionStartedAtRef.current || Date.now();
-            const durationMs = Date.now() - started;
-            sessionStartedAtRef.current = null;
+            if (userRecorderRef.current === userRecorder) userRecorderRef.current = null;
+            if (aiRecorderRef.current === aiRecorder) aiRecorderRef.current = null;
 
             // Also finalize streaming parts if any
             try {
-                if (currentSessionIdRef.current) {
+                if (stoppedSessionId && stoppedGeneration === sessionGenerationRef.current) {
                     await waitForUploads();
                     const urlParams = new URLSearchParams(window.location.search);
                     const apiKey = urlParams.get('apiKey');
@@ -438,7 +444,9 @@ export function useAudioStreaming(
                     if (apiKey) {
                         headers['Authorization'] = `Bearer ${apiKey}`;
                     }
-                    await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST', headers });
+                    if (stoppedGeneration === sessionGenerationRef.current) {
+                        await fetch(`/api/learning/sessions/${stoppedSessionId}/recordings/finalize`, { method: 'POST', headers });
+                    }
                 }
             } catch (err) { console.error('Failed to finalize session recordings', err); }
 
@@ -449,9 +457,16 @@ export function useAudioStreaming(
 
 
 
+    const handleStreamingFailure = useCallback((err: unknown, action: 'start' | 'resume', generation: number) => {
+        if (generation !== sessionGenerationRef.current) return;
+        stopStreaming();
+        setError(`Failed to ${action} streaming: ${err instanceof Error ? err.message : 'Voice connection failed'}`);
+    }, [stopStreaming]);
+
     // Main function to start the streaming process
     const startStreaming = useCallback(async () => {
         if (isStreamingRef.current) return;
+        const generation = ++sessionGenerationRef.current;
 
         // Reset manual disconnect flag when starting
         isManualDisconnectRef.current = false;
@@ -467,15 +482,14 @@ export function useAudioStreaming(
         let stream: MediaStream | null = null;
 
         try {
-            const now = Date.now();
-            if (now - lastAttemptTimeRef.current < 2500) {
-                throw new Error('Retrying too quickly – waiting before next attempt');
-            }
-            lastAttemptTimeRef.current = now;
             // --- Step 1: Get microphone access and sample rate ---
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
+            if (generation !== sessionGenerationRef.current) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+            }
             streamRef.current = stream;
             sessionStartedAtRef.current = Date.now();
 
@@ -489,15 +503,20 @@ export function useAudioStreaming(
             await startGeminiLiveSessionRef.current?.(stream, sampleRate);
 
         } catch (err: any) {
+            if (generation !== sessionGenerationRef.current) return;
             console.error('Failed to start streaming:', err);
-            setError(`Failed to start streaming: ${err.message}`);
-            stopStreaming(); // Use stopStreaming for full cleanup on failure
-            setConnectionStatus('disconnected');
+            handleStreamingFailure(err, 'start', generation);
+            throw err;
         }
-    }, [stopStreaming, cleanupAudioResources]);
+    }, [handleStreamingFailure]);
 
     // Browser-based Gemini Live connection
     const startGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number) => {
+        const generation = sessionGenerationRef.current;
+        const connectionGeneration = ++connectionGenerationRef.current;
+        let connectionClosed = false;
+        const ownsConnection = () => generation === sessionGenerationRef.current && connectionGeneration === connectionGenerationRef.current;
+        const acceptsEvents = () => ownsConnection() && !connectionClosed;
         try {
             // Get ephemeral token
             const urlParams = new URLSearchParams(window.location.search);
@@ -510,10 +529,12 @@ export function useAudioStreaming(
                 method: 'POST',
                 headers
             });
+            if (!ownsConnection()) return;
             if (!tokenResponse.ok) {
-                throw new Error('Failed to get ephemeral token');
+                throw new VoiceTokenRequestError(tokenResponse.status);
             }
             const { token } = await tokenResponse.json();
+            if (!ownsConnection()) return;
 
             const ai = new GoogleGenAI({
                 apiKey: token,
@@ -673,17 +694,20 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 },
                 callbacks: {
                     onopen: () => {
+                        if (!acceptsEvents()) return;
                         tutorTurnsRef.current.reset();
                         setConnectionStatus('connected');
                         isResumingSessionRef.current = false;
                         sessionOpenedAtRef.current = Date.now();
                     },
                     onmessage: (message: LiveServerMessage) => {
+                        if (!acceptsEvents()) return;
                         tutorTurnsRef.current.received(message);
                         responseQueue.push(message);
                         processGeminiResponseQueueRef.current?.(responseQueue, audioParts);
                     },
                     onerror: (e: ErrorEvent) => {
+                        if (!acceptsEvents() || isManualDisconnectRef.current) return;
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
@@ -695,6 +719,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
+                        if (!acceptsEvents()) return;
+                        connectionClosed = true;
                         // Surface the real close reason for diagnostics.
                         console.warn('[Gemini Live] socket closed', { code: e.code, reason: e.reason });
 
@@ -721,7 +747,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             hasHandleOrRetrying;
 
                         if (!shouldTryResume) {
-                            setConnectionStatus('disconnected');
+                            stopStreaming();
+                            setError('Live voice connection ended. Please try again.');
                             return;
                         }
 
@@ -754,15 +781,21 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         const delay = Math.min(1000 * 2 ** (resumeAttemptsRef.current - 1), 8000);
                         setConnectionStatus('connecting');
                         reconnectTimeoutRef.current = setTimeout(() => {
-                            if (!isStreamingRef.current || isManualDisconnectRef.current) return;
+                            if (!ownsConnection() || !isStreamingRef.current || isManualDisconnectRef.current) return;
                             isResumingSessionRef.current = true;
-                            startGeminiLiveSessionRef.current?.(streamRef.current!, 16000);
+                            void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((err: unknown) => {
+                                handleStreamingFailure(err, 'resume', generation);
+                            });
                         }, delay);
                     }
                 }
             };
 
             const geminiSession = await ai.live.connect(connectConfig);
+            if (!acceptsEvents()) {
+                geminiSession.close();
+                return;
+            }
 
             geminiLiveSessionRef.current = geminiSession;
 
@@ -790,11 +823,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 console.error('Failed to add audio worklet module.', e);
                 throw new Error('Failed to load audio processor.');
             }
+            if (!acceptsEvents()) {
+                void audioContext.close();
+                return;
+            }
 
             const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
 
             workletNode.port.onmessage = (event) => {
-                if (!isStreamingRef.current || !geminiLiveSessionRef.current) return;
+                if (!acceptsEvents() || !isStreamingRef.current || !geminiLiveSessionRef.current) return;
 
                 if (event.data.type === 'audioData') {
                     const float32Chunk = new Float32Array(event.data.data);
@@ -915,19 +952,22 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             try {
                 if (typeof MediaRecorder !== 'undefined') {
                     const mimeType = pickType();
-                    userChunksRef.current = [];
-                    userRecorderRef.current = new MediaRecorder(stream, { mimeType });
-                    userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                    const chunks: Blob[] = [];
+                    userChunksRef.current = chunks;
+                    const recorder = new MediaRecorder(stream, { mimeType });
+                    userRecorderRef.current = recorder;
+                    recorder.ondataavailable = (e: BlobEvent) => {
                         if (e.data && e.data.size > 0) {
                             // Gate saving by VAD if enabled
-                            if (saveOnlySpeechRef.current) {
+                            if (saveOnlySpeechRef.current && userRecorderRef.current === recorder) {
                                 const include = vadSpeechSinceLastChunkRef.current || vadSpeechActiveRef.current;
                                 vadSpeechSinceLastChunkRef.current = false;
                                 if (!include) {
                                     return; // drop silent chunk
                                 }
                             }
-                            userChunksRef.current.push(e.data);
+                            chunks.push(e.data);
+                            if (userRecorderRef.current !== recorder) return;
                             pendingUserChunkQueueRef.current.push(e.data);
                             maybeUploadSegment('user');
                         }
@@ -945,10 +985,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             sendLiveText(initialMessage);
 
         } catch (error: any) {
+            if (!ownsConnection()) return;
             console.error('Failed to start Gemini Live session:', error);
             throw error;
         }
-    }, [cleanupAudioResources, maybeUploadSegment, sendLiveText]);
+    }, [cleanupAudioResources, maybeUploadSegment, sendLiveText, handleStreamingFailure, stopStreaming]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
@@ -1140,12 +1181,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     }
                     return 'audio/webm';
                 };
-                aiChunksRef.current = [];
+                const chunks: Blob[] = [];
+                aiChunksRef.current = chunks;
                 try {
-                    aiRecorderRef.current = new MediaRecorder(playbackDestinationRef.current.stream, { mimeType: pickType() });
-                    aiRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                    const recorder = new MediaRecorder(playbackDestinationRef.current.stream, { mimeType: pickType() });
+                    aiRecorderRef.current = recorder;
+                    recorder.ondataavailable = (e: BlobEvent) => {
                         if (e.data && e.data.size > 0) {
-                            aiChunksRef.current.push(e.data);
+                            chunks.push(e.data);
+                            if (aiRecorderRef.current !== recorder) return;
                             pendingAiChunkQueueRef.current.push(e.data);
                             maybeUploadSegment('ai');
                         }
