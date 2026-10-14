@@ -1,5 +1,5 @@
 import { parse } from 'acorn'
-import { analyze } from 'eslint-scope'
+import { analyze, type ScopeManager } from 'eslint-scope'
 import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from './react-component-source'
 
 const REACT_SANDBOX_GLOBALS = new Set([
@@ -31,25 +31,70 @@ const REACT_SANDBOX_GLOBALS = new Set([
   'ReactDOM', 'Recharts', 'ReactLeaflet',
 ])
 
-function collectTypeofIdentifiers(node: unknown, identifiers: Set<object>): void {
+function prepareBindingAst(node: unknown, identifiers: Set<object>): void {
   if (!node || typeof node !== 'object') return
   if (Array.isArray(node)) {
-    node.forEach(child => collectTypeofIdentifiers(child, identifiers))
+    node.forEach(child => prepareBindingAst(child, identifiers))
     return
   }
   const current = node as Record<string, unknown>
+  if (current.type === 'IfStatement') {
+    for (const key of ['consequent', 'alternate']) {
+      const clause = current[key] as { type?: string; range?: number[] } | null
+      if (clause?.type === 'FunctionDeclaration') {
+        current[key] = { type: 'BlockStatement', body: [clause], range: clause.range }
+      }
+    }
+  }
   const argument = current.argument as { type?: string } | undefined
   if (current.type === 'UnaryExpression' && current.operator === 'typeof' && argument?.type === 'Identifier') {
     identifiers.add(argument)
   }
-  Object.values(current).forEach(child => collectTypeofIdentifiers(child, identifiers))
+  Object.values(current).forEach(child => prepareBindingAst(child, identifiers))
+}
+
+function addLegacyFunctionBindings(source: string, manager: ScopeManager): boolean {
+  let changed = false
+  for (const scope of manager.scopes) {
+    if (scope.isStrict || (scope.type !== 'block' && scope.type !== 'switch')) continue
+    const owner = scope.variableScope
+    const ownerNode = owner.block
+    if (ownerNode.type !== 'FunctionDeclaration' && ownerNode.type !== 'FunctionExpression' && ownerNode.type !== 'ArrowFunctionExpression') continue
+    if (ownerNode.body.type !== 'BlockStatement') continue
+    for (const variable of scope.variables) {
+      if (variable.name === 'arguments' || owner.set.get(variable.name)?.defs.some(definition => definition.type === 'Parameter')) continue
+      const declarations = variable.defs.map(definition => definition.node)
+        .filter(node => node.type === 'FunctionDeclaration' && node.id && !node.async && !node.generator)
+        .sort((left, right) => right.range![0] - left.range![0])
+      if (!declarations.length) continue
+      let replacement = source
+      for (const declaration of declarations) {
+        const [start, end] = declaration.range!
+        replacement = replacement.slice(0, start) + 'var ' + variable.name + ';' + replacement.slice(end)
+      }
+      try {
+        parse(replacement, { ecmaVersion: 'latest', sourceType: 'script' })
+      } catch {
+        continue
+      }
+      const declaration = declarations[0]
+      if (declaration.type !== 'FunctionDeclaration' || !declaration.id) continue
+      ownerNode.body.body.push({
+        type: 'VariableDeclaration', kind: 'var', range: declaration.range,
+        declarations: [{ type: 'VariableDeclarator', id: { ...declaration.id }, init: null }],
+      })
+      changed = true
+    }
+  }
+  return changed
 }
 
 export function assertReactComponentBindings(code: string): void {
   const body = prepareReactComponentCode(code)
+  const source = '(function(' + REACT_COMPONENT_ARGUMENTS.join(',') + ') {\n' + body + '\n})'
   let ast
   try {
-    ast = parse('(function(' + REACT_COMPONENT_ARGUMENTS.join(',') + ') {\n' + body + '\n})', {
+    ast = parse(source, {
       ecmaVersion: 'latest',
       sourceType: 'script',
       ranges: true,
@@ -58,12 +103,16 @@ export function assertReactComponentBindings(code: string): void {
     throw new Error('Generated React code has invalid JavaScript syntax')
   }
   const safeTypeof = new Set<object>()
-  collectTypeofIdentifiers(ast, safeTypeof)
-  const scope = analyze(ast as unknown as Parameters<typeof analyze>[0], {
+  prepareBindingAst(ast, safeTypeof)
+  const options = {
     ecmaVersion: 2024,
     sourceType: 'script',
     ignoreEval: true,
-  }).globalScope
+  } as const
+  const tree = ast as unknown as Parameters<typeof analyze>[0]
+  let manager = analyze(tree, options)
+  if (addLegacyFunctionBindings(source, manager)) manager = analyze(tree, options)
+  const scope = manager.globalScope
   if (!scope) throw new Error('Generated React code bindings could not be analyzed')
   const unresolved = [...new Set(scope.through
     .filter(reference => !safeTypeof.has(reference.identifier) && !REACT_SANDBOX_GLOBALS.has(reference.identifier.name))
