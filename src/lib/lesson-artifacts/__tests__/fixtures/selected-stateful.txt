@@ -1,0 +1,39 @@
+function Component() {
+  const [selected, setSelected] = React.useState(null);
+  return (React.createElement('div', { style: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%)', fontFamily: 'system-ui, sans-serif', padding: '20px', boxSizing: 'border-box' } },
+  React.createElement('h1', { style: { fontSize: 'clamp(18px, 3vw, 26px)', color: '#166534', marginBottom: '8px', textAlign: 'center', fontWeight: 700 } }, '🌱 Photosynthesis Quiz'),
+  React.createElement('p', { style: { fontSize: 'clamp(15px, 2.5vw, 18px)', color: '#374151', marginBottom: '20px', textAlign: 'center' } }, 'Which gas does the plant ABSORB from the air?'),
+  React.createElement('div', { style: { position: 'relative', width: '100%', maxWidth: '360px', height: '220px', marginBottom: '24px' } },
+    React.createElement('svg', { viewBox: '0 0 360 220', width: '100%', height: '100%' },
+      React.createElement('rect', { x: '140', y: '160', width: '80', height: '50', rx: '8', fill: '#92400e' }),
+      React.createElement('rect', { x: '135', y: '155', width: '90', height: '12', rx: '4', fill: '#78350f' }),
+      React.createElement('line', { x1: '180', y1: '160', x2: '180', y2: '80', stroke: '#16a34a', strokeWidth: '6', strokeLinecap: 'round' }),
+      React.createElement('ellipse', { cx: '155', cy: '90', rx: '30', ry: '18', fill: '#22c55e', transform: 'rotate(-30 155 90)' }),
+      React.createElement('ellipse', { cx: '205', cy: '85', rx: '30', ry: '18', fill: '#16a34a', transform: 'rotate(30 205 85)' }),
+      React.createElement('ellipse', { cx: '160', cy: '115', rx: '28', ry: '16', fill: '#4ade80', transform: 'rotate(-20 160 115)' }),
+      React.createElement('ellipse', { cx: '200', cy: '110', rx: '28', ry: '16', fill: '#22c55e', transform: 'rotate(25 200 110)' }),
+      React.createElement('ellipse', { cx: '180', cy: '70', rx: '22', ry: '14', fill: '#86efac' }),
+      selected === 'co2' && React.createElement('g', null,
+        React.createElement('path', { d: 'M 40 60 Q 80 50 120 70', stroke: '#16a34a', strokeWidth: '3', fill: 'none', strokeDasharray: '8 4', className: 'animate-pulse' }),
+        React.createElement('polygon', { points: '120,70 112,62 114,74', fill: '#16a34a' }),
+        React.createElement('text', { x: '30', y: '50', fontSize: '14', fill: '#166534', fontWeight: 'bold' }), 'CO₂ →'),
+      selected === 'o2' && React.createElement('g', null,
+        React.createElement('path', { d: 'M 240 70 Q 280 50 320 60', stroke: '#dc2626', strokeWidth: '3', fill: 'none', strokeDasharray: '8 4', className: 'animate-pulse' }),
+        React.createElement('polygon', { points: '320,60 312,52 314,64', fill: '#dc2626' }),
+        React.createElement('text', { x: '270', y: '50', fontSize: '14', fill: '#dc2626', fontWeight: 'bold' }), 'O₂ →'),
+    ),
+    selected && React.createElement('div', { style: { position: 'absolute', bottom: '-8px', left: '50%', transform: 'translateX(-50%)', padding: '4px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: 600, background: selected === 'co2' ? '#dcfce7' : '#fee2e2', color: selected === 'co2' ? '#166534' : '#991b1b', whiteSpace: 'nowrap' } },
+      selected === 'co2' ? '✓ Correct! Plants absorb CO₂' : '✗ Not quite — that\'s what they RELEASE'
+    )
+  ),
+  React.createElement('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '400px' } },
+    React.createElement('button', { onClick: () => setSelected('co2'), style: { flex: '1 1 160px', minWidth: '140px', padding: '18px 24px', fontSize: 'clamp(16px, 2.5vw, 20px)', fontWeight: 700, borderRadius: '16px', border: selected === 'co2' ? '3px solid #16a34a' : '3px solid #d1d5db', background: selected === 'co2' ? '#dcfce7' : 'linear-gradient(135deg, #4ade80, #16a34a)', color: selected === 'co2' ? '#166534' : '#fff', cursor: 'pointer', transition: 'all 0.2s', boxShadow: selected === 'co2' ? '0 4px 20px rgba(22,163,74,0.3)' : '0 4px 12px rgba(0,0,0,0.1)', minHeight: '56px' } }, '🫧 Carbon Dioxide'),
+    React.createElement('button', { onClick: () => setSelected('o2'), style: { flex: '1 1 160px', minWidth: '140px', padding: '18px 24px', fontSize: 'clamp(16px, 2.5vw, 20px)', fontWeight: 700, borderRadius: '16px', border: selected === 'o2' ? '3px solid #dc2626' : '3px solid #d1d5db', background: selected === 'o2' ? '#fee2e2' : 'linear-gradient(135deg, #93c5fd, #3b82f6)', color: selected === 'o2' ? '#991b1b' : '#fff', cursor: 'pointer', transition: 'all 0.2s', boxShadow: selected === 'o2' ? '0 4px 20px rgba(220,38,38,0.3)' : '0 4px 12px rgba(0,0,0,0.1)', minHeight: '56px' } }, '💨 Oxygen')
+  ),
+  selected && React.createElement('div', { style: { marginTop: '16px', padding: '12px 20px', borderRadius: '12px', background: '#f9fafb', border: '1px solid #e5e7eb', fontSize: '15px', color: '#374151', maxWidth: '380px', textAlign: 'center', lineHeight: 1.5 } },
+    selected === 'co2'
+      ? 'Plants take in carbon dioxide (CO₂) through tiny pores called stomata. They use sunlight to convert it into sugar for energy!'
+      : 'Oxygen (O₂) is what plants RELEASE as a byproduct. That\'s why forests help us breathe!'
+  )
+));
+}
