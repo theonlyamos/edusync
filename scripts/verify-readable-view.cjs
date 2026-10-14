@@ -14,17 +14,22 @@ function optionsFrom(args) {
   const result = {};
   for (let index = 0; index < args.length; index++) {
     const name = args[index];
-    assert(['--playwright-package', '--chromium', '--output-dir'].includes(name), `Unknown option: ${name}`);
+    if (name === '--toolbar') {
+      result.toolbar = true;
+      continue;
+    }
+    assert(['--playwright-package', '--chromium', '--output-dir', '--toolbar-class'].includes(name), `Unknown option: ${name}`);
     const value = args[++index];
     assert(value && !value.startsWith('--'), `Missing value for ${name}`);
     result[name.slice(2)] = value;
   }
+  assert(!result['toolbar-class'] || result.toolbar, '--toolbar-class requires --toolbar');
   return result;
 }
 
 const localRequire = name => require(require.resolve(name, { paths: [repo] }));
 
-async function harness() {
+async function harness(toolbar = false, toolbarClass) {
   const ts = localRequire('typescript');
   const configCache = new Map();
   function loadConfig(file) {
@@ -41,7 +46,8 @@ async function harness() {
     return configModule.exports;
   }
   const cssFiles = ['src/components/lessons/ReactRenderer.tsx', 'src/components/lessons/LearningActivityView.tsx', 'src/components/ui/button.tsx'];
-  const config = { ...loadConfig('tailwind.config.ts').default, content: cssFiles.filter(file => fs.existsSync(path.join(repo, file))).map(file => ({ raw: fs.readFileSync(path.join(repo, file), 'utf8'), extension: 'tsx' })) };
+  const toolbarCss = toolbar ? [{ raw: `flex items-center justify-end gap-2 h-11 w-11 w-4 h-4 ${toolbarClass || ''}`, extension: 'tsx' }] : [];
+  const config = { ...loadConfig('tailwind.config.ts').default, content: [...cssFiles.filter(file => fs.existsSync(path.join(repo, file))).map(file => ({ raw: fs.readFileSync(path.join(repo, file), 'utf8'), extension: 'tsx' })), ...toolbarCss] };
   const css = (await localRequire('postcss')([localRequire('tailwindcss')(config)]).process(fs.readFileSync(path.join(repo, 'src/app/globals.css'), 'utf8'), { from: undefined })).css;
   const runtimeConfig = loadConfig('tailwind.lesson-runtime.config.ts').default;
   runtimeConfig.content = runtimeConfig.content.map(file => path.join(repo, file));
@@ -55,15 +61,29 @@ async function harness() {
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {ReactRenderer} from './src/components/lessons/ReactRenderer';
+import * as ActivityView from './src/components/lessons/LearningActivityView';
+import {Button} from './src/components/ui/button';
+import {RefreshCw,ChevronLeft,ChevronRight} from 'lucide-react';
 import {vizReducer,initialVizState} from './src/reducers/visualizationReducer';
+const toolbarMode=${JSON.stringify(toolbar)};
+const toolbarButtonClass=${JSON.stringify(toolbarClass || 'h-11 w-11')};
+const ToolbarProvider=ActivityView['LearningActivityToolbar']||React.Fragment;
+const ExpandSlot=ActivityView['LearningActivityExpandSlot']||(()=>null);
 function App(){
  const [state,dispatch]=React.useReducer(vizReducer,initialVizState,s=>vizReducer(s,{type:'LOAD_VISUALIZATIONS',payload:[{...window.__fixture,id:'first'},{...window.__fixture,code:window.__fixture.code+'\\n',id:'second'}]}));
  window.__history=state;
- return React.createElement(React.Fragment,null,
+ const previous=()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex-1});
+ const next=()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex+1});
+ const iconButton=(label,icon,props={})=>React.createElement(Button,{type:'button',size:'icon',variant:'ghost',className:toolbarButtonClass,title:label,'aria-label':label,...props},React.createElement(icon,{className:'w-4 h-4','aria-hidden':true}));
+ return React.createElement(toolbarMode?ToolbarProvider:React.Fragment,toolbarMode?{buttonClassName:toolbarButtonClass}:null,
  React.createElement('nav',{id:'history','aria-label':'Activity history'},
- React.createElement('button',{onClick:()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex-1}),disabled:state.currentVizIndex===0},'Previous'),
+ toolbarMode?React.createElement('div',{id:'visualization-toolbar',className:'flex items-center justify-end gap-2',role:'group','aria-label':'Visualization controls'},
+ iconButton('Regenerate visualization',RefreshCw),React.createElement(ExpandSlot),
+ iconButton('Previous',ChevronLeft,{onClick:previous,disabled:state.currentVizIndex===0}),
+ iconButton('Next',ChevronRight,{onClick:next,disabled:state.currentVizIndex===state.visualizations.length-1})):
+ React.createElement('button',{onClick:previous,disabled:state.currentVizIndex===0},'Previous'),
  React.createElement('span',null,(state.currentVizIndex+1)+' / '+state.visualizations.length),
- React.createElement('button',{onClick:()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex+1}),disabled:state.currentVizIndex===state.visualizations.length-1},'Next')),
+ !toolbarMode&&React.createElement('button',{onClick:next,disabled:state.currentVizIndex===state.visualizations.length-1},'Next')),
  React.createElement('div',{id:'preview'},React.createElement(ReactRenderer,{code:state.code,onError:error=>window.__renderError=error,onReady:()=>window.__readyCount=(window.__readyCount||0)+1})));
 }
 createRoot(document.getElementById('app')).render(React.createElement(App));`;
@@ -77,7 +97,7 @@ createRoot(document.getElementById('app')).render(React.createElement(App));`;
   const safeJson = value => JSON.stringify(value).replace(/</g, '\\u003c');
   const safeScript = value => value.replace(/<\/script/gi, '<\\/script');
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css.replace(/<\/style/gi, '<\\/style')}</style><style>
-body{margin:0;font-family:Arial,sans-serif}#app{height:760px;margin:80px 24px 24px}#preview{height:100%;background:white;border-radius:8px}#history{position:absolute;top:20px;left:24px;display:flex;align-items:center;gap:16px}#history button{min-height:44px;padding:8px 12px;border:1px solid #bbb;border-radius:8px}
+body{margin:0;font-family:Arial,sans-serif}#app{height:760px;margin:80px 24px 24px}#preview{height:100%;background:white;border-radius:8px}#history{position:absolute;top:20px;${toolbar ? 'right:24px' : 'left:24px'};display:flex;align-items:center;gap:16px}${toolbar ? '' : '#history button{min-height:44px;padding:8px 12px;border:1px solid #bbb;border-radius:8px}'}
 @media(max-width:639px){#app{height:620px;margin:80px 12px 24px}#history{left:12px}}
 </style></head><body><div id="app"></div><script>
 window.__fixture=${safeJson(fixture)};const assets=${safeJson(assets)};window.__blockedFetches=[];
@@ -131,8 +151,79 @@ async function noBodyOverflow(page, stage) {
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${stage}: page horizontal overflow`);
 }
 
+async function toolbarAppearance(page, customClass) {
+  const toolbar = page.getByRole('group', { name: 'Visualization controls', exact: true });
+  const regenerate = toolbar.getByRole('button', { name: 'Regenerate visualization', exact: true });
+  const expand = toolbar.getByRole('button', { name: 'Expand learning activity', exact: true });
+  const labels = await toolbar.locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
+  assert.deepEqual(labels, ['Regenerate visualization', 'Expand learning activity', 'Previous', 'Next'], 'Expand must follow Regenerate in the shared visualization toolbar');
+  assert.equal(await page.locator('button[aria-label="Expand learning activity"]').count(), 1, 'Duplicate Expand trigger');
+  assert.equal(await expand.getAttribute('title'), 'Expand learning activity', 'Expand icon needs its accessible tooltip');
+  const boxes = await Promise.all([regenerate, expand, toolbar.getByRole('button', { name: 'Previous', exact: true }), toolbar.getByRole('button', { name: 'Next', exact: true })].map(button => button.boundingBox()));
+  boxes.forEach(box => assert(box && box.width > 0 && box.height > 0 && (customClass || box.width >= 43.99 && box.height >= 43.99), 'Toolbar touch target smaller than 44px'));
+  assert(Math.abs(boxes[1].width - boxes[0].width) < .01 && Math.abs(boxes[1].height - boxes[0].height) < .01, 'Expand dimensions differ from Regenerate');
+  for (let index = 1; index < boxes.length; index++) {
+    assert(boxes[index].x >= boxes[index - 1].x + boxes[index - 1].width - .5 && Math.abs(boxes[index].y - boxes[0].y) < .5, 'Toolbar icon order or alignment changed');
+  }
+  const appearance = button => button.evaluate(element => {
+    const style = getComputedStyle(element);
+    const properties = ['width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'backgroundColor', 'color', 'borderTopWidth', 'borderTopStyle', 'borderTopColor', 'borderRadius', 'boxShadow', 'outlineWidth', 'outlineStyle', 'outlineColor', 'fontSize', 'fontWeight', 'transitionProperty', 'transitionDuration'];
+    const icon = element.querySelector('svg'), iconStyle = icon && getComputedStyle(icon);
+    return { button: Object.fromEntries(properties.map(property => [property, style[property]])), icon: iconStyle && { width: iconStyle.width, height: iconStyle.height, strokeWidth: iconStyle.strokeWidth }, focusVisible: element.matches(':focus-visible') };
+  });
+  const settleStyles = () => page.waitForTimeout(180);
+  const result = {};
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => document.activeElement?.blur());
+  await settleStyles();
+  result.normal = { regenerate: await appearance(regenerate), expand: await appearance(expand) };
+  assert.deepEqual(result.normal.expand, result.normal.regenerate, 'Expand normal styling differs from Regenerate');
+  assert.equal(result.normal.expand.icon.width, '16px', 'Expand icon width differs from the toolbar icons');
+  assert.equal(result.normal.expand.icon.height, '16px', 'Expand icon height differs from the toolbar icons');
+  await regenerate.hover();
+  await settleStyles();
+  const regenerateHover = await appearance(regenerate);
+  await expand.hover();
+  await settleStyles();
+  result.hover = { regenerate: regenerateHover, expand: await appearance(expand) };
+  assert.deepEqual(result.hover.expand, result.hover.regenerate, 'Expand hover styling differs from Regenerate');
+  await page.mouse.move(0, 0);
+  await page.keyboard.press('Tab');
+  await regenerate.focus();
+  await settleStyles();
+  const regenerateFocus = await appearance(regenerate);
+  await expand.focus();
+  await settleStyles();
+  result.focus = { regenerate: regenerateFocus, expand: await appearance(expand) };
+  assert(result.focus.expand.focusVisible && result.focus.regenerate.focusVisible, 'Toolbar keyboard focus indicator unavailable');
+  assert.deepEqual(result.focus.expand, result.focus.regenerate, 'Expand focus styling differs from Regenerate');
+  await page.evaluate(() => document.activeElement?.blur());
+  return result;
+}
+
+function denyNativeCapture() {
+  const state = { nativeCaptureCalls: 0, ready: false };
+  window.__offlineCaptureGuard = state;
+  const deny = () => { state.nativeCaptureCalls++; throw Error('OFFLINE_NATIVE_CAPTURE_PROHIBITED'); };
+  const lock = (target, name, value) => { if (target) Object.defineProperty(target, name, { value, writable: false, configurable: false }); };
+  const navigator = window.navigator;
+  const media = navigator.mediaDevices;
+  for (const name of ['getUserMedia', 'getDisplayMedia']) {
+    lock(window.MediaDevices?.prototype, name, deny);
+    lock(media, name, deny);
+  }
+  const guardedMedia = media || { getUserMedia: deny, getDisplayMedia: deny };
+  lock(navigator, 'mediaDevices', guardedMedia);
+  for (const name of ['getUserMedia', 'webkitGetUserMedia', 'mozGetUserMedia', 'msGetUserMedia']) {
+    lock(window.Navigator.prototype, name, deny);
+    lock(navigator, name, deny);
+  }
+  lock(window, 'MediaRecorder', undefined);
+  state.ready = true;
+}
+
 async function viewportCase(context, html, size, report, outputDir) {
-  const item = { name: `readable-${size.width}`, viewport: size, assertionsPassed: false };
+  const item = { name: `${report.toolbar ? 'toolbar' : 'readable'}-${size.width}`, viewport: size, assertionsPassed: false };
   report.cases.push(item);
   const page = await context.newPage();
   await page.setViewportSize(size);
@@ -146,7 +237,14 @@ async function viewportCase(context, html, size, report, outputDir) {
   const expand = page.getByRole('button', { name: 'Expand learning activity', exact: true });
   assert.equal(await expand.count(), 1, 'Activity must provide an accessible Expand learning activity control');
   const expandRect = await expand.boundingBox();
-  assert(expandRect && expandRect.width >= 43.99 && expandRect.height >= 43.99, 'Expand touch target smaller than 44px');
+  assert(expandRect && expandRect.width > 0 && expandRect.height > 0 && (report.toolbarClass || expandRect.width >= 43.99 && expandRect.height >= 43.99), 'Expand touch target smaller than 44px');
+  if (report.toolbar) {
+    try { item.toolbarAppearance = await toolbarAppearance(page, report.toolbarClass); }
+    catch (error) {
+      await page.screenshot({ path: path.join(outputDir, `${item.name}-toolbar-failure.png`), fullPage: true });
+      throw error;
+    }
+  }
   assert.equal(await page.locator('iframe').getAttribute('sandbox'), 'allow-scripts', 'Sandbox permissions changed');
   await frame.getByRole('button', { name: 'Choose Sun', exact: true }).click();
   await frame.evaluate(() => { window.__fixtureIdentity = 'persistent-quiz'; });
@@ -156,12 +254,14 @@ async function viewportCase(context, html, size, report, outputDir) {
   item.inline = await measurements(page, frame);
   readable(item.inline, `${size.width}px inline`);
   await noBodyOverflow(page, 'inline');
+  if (report.toolbar) await page.screenshot({ path: path.join(outputDir, `${item.name}-inline.png`), fullPage: true });
   await expand.focus();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Learning activity', exact: true });
   await dialog.waitFor({ state: 'visible' });
   assert(await dialog.evaluate(el => el.matches(':modal')), 'Expanded activity must be modal');
   assert(await page.evaluate(() => document.querySelector('dialog').contains(document.activeElement)), 'Expanded dialog did not receive focus');
+  if (report.toolbar) assert.equal(await page.getByRole('button', { name: 'Expand learning activity', exact: true }).count(), 0, 'Toolbar Expand remains visible while expanded');
   await page.evaluate(() => {
     window.postMessage({ type: 'lesson-viewer-escape' }, '*');
     return new Promise(resolve => setTimeout(resolve, 0));
@@ -229,16 +329,21 @@ async function viewportCase(context, html, size, report, outputDir) {
   assert.equal(await page.evaluate(() => document.body.style.overflow), initialBodyOverflow, 'Closing the activity left page scrolling locked');
   await settled(frame);
   await unchanged(page, frame, history, 'iframe Escape close');
-  await expand.click();
+  if (report.toolbar) {
+    await expand.focus();
+    await page.keyboard.press('Space');
+  } else await expand.click();
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: 'Close expanded activity', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('dialog').matches(':modal'));
+  assert(await expand.evaluate(el => document.activeElement === el), 'Close button did not restore focus to Expand');
   await unchanged(page, frame, history, 'close button');
   await expand.click();
   await dialog.waitFor({ state: 'visible' });
   await dialog.getByRole('button', { name: 'Fit', exact: true }).focus();
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('dialog').matches(':modal'));
+  assert(await expand.evaluate(el => document.activeElement === el), 'Parent Escape did not restore focus to Expand');
   await unchanged(page, frame, history, 'parent Escape close');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.waitForFunction(() => window.__history.currentVizIndex === 1 && window.__readyCount === 2);
@@ -247,6 +352,8 @@ async function viewportCase(context, html, size, report, outputDir) {
   await page.waitForFunction(() => window.__history.currentVizIndex === 0 && window.__readyCount === 3);
   assert.match(await page.locator('#history').innerText(), /1 \/ 2/, 'Previous history item unavailable after close');
   assert.deepEqual(await page.evaluate(() => window.__blockedFetches), [], 'Unexpected harness fetch');
+  item.captureGuards = await Promise.all(page.frames().map(child => child.evaluate(() => window.__offlineCaptureGuard)));
+  assert(item.captureGuards.every(state => state?.ready && state.nativeCaptureCalls === 0), 'Offline capture guard missing or native capture attempted');
   item.assertionsPassed = true;
   await page.close();
 }
@@ -256,18 +363,21 @@ async function run() {
   const outputDir = options['output-dir'] ? path.resolve(options['output-dir']) : fs.mkdtempSync(path.join(os.tmpdir(), 'readable-view-'));
   fs.mkdirSync(outputDir, { recursive: true });
   const reportPath = path.join(outputDir, 'readable-view.json');
-  const report = { utc: new Date().toISOString(), kind: 'offline actual ReactRenderer, LearningActivityView, and visualizationReducer', chromiumSandbox: true, externalNetworkBlocked: true, assertionsPassed: false, fixture: 'readable-learning-activity.json', scope: 'Authored source layout and viewer behavior; does not establish quality of new model output. Hidden-frame focus case styles the actual iframe visibility as used during renderer loading/errors; it verifies the viewer fallback without claiming a renderer error-flow test.', networkRequests: [], errors: [], cases: [] };
+  const report = { utc: new Date().toISOString(), nodePid: process.pid, kind: 'offline actual ReactRenderer, LearningActivityView, and visualizationReducer', toolbar: !!options.toolbar, toolbarClass: options['toolbar-class'] || null, chromiumSandbox: true, fakeMediaDevices: true, nativeCaptureDenied: true, externalNetworkBlocked: true, assertionsPassed: false, browserClosed: false, fixture: 'readable-learning-activity.json', scope: 'Authored source layout and viewer behavior; does not establish quality of new model output. Hidden-frame focus case styles the actual iframe visibility as used during renderer loading/errors; it verifies the viewer fallback without claiming a renderer error-flow test.', networkRequests: [], socketRequests: 0, errors: [], cases: [] };
   report.sourceHashes = Object.fromEntries(['src/components/lessons/ReactRenderer.tsx', 'src/components/lessons/LearningActivityView.tsx', 'src/lib/lesson-artifacts/sandbox-responsive.ts', 'scripts/verify-readable-view.cjs', 'scripts/fixtures/readable-learning-activity.json'].filter(file => fs.existsSync(path.join(repo, file))).map(file => [file, crypto.createHash('sha256').update(fs.readFileSync(path.join(repo, file))).digest('hex')]));
   let browser;
   try {
-    const html = await harness();
+    const html = await harness(!!options.toolbar, options['toolbar-class']);
     const { chromium } = options['playwright-package'] ? require(options['playwright-package']) : localRequire('playwright');
-    browser = await chromium.launch({ headless: true, chromiumSandbox: true, ...(options.chromium ? { executablePath: path.resolve(options.chromium) } : {}) });
+    browser = await chromium.launch({ headless: true, chromiumSandbox: true, args: ['--use-fake-device-for-media-stream'], ...(options.chromium ? { executablePath: path.resolve(options.chromium) } : {}) });
     const context = await browser.newContext({ serviceWorkers: 'block' });
+    await context.addInitScript(denyNativeCapture);
     await context.route('**/*', route => { report.networkRequests.push(route.request().url().split('?')[0]); return route.abort(); });
+    await context.routeWebSocket('**/*', socket => { report.socketRequests++; socket.close(); });
     context.on('page', page => page.on('pageerror', error => report.errors.push(error.message)));
     for (const size of sizes) await viewportCase(context, html, size, report, outputDir);
     assert.deepEqual(report.networkRequests, [], 'Unexpected network attempted');
+    assert.equal(report.socketRequests, 0, 'Unexpected WebSocket attempted');
     assert.deepEqual(report.errors, [], 'Browser errors');
     assert.equal(report.cases.length, 3, 'Missing viewport regression case');
     assert(report.cases.every(item => item.assertionsPassed), 'Incomplete viewport regression');
@@ -277,7 +387,7 @@ async function run() {
     process.exitCode = 1;
   } finally {
     if (browser) {
-      try { await browser.close(); } catch (error) { report.assertionsPassed = false; report.closeFailure = error.message; process.exitCode = 1; }
+      try { await browser.close(); report.browserClosed = true; } catch (error) { report.assertionsPassed = false; report.closeFailure = error.message; process.exitCode = 1; }
     }
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   }

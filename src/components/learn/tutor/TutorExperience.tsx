@@ -17,6 +17,7 @@ import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -781,6 +782,7 @@ export const TutorExperience = ({
             </CardContent>
           </Card>
         ) : code && library ? (
+          <LearningActivityToolbar>
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
               <div className="relative w-full z-10 flex flex-wrap items-center justify-end gap-2">
@@ -795,8 +797,8 @@ export const TutorExperience = ({
                       <ToggleGroupItem value="code">Code</ToggleGroupItem>
                     </ToggleGroup>
                   )}
-                  {visualizations.length > 0 && (
-                    <div className="flex items-center gap-2 bg-background/95">
+                  <div className="flex items-center gap-2 bg-background/95">
+                    {visualizations.length > 0 && (
                       <Button
                         size="icon"
                         variant="ghost"
@@ -807,14 +809,19 @@ export const TutorExperience = ({
                       >
                         <RefreshCw className="w-4 h-4" />
                       </Button>
+                    )}
+                    {show === 'render' && <LearningActivityExpandSlot />}
+                    {visualizations.length > 0 && (
+                      <>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization" aria-label="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization" aria-label="Next visualization">
                         <ChevronRight className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -852,6 +859,7 @@ export const TutorExperience = ({
               </div>
             </CardContent>
           </Card>
+          </LearningActivityToolbar>
         ) : (
           preparingActivity ? (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
