@@ -30,6 +30,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Locate Chrome for offline browser regression
+        run: |
+          chrome_path="$(command -v google-chrome)"
+          test -x "$chrome_path"
+          printf 'CHROMIUM_EXECUTABLE_PATH=%s\n' "$chrome_path" >> "$GITHUB_ENV"
+
       - name: Test
         run: pnpm test
 
