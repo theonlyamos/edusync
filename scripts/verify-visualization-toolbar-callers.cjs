@@ -226,8 +226,8 @@ async function run() {
     ];
     const fixtures = await Promise.all(scenarios.map(async scenario => ({ scenario, html: await fixtureHtml(prepared, scenario) })));
     const { chromium } = options['playwright-package'] ? require(options['playwright-package']) : localRequire('playwright');
-    report.chromium = options.chromium || path.join(process.env.ProgramFiles || 'C:/Program Files', 'Google/Chrome/Application/chrome.exe');
-    browser = await chromium.launch({ executablePath: report.chromium, headless: true, chromiumSandbox: true, args: ['--use-fake-device-for-media-stream'] });
+    report.chromium = options.chromium ? path.resolve(options.chromium) : chromium.executablePath();
+    browser = await chromium.launch({ headless: true, chromiumSandbox: true, args: ['--use-fake-device-for-media-stream'], ...(options.chromium ? { executablePath: report.chromium } : {}) });
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await context.addInitScript(denyCapture);
     await context.route('**/*', route => { report.networkRequests.push(route.request().url().split('?')[0]); return route.abort(); });
