@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 const { complete } = vi.hoisted(() => ({ complete: vi.fn() }))
 vi.mock('openai', () => ({
@@ -9,6 +10,13 @@ vi.mock('openai', () => ({
 vi.mock('@/lib/imageUtils.server', () => ({ convertImageUrlsToBase64: async (code: string) => code }))
 
 import { runVisualizeGeneration } from '../visualize-ai-task'
+
+const brokenQuiz = readFileSync(new URL('../lesson-artifacts/__tests__/fixtures/selected-missing.txt', import.meta.url), 'utf8')
+const statefulQuiz = readFileSync(new URL('../lesson-artifacts/__tests__/fixtures/selected-stateful.txt', import.meta.url), 'utf8')
+const reactResponse = (code: string) => ({ choices: [{ message: { tool_calls: [{
+  type: 'function',
+  function: { name: 'display_visual_aid', arguments: JSON.stringify({ library: 'react', code, explanation: 'Choose the gas.' }) },
+}] } }] })
 
 beforeEach(() => {
   complete.mockReset().mockResolvedValue({ choices: [{ message: { tool_calls: [{
@@ -21,6 +29,22 @@ beforeEach(() => {
 })
 
 describe('responsive visualization generation', () => {
+  it('rejects the captured missing-state quiz and returns the valid next bounded attempt unchanged', async () => {
+    complete.mockResolvedValueOnce(reactResponse(brokenQuiz)).mockResolvedValueOnce(reactResponse(statefulQuiz))
+
+    const result = await runVisualizeGeneration({ task_description: 'Create a photosynthesis quiz.' })
+    expect(result.code).toBe(statefulQuiz)
+    expect(complete).toHaveBeenCalledTimes(2)
+  })
+
+  it('never returns the captured missing-state quiz after the existing three attempts', async () => {
+    complete.mockResolvedValue(reactResponse(brokenQuiz))
+
+    await expect(runVisualizeGeneration({ task_description: 'Create a photosynthesis quiz.' }))
+      .rejects.toThrow('Generated React code has unresolved bindings: selected, setSelected')
+    expect(complete).toHaveBeenCalledTimes(3)
+  })
+
   it('rejects malformed generated React syntax and uses the existing bounded retry', async () => {
     const response = (code: string) => ({ choices: [{ message: { tool_calls: [{
       type: 'function',
