@@ -56,7 +56,9 @@ const guardScript = `
       workersLocked: locked(window, 'Worker') && locked(window, 'SharedWorker'),
       canReadParent,
       origin: self.origin,
-      documentUrl: document.URL
+      documentUrl: document.URL,
+      crossOriginIsolated: self.crossOriginIsolated,
+      browserBindings: { DOMException: typeof DOMException, FormData: typeof FormData, HTMLInputElement: typeof HTMLInputElement, Audio: typeof Audio, AudioContext: typeof AudioContext, SharedArrayBuffer: typeof SharedArrayBuffer }
     };
   }
 `;
@@ -71,6 +73,8 @@ type SecurityState = {
   canReadParent: boolean;
   origin: string;
   documentUrl: string;
+  crossOriginIsolated: boolean;
+  browserBindings: Record<string, string>;
 };
 
 type FrameEvidence = {
@@ -291,6 +295,8 @@ describe('generated React bindings in the offline browser sandbox', () => {
         expect(frame.probe!.security.canReadParent).toBe(false);
         expect(frame.probe!.security.origin).toBe('null');
         expect(frame.probe!.security.documentUrl).toBe('about:srcdoc');
+        expect(frame.probe!.security.crossOriginIsolated).toBe(false);
+        expect(frame.probe!.security.browserBindings).toEqual({ DOMException: 'function', FormData: 'function', HTMLInputElement: 'function', Audio: 'function', AudioContext: 'function', SharedArrayBuffer: 'undefined' });
       }
       const broken = evidence.frames.find(frame => frame.kind === 'missing')!;
       expect(broken.messages).toContainEqual({ type: 'react-render-error', error: 'selected is not defined' });
