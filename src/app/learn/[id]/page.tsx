@@ -14,6 +14,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -743,9 +744,10 @@ function HomeComponent() {
             {/* Right Panel - Preview/Code Editor */}
             <div data-visualization-viewport className="min-w-0 flex-1 flex flex-col ml-0 overflow-y-auto" ref={vizRef}>
               {code && library ? (
+                <LearningActivityToolbar buttonClassName="h-9 w-9">
                 <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {/* Chat Panel Toggle - Only show on large screens */}
                         <Button
@@ -768,7 +770,7 @@ function HomeComponent() {
                         </Button>
                         <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                         {debugMode && (
                           <ToggleGroup
                             type="single"
@@ -830,6 +832,7 @@ function HomeComponent() {
                         >
                           <RefreshCw className="w-4 h-4" />
                         </Button>
+                        {show === 'render' && <LearningActivityExpandSlot />}
                         {visualizations.length > 0 && (
                           <div className="flex items-center gap-2">
                             <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
@@ -883,6 +886,7 @@ function HomeComponent() {
                     </div>
                   </CardContent>
                 </Card>
+                </LearningActivityToolbar>
               ) : (
                 generatingVisualization ? (
                   <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">

@@ -1,10 +1,31 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 import { Expand, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+type ActivityToolbar = {
+  target: HTMLSpanElement | null;
+  setTarget: Dispatch<SetStateAction<HTMLSpanElement | null>>;
+  buttonClassName: string;
+};
+
+const ActivityToolbarContext = createContext<ActivityToolbar | null>(null);
+
+export function LearningActivityToolbar({ children, buttonClassName = 'h-11 w-11' }: { children: ReactNode; buttonClassName?: string }) {
+  const [target, setTarget] = useState<HTMLSpanElement | null>(null);
+  const value = useMemo(() => ({ target, setTarget, buttonClassName }), [target, buttonClassName]);
+  return <ActivityToolbarContext.Provider value={value}>{children}</ActivityToolbarContext.Provider>;
+}
+
+export function LearningActivityExpandSlot() {
+  const toolbar = useContext(ActivityToolbarContext);
+  return toolbar ? <span ref={toolbar.setTarget} className="contents" /> : null;
+}
+
 export function LearningActivityView({ children }: { children: ReactNode }) {
+  const toolbar = useContext(ActivityToolbarContext);
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(1);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -60,6 +81,12 @@ export function LearningActivityView({ children }: { children: ReactNode }) {
     };
   }, [expanded]);
 
+  const expandButton = (
+    <Button ref={expandRef} type="button" variant={toolbar ? 'ghost' : 'outline'} size={toolbar ? 'icon' : 'sm'} className={expanded ? 'hidden' : toolbar ? toolbar.buttonClassName : 'h-11 gap-2'} title="Expand learning activity" aria-label="Expand learning activity" onClick={open}>
+      <Expand className="h-4 w-4" aria-hidden="true" />{toolbar ? null : 'Expand'}
+    </Button>
+  );
+
   return (
     <dialog
       ref={dialogRef}
@@ -84,10 +111,8 @@ export function LearningActivityView({ children }: { children: ReactNode }) {
           <X className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
-      <div className="flex shrink-0 items-center justify-end gap-2">
-        <Button ref={expandRef} type="button" variant="outline" size="sm" className={expanded ? 'hidden' : 'h-11 gap-2'} aria-label="Expand learning activity" onClick={open}>
-          <Expand className="h-4 w-4" aria-hidden="true" />Expand
-        </Button>
+      <div className={toolbar && !expanded ? 'hidden' : 'flex shrink-0 items-center justify-end gap-2'}>
+        {toolbar ? toolbar.target && createPortal(expandButton, toolbar.target) : expandButton}
         <div className={expanded ? 'flex w-full items-center gap-2' : 'hidden'} role="group" aria-label="Activity zoom controls">
           <Button type="button" variant="outline" className="h-11" onClick={fit}>Fit</Button>
           <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Zoom out" disabled={zoom === 1} onClick={() => setZoom(value => Math.max(1, value - 0.5))}>

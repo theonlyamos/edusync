@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { VisualizationSkeleton } from '@/components/lessons/VisualizationSkeleton';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 import type { VisualizationDimensions } from '@/lib/visualization-layout';
 import type { InteractiveElement, InteractiveElementUpdate, InteractiveLibrary } from './types';
 
@@ -68,11 +69,12 @@ export function InteractiveElementCard({
   };
 
   return (
+    <LearningActivityToolbar buttonClassName="h-11 w-11 text-muted-foreground xl:h-7 xl:w-7">
     <Card className="mt-4 overflow-hidden border-muted">
       <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium">Interactive visualization</CardTitle>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {explanation ? (
               <Button
                 type="button"
@@ -102,6 +104,7 @@ export function InteractiveElementCard({
                 <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
               </Button>
             ) : null}
+            <LearningActivityExpandSlot />
           </div>
         </div>
         {explanation && showExplanation ? (
@@ -139,5 +142,6 @@ export function InteractiveElementCard({
         </div>
       </CardContent>
     </Card>
+    </LearningActivityToolbar>
   );
 }
