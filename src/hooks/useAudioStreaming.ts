@@ -3,7 +3,7 @@ import { GoogleGenAI, Modality, LiveServerMessage, FunctionResponseScheduling, S
 import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
-import { convertToWav } from '@/lib/audio/wav';
+import { PcmPlaybackQueue } from '@/lib/audio/pcm-playback-queue';
 import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
@@ -77,7 +77,6 @@ export function useAudioStreaming(
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
-    const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to hold mutable values that don't trigger re-renders
     const isStreamingRef = useRef(false);
@@ -87,9 +86,8 @@ export function useAudioStreaming(
     const processorRef = useRef<AudioWorkletNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
-    const nextPlaybackTimeRef = useRef<number>(0);
+    const playbackQueueRef = useRef<PcmPlaybackQueue | null>(null);
     const tutorTurnsRef = useRef(createTutorTurnTracker());
-    const decodingAudioRef = useRef(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micAnalyserRef = useRef<AnalyserNode | null>(null);
     const toolCallListenerRef = useRef<((name: string, args: any, callId?: string) => void) | null>(null);
@@ -113,7 +111,7 @@ export function useAudioStreaming(
     // earlier-declared callbacks. Calling through a ref avoids the temporal-dead-zone
     // forward reference the bundler rejects, and keeps the existing xRef.current?.(...) idiom.
     const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number) => Promise<void>) | null>(null);
-    const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], audioParts: string[]) => void) | null>(null);
+    const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => void) | null>(null);
     const playGeminiAudioChunksRef = useRef<((rawData: string[]) => void) | null>(null);
     /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
     const liveUserTranscriptRef = useRef('');
@@ -181,11 +179,9 @@ export function useAudioStreaming(
             },
             isIdle: () => {
                 const current = lessonContextRef.current;
-                const playback = playbackCtxRef.current;
                 return current?.learningRunId === scope.runId && current.activeObjective?.id === scope.objectiveId
                     && current.activeObjective.revision === scope.objectiveRevision && !!geminiLiveSessionRef.current
-                    && !vadSpeechActiveRef.current && decodingAudioRef.current === 0
-                    && (!playback || playback.state === 'closed' || nextPlaybackTimeRef.current <= playback.currentTime)
+                    && !vadSpeechActiveRef.current && (!playbackQueueRef.current || playbackQueueRef.current.isIdle())
                     && tutorTurnsRef.current.isIdle();
             },
             send: (context) => {
@@ -316,6 +312,10 @@ export function useAudioStreaming(
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
         tutorTurnsRef.current.reset();
+        const queue = playbackQueueRef.current;
+        playbackQueueRef.current = null;
+        queue?.stop();
+        playbackDestinationRef.current = null;
         // Disconnect and stop the audio processor
         processorRef.current?.disconnect();
         processorRef.current = null;
@@ -371,12 +371,6 @@ export function useAudioStreaming(
             reconnectTimeoutRef.current = null;
         }
 
-        // Clear speaking timeout
-        if (speakingTimeoutRef.current) {
-            clearTimeout(speakingTimeoutRef.current);
-            speakingTimeoutRef.current = null;
-        }
-
         liveUserTranscriptRef.current = '';
         liveAssistantTranscriptRef.current = '';
     }, []);
@@ -404,7 +398,6 @@ export function useAudioStreaming(
         // Clear resumption handle when manually stopping
         sessionResumptionHandleRef.current = null;
         isResumingSessionRef.current = false;
-        nextPlaybackTimeRef.current = 0;
 
         // Run the full cleanup for capture resources
         cleanupAudioResources();
@@ -421,6 +414,7 @@ export function useAudioStreaming(
                 rec.addEventListener('stop', handler as any);
                 try {
                     if (rec.state !== 'inactive') rec.stop();
+                    else handler();
                 } catch {
                     resolve(null);
                 }
@@ -467,6 +461,8 @@ export function useAudioStreaming(
     const startStreaming = useCallback(async () => {
         if (isStreamingRef.current) return;
         const generation = ++sessionGenerationRef.current;
+        userRecorderRef.current = null;
+        aiRecorderRef.current = null;
 
         // Reset manual disconnect flag when starting
         isManualDisconnectRef.current = false;
@@ -545,7 +541,6 @@ export function useAudioStreaming(
             // No need to pass config since it's pre-configured in the ephemeral token
 
             const responseQueue: LiveServerMessage[] = [];
-            const audioParts: string[] = [];
 
             // Build context addition based on lesson context or topic (read refs — startGeminiLiveSession is []-memoized)
             let contextAddition = '';
@@ -704,7 +699,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         if (!acceptsEvents()) return;
                         tutorTurnsRef.current.received(message);
                         responseQueue.push(message);
-                        processGeminiResponseQueueRef.current?.(responseQueue, audioParts);
+                        processGeminiResponseQueueRef.current?.(responseQueue, acceptsEvents);
                     },
                     onerror: (e: ErrorEvent) => {
                         if (!acceptsEvents() || isManualDisconnectRef.current) return;
@@ -760,13 +755,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             );
                             sessionResumptionHandleRef.current = null;
                             resumeAttemptsRef.current = 0;
-                            isManualDisconnectRef.current = true;
                             setError('Live session ended: the connection kept dropping. Please try again.');
-                            cleanupAudioResources();
-                            setIsStreaming(false);
-                            isStreamingRef.current = false;
-                            setIsSpeaking(false);
-                            setConnectionStatus('disconnected');
+                            stopStreaming();
                             return;
                         }
 
@@ -989,14 +979,17 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             console.error('Failed to start Gemini Live session:', error);
             throw error;
         }
-    }, [cleanupAudioResources, maybeUploadSegment, sendLiveText, handleStreamingFailure, stopStreaming]);
+    }, [maybeUploadSegment, sendLiveText, handleStreamingFailure, stopStreaming]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
-    const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
-        const FRAGMENT_PARTS = 10;
+    const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => {
         const MAX_MESSAGES_PER_FRAME = 10; // Process max 10 messages per animation frame
 
         const processMessages = () => {
+            if (!acceptsEvents()) {
+                responseQueue.length = 0;
+                return;
+            }
             let messagesProcessed = 0;
 
             const flushUserTranscript = () => {
@@ -1012,7 +1005,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 onTranscriptionListenerRef.current?.({ role: 'assistant', text: t, finished: true });
             };
 
-            while (responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
+            while (acceptsEvents() && responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
                 messagesProcessed++;
                 const message = responseQueue.shift();
 
@@ -1032,15 +1025,9 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
 
                 if (message?.serverContent && (message as any).serverContent.interrupted) {
-                    audioParts.length = 0;
                     liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
-                    if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
-                        playbackCtxRef.current.close();
-                    }
-                    playbackCtxRef.current = null;
-                    analyserRef.current = null;
-                    nextPlaybackTimeRef.current = 0;
+                    playbackQueueRef.current?.interrupt();
                     continue;
                 }
 
@@ -1118,25 +1105,20 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
 
                 // Handle audio data
-                if (message?.serverContent?.modelTurn?.parts) {
-                    const part = message.serverContent.modelTurn.parts[0];
-                    if (part?.inlineData?.data) {
-                        audioParts.push(part.inlineData.data);
-                    }
-                }
-
-                const shouldFlush =
-                    audioParts.length >= FRAGMENT_PARTS ||
-                    (message?.serverContent?.turnComplete && audioParts.length > 0);
-
-                if (shouldFlush) {
-                    playGeminiAudioChunksRef.current?.(audioParts.slice());
-                    audioParts.length = 0;
+                const audioParts = message?.serverContent?.modelTurn?.parts?.flatMap(part => {
+                    const audio = part.inlineData;
+                    return audio?.data && (!audio.mimeType || audio.mimeType.startsWith('audio/pcm')) ? [audio.data] : [];
+                });
+                if (audioParts?.length && acceptsEvents()) playGeminiAudioChunksRef.current?.(audioParts);
+                if (message?.serverContent?.turnComplete) {
+                    playbackQueueRef.current?.completeTurn();
+                } else if (message?.serverContent?.generationComplete) {
+                    playbackQueueRef.current?.completeTurn('generation-complete');
                 }
             }
 
             // If there are more messages, schedule processing for next animation frame
-            if (responseQueue.length > 0) {
+            if (acceptsEvents() && responseQueue.length > 0) {
                 requestAnimationFrame(processMessages);
             }
         };
@@ -1146,17 +1128,16 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     }, []);
 
     // Play audio chunks from Gemini
-    const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
-        decodingAudioRef.current += 1;
+    const playGeminiAudioChunks = useCallback((rawData: string[]) => {
+        if (!isStreamingRef.current) return;
         try {
-            // Single decode path via convertToWav (avoid duplicate base64→PCM work per chunk).
-            const wavBuffer = convertToWav(rawData, 24000);
-
             let ctx = playbackCtxRef.current;
             if (!ctx || ctx.state === 'closed') {
+                playbackQueueRef.current?.stop();
+                playbackQueueRef.current = null;
+                playbackDestinationRef.current = null;
                 ctx = new AudioContext({ sampleRate: 24000 });
                 playbackCtxRef.current = ctx;
-                nextPlaybackTimeRef.current = ctx.currentTime;
             }
 
             if (!playbackDestinationRef.current) {
@@ -1213,55 +1194,29 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
             }
 
-            const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
-            const float32Data = audioBuffer.getChannelData(0);
-            onAiAudioDataListenerRef.current?.(float32Data);
-            const source = ctx.createBufferSource();
-            source.buffer = audioBuffer;
-
-            // Connect through analyser for visualization if available
-            try {
-                if (analyserRef.current && analyserRef.current.context.state !== 'closed') {
-                    source.connect(analyserRef.current);
-                } else {
-                    source.connect(ctx.destination);
-                }
-                if (playbackDestinationRef.current) {
-                    try { source.connect(playbackDestinationRef.current); } catch { /* best-effort cleanup; failure is non-fatal */ }
-                }
-            } catch (e) {
-                console.error('Failed to connect audio source:', e);
-                try {
-                    source.connect(ctx.destination);
-                } catch (fallbackError) {
-                    console.error('Failed to connect to destination:', fallbackError);
-                    throw new Error('Unable to connect audio source');
-                }
+            if (!playbackQueueRef.current) {
+                const context = ctx;
+                const analyser = analyserRef.current;
+                const destination = playbackDestinationRef.current;
+                const generation = sessionGenerationRef.current;
+                const queue: PcmPlaybackQueue = new PcmPlaybackQueue(context, {
+                    connect: source => {
+                        source.connect(analyser && analyser.context === context ? analyser : context.destination);
+                        if (destination?.context === context) source.connect(destination);
+                    },
+                    onSamples: samples => {
+                        if (playbackQueueRef.current === queue && generation === sessionGenerationRef.current) onAiAudioDataListenerRef.current?.(samples);
+                    },
+                    onPlayingChange: playing => {
+                        if (playbackQueueRef.current === queue && generation === sessionGenerationRef.current) setIsSpeaking(playing);
+                    },
+                    onDiagnostic: detail => window.dispatchEvent(new CustomEvent('insyte-audio-playback', { detail })),
+                });
+                playbackQueueRef.current = queue;
             }
-
-            const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
-            source.start(startAt);
-            nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
-
-            setIsSpeaking(true);
-            // Clear any existing timeout to prevent premature stopping
-            if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-
-            // Calculate when this chunk will finish playing
-            const timeUntilEnd = (startAt + audioBuffer.duration - ctx.currentTime) * 1000;
-            // A small buffer to ensure the audio has fully finished.
-            const endTime = Math.max(0, timeUntilEnd) + 250;
-
-            speakingTimeoutRef.current = setTimeout(() => {
-                if (playbackCtxRef.current && nextPlaybackTimeRef.current <= playbackCtxRef.current.currentTime + 0.1) {
-                    setIsSpeaking(false);
-                }
-            }, endTime);
-
-        } catch (e) {
-            console.error('Failed to play Gemini audio chunks:', e);
-        } finally {
-            decodingAudioRef.current -= 1;
+            for (const data of rawData) playbackQueueRef.current?.enqueue(data);
+        } catch {
+            console.error('Failed to play Gemini audio chunks');
         }
     }, [maybeUploadSegment]);
 
@@ -1272,8 +1227,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         processGeminiResponseQueueRef.current = processGeminiResponseQueue;
         playGeminiAudioChunksRef.current = playGeminiAudioChunks;
     }, [startGeminiLiveSession, processGeminiResponseQueue, playGeminiAudioChunks]);
-
-    // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
     const setToolCallListener = useCallback((cb: (name: string, args: any, callId?: string) => void) => {
         toolCallListenerRef.current = cb;
