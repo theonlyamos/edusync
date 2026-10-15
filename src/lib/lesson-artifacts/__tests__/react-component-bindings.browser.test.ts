@@ -8,10 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from '../react-component-source';
 import { renderReactSandboxScripts } from '../react-sandbox-runtime';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '../sandbox-responsive';
+import { codingEditorBridgeScript } from '../coding-editor-bridge';
 
 const chromiumExecutable = process.env.CHROMIUM_EXECUTABLE_PATH;
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const nonce = 'offlineReactBindingRegression';
+const editorToken = '0'.repeat(32);
 const policy = `default-src 'none'; script-src 'nonce-${nonce}' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; frame-src 'self' about:; connect-src 'none'; worker-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
 
 const guardScript = `
@@ -116,10 +118,14 @@ function rendererTemplate(rendererSource: string) {
   const build = new Function(
     'needsLeaflet', 'needsRecharts', 'nonce', 'reactRuntimeScripts',
     'SANDBOX_RESPONSIVE_STYLES', 'SANDBOX_RESPONSIVE_SCRIPT', 'codeJson',
-    'returnStatementJson', 'REACT_COMPONENT_ARGUMENTS',
+    'returnStatementJson', 'REACT_COMPONENT_ARGUMENTS', 'codingEditorBridgeScript', 'editorToken', 'window',
     `return (${html.getText(sourceFile)});`,
   ) as (...values: unknown[]) => string;
   return { build, returnStatement: returnStatement.text, sandbox: sandbox! };
+}
+
+function buildRendererHtml(template: ReturnType<typeof rendererTemplate>, source: string, runtime: string): string {
+  return template.build(false, false, nonce, runtime, SANDBOX_RESPONSIVE_STYLES, SANDBOX_RESPONSIVE_SCRIPT, JSON.stringify(prepareReactComponentCode(source)), JSON.stringify(template.returnStatement), REACT_COMPONENT_ARGUMENTS, codingEditorBridgeScript, editorToken, { location: { origin: 'null' } });
 }
 
 function childProbe(kind: string): string {
@@ -238,6 +244,15 @@ function expectCaptureDisabled(state: SecurityState) {
 }
 
 describe('generated React bindings in the offline browser sandbox', () => {
+  it('builds the current renderer template with its explicit coding bridge context without Chromium', async () => {
+    const rendererSource = await readFile(join(repoRoot, 'src/components/lessons/ReactRenderer.tsx'), 'utf8');
+    const template = rendererTemplate(rendererSource);
+    const html = buildRendererHtml(template, 'const Component = () => null;', '');
+    expect(html).toContain(codingEditorBridgeScript(editorToken, 'null'));
+    expect(html).toContain('const Component = () => null;');
+    expect(template.sandbox).toBe('allow-scripts');
+  });
+
   it.skipIf(!chromiumExecutable)('reproduces missing selected and keeps stateful answers interactive without capture', async () => {
     const tempRoot = resolve(tmpdir());
     const directory = await mkdtemp(join(tempRoot, 'lesson-react-bindings-'));
@@ -254,7 +269,7 @@ describe('generated React bindings in the offline browser sandbox', () => {
       const template = rendererTemplate(rendererSource);
       const runtime = renderReactSandboxScripts(nonce, { react, reactDom, tailwindCss });
       const children = [{ kind: 'missing', source: missing }, { kind: 'stateful', source: stateful }].map(({ kind, source }) => {
-        const html = template.build(false, false, nonce, runtime, SANDBOX_RESPONSIVE_STYLES, SANDBOX_RESPONSIVE_SCRIPT, JSON.stringify(prepareReactComponentCode(source)), JSON.stringify(template.returnStatement), REACT_COMPONENT_ARGUMENTS);
+        const html = buildRendererHtml(template, source, runtime);
         const guarded = html.replace('<head>', `<head><meta http-equiv="Content-Security-Policy" content="${escapeAttribute(policy)}"><script nonce="${nonce}">${guardScript}</script>`);
         expect(guarded).not.toBe(html);
         return { kind, html: guarded.replace('</body>', `<script nonce="${nonce}">${childProbe(kind)}</script></body>`) };
