@@ -19,7 +19,6 @@ import { LearningArtifactCard } from '@/components/students/study-companion/Lear
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
-const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
@@ -280,17 +279,6 @@ export const TutorExperience = ({
     }
   }, [code, library, handleRendererError]);
 
-  const editorData = useMemo(
-    () => ({
-      initialCode: code,
-      language: library === 'react' ? 'javascript' : 'javascript',
-      tests: [],
-    }),
-    [code, library]
-  );
-
-  const handleEditorSubmit = useCallback(() => { }, []);
-
   const handleToolCall = async (name: string, args: any, callId?: string) => {
     if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
       try {
@@ -441,7 +429,8 @@ export const TutorExperience = ({
             if (
               node.classList?.contains('monaco-editor') ||
               node.classList?.contains('monaco-aria-container') ||
-              node.closest?.('.monaco-editor')
+              node.closest?.('.monaco-editor') ||
+              node.closest?.('[data-lesson-coding-workspace]')
             ) {
               return false;
             }
@@ -837,17 +826,7 @@ export const TutorExperience = ({
                     {renderVisualization}
                   </div>
                 )}
-                {!preparingActivity && (
-                  <div
-                    className="h-full"
-                    style={{ display: show === 'code' ? 'block' : 'none' }}
-                  >
-                    <Editor
-                      data={editorData}
-                      onSubmit={handleEditorSubmit}
-                    />
-                  </div>
-                )}
+                {!preparingActivity && show === 'code' && <pre className="h-full overflow-auto whitespace-pre-wrap rounded border p-3 text-sm"><code>{code}</code></pre>}
                 {preparingActivity && (
                   <div className="h-full flex flex-col items-center justify-center">
                     <Loader2 className="w-10 h-10 animate-spin mr-2" />

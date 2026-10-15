@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
 import { LearningActivityView } from './LearningActivityView';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
+import { codingEditorBridgeScript, createCodingEditorToken, readCodingEditorRequest, type CodingEditorRequest } from '@/lib/lesson-artifacts/coding-editor-bridge';
+import { CodingWorkspace } from './CodingWorkspace';
 
 interface SafeCodeRunnerProps {
   code: string;
@@ -16,6 +18,15 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [codingRequest, setCodingRequest] = useState<CodingEditorRequest | null>(null);
+  const restoreEditorFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (!codingRequest && restoreEditorFocusRef.current) {
+      restoreEditorFocusRef.current = false;
+      iframeRef.current?.focus();
+    }
+  }, [codingRequest]);
 
   const onErrorRef = useRef(onError);
   const onReadyRef = useRef(onReady);
@@ -27,6 +38,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
   }, [onReady]);
 
   useEffect(() => {
+    setCodingRequest(null);
     if (!iframeRef.current || !code) return;
 
     setIsLoading(true);
@@ -34,6 +46,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
 
     try {
       const iframe = iframeRef.current;
+      const editorToken = createCodingEditorToken();
 
       // Device sensors are gated by iframe `allow` and by Permissions-Policy inside the document (not CSP script-src).
       const sensorPermissionsMeta =
@@ -78,6 +91,7 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
     ${SANDBOX_RESPONSIVE_STYLES}
   </style>
   <script>${SANDBOX_RESPONSIVE_SCRIPT}</script>
+  <script>${codingEditorBridgeScript(editorToken, window.location.origin)}</script>
 </head>
 <body>`;
 
@@ -162,6 +176,8 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
       };
 
       const handleMessage = (event: MessageEvent) => {
+        const coding = readCodingEditorRequest(event, iframe.contentWindow, editorToken, navigator.userActivation?.isActive === true);
+        if (coding) { setCodingRequest(coding); return; }
         if (event.source !== iframe.contentWindow) return;
         if (event.data?.type === 'lesson-visualization-ready') {
           setIsLoading(false);
@@ -205,9 +221,11 @@ export const SafeCodeRunner: React.FC<SafeCodeRunnerProps> = React.memo(({ code,
         title="Code Preview"
         className="block w-full h-full min-w-0 border border-gray-200 rounded bg-transparent"
         sandbox="allow-scripts"
+        inert={codingRequest !== null}
         allow={library === 'p5' ? 'accelerometer; gyroscope; magnetometer' : undefined}
         style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
+      <CodingWorkspace request={codingRequest} onClose={() => { restoreEditorFocusRef.current = true; setCodingRequest(null); }} />
     </div>
     </LearningActivityView>
   );

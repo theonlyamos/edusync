@@ -10,6 +10,8 @@ import { VisualizationSkeleton } from './VisualizationSkeleton';
 import { LearningActivityView } from './LearningActivityView';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
 import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from '@/lib/lesson-artifacts/react-component-source';
+import { codingEditorBridgeScript, createCodingEditorToken, readCodingEditorRequest, type CodingEditorRequest } from '@/lib/lesson-artifacts/coding-editor-bridge';
+import { CodingWorkspace } from './CodingWorkspace';
 
 let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
 const loadReactSandboxSources = () => {
@@ -53,7 +55,16 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runtimeSources, setRuntimeSources] = useState<ReactSandboxSourceText>();
+  const [codingRequest, setCodingRequest] = useState<CodingEditorRequest | null>(null);
+  const restoreEditorFocusRef = useRef(false);
   const loadTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!codingRequest && restoreEditorFocusRef.current) {
+      restoreEditorFocusRef.current = false;
+      iframeRef.current?.focus();
+    }
+  }, [codingRequest]);
 
   // Stable reference for onError to prevent unnecessary effect re-runs
   const onErrorRef = useRef(onError);
@@ -80,6 +91,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   }, []);
 
   useEffect(() => {
+    setCodingRequest(null);
     if (!iframeRef.current || !code || !runtimeSources) return;
 
     setIsLoading(true);
@@ -87,6 +99,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
     try {
       const iframe = iframeRef.current;
+      const editorToken = createCodingEditorToken();
       const sanitizedCode = prepareReactComponentCode(code);
 
       // Detect which libraries the code actually needs (using cached patterns; match injected source)
@@ -111,6 +124,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline' https://unpkg.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
   <script nonce="${nonce}">
+    ${codingEditorBridgeScript(editorToken, window.location.origin)}
     window.__lessonRenderFailed = false;
     function reportLessonRenderError(error) {
       window.__lessonRenderFailed = true;
@@ -580,7 +594,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
             XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
             Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart,
             MapContainer, TileLayer, Marker, Popup, Polyline, Polygon,
-            Circle, Rectangle, useMap, useMapEvent, L
+            Circle, Rectangle, useMap, useMapEvent, L, window.openCodeEditor
           );
           class LessonRenderBoundary extends React.Component {
             componentDidCatch(error) {
@@ -634,6 +648,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
       // Listen for error/success messages from iframe
       const handleMessage = (event: MessageEvent) => {
+        const coding = readCodingEditorRequest(event, iframe.contentWindow, editorToken, navigator.userActivation?.isActive === true);
+        if (coding) { setCodingRequest(coding); return; }
         if (event.source !== iframe.contentWindow) return;
         if (event.data?.type === 'react-render-ready') {
           clearLoadTimeout();
@@ -694,8 +710,10 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         title="React Component Preview"
         className="block w-full h-full min-w-0 border-0 rounded-lg bg-transparent"
         sandbox="allow-scripts"
+        inert={codingRequest !== null}
         style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
+      <CodingWorkspace request={codingRequest} onClose={() => { restoreEditorFocusRef.current = true; setCodingRequest(null); }} />
     </div>
     </LearningActivityView>
   );

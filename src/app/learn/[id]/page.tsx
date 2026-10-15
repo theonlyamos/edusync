@@ -16,7 +16,6 @@ import axios from 'axios';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
-const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
@@ -381,7 +380,7 @@ function HomeComponent() {
       const container = vizRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
       isCapturingRef.current = true;
-      toPng(container, { pixelRatio: 1 })
+      toPng(container, { pixelRatio: 1, filter: node => !(node instanceof Element && node.closest('[data-lesson-coding-workspace]')) })
         .then((dataUrl) => {
           window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
         })
@@ -865,14 +864,7 @@ function HomeComponent() {
                       {show === 'code' && (
                         !generatingVisualization ? (
                           <div className="h-full">
-                            <Editor
-                              data={{
-                                initialCode: code,
-                                language: library === 'react' ? 'javascript' : 'javascript',
-                                tests: [],
-                              }}
-                              onSubmit={() => { }}
-                            />
+                            <pre className="h-full overflow-auto whitespace-pre-wrap rounded border p-3 text-sm"><code>{code}</code></pre>
                           </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center">
