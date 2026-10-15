@@ -9,7 +9,7 @@ export const REACT_COMPONENT_ARGUMENTS = [
   'XAxis', 'YAxis', 'CartesianGrid', 'Tooltip', 'Legend', 'ResponsiveContainer',
   'Line', 'Bar', 'Area', 'Pie', 'Cell', 'Scatter', 'RadialBar', 'RadialBarChart',
   'MapContainer', 'TileLayer', 'Marker', 'Popup', 'Polyline', 'Polygon',
-  'Circle', 'Rectangle', 'useMap', 'useMapEvent', 'L',
+  'Circle', 'Rectangle', 'useMap', 'useMapEvent', 'L', 'openCodeEditor',
 ] as const;
 
 const COMPONENT_EXPORT_PATTERN = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/;

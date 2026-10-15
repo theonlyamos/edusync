@@ -4,6 +4,7 @@ import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyM
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
 import { PcmPlaybackQueue } from '@/lib/audio/pcm-playback-queue';
+import { emitLiveInputDiagnostic } from '@/lib/audio/live-input-diagnostics';
 import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
@@ -157,9 +158,10 @@ export function useAudioStreaming(
     const vadMinSpeechMsRef = useRef<number>(150);
     const vadMinSilenceMsRef = useRef<number>(300);
 
-    const sendLiveText = useCallback((text: string) => {
+    const sendLiveText = useCallback((text: string, source: 'user' | 'quiz' | 'initial' = 'user') => {
         if (!geminiLiveSessionRef.current) throw new Error('Not connected');
         geminiLiveSessionRef.current.sendRealtimeInput({ text });
+        emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'text', source });
         tutorTurnsRef.current.sent();
     }, []);
 
@@ -185,7 +187,7 @@ export function useAudioStreaming(
                     && tutorTurnsRef.current.isIdle();
             },
             send: (context) => {
-                sendLiveText(context);
+                sendLiveText(context, 'quiz');
             },
         });
         const refresh = (attempt = 0) => {
@@ -913,6 +915,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                                 mimeType: `audio/pcm;rate=${sampleRate}`
                             }
                         });
+                        emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'audio', source: 'microphone', audioBytes: uint8Array.byteLength });
                     } catch (err) {
                         // Socket may be closing/closed; drop this frame
                     }
@@ -972,7 +975,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 : isStudyCompanion
                     ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
                     : 'Hello';
-            sendLiveText(initialMessage);
+            sendLiveText(initialMessage, 'initial');
 
         } catch (error: any) {
             if (!ownsConnection()) return;
@@ -1025,9 +1028,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
 
                 if (message?.serverContent && (message as any).serverContent.interrupted) {
+                    const connectionGeneration = connectionGenerationRef.current;
                     liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
                     playbackQueueRef.current?.interrupt();
+                    emitLiveInputDiagnostic({ event: 'server-interrupted', connectionGeneration });
                     continue;
                 }
 
@@ -1086,7 +1091,9 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                         // Send response back to Gemini
                         try {
-                            geminiLiveSessionRef.current?.sendToolResponse({
+                            const session = geminiLiveSessionRef.current;
+                            if (!session) continue;
+                            session.sendToolResponse({
                                 functionResponses: [
                                     {
                                         id: fn.id || '',
@@ -1098,6 +1105,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                                     }
                                 ]
                             });
+                            emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'tool', source: 'tool' });
                         } catch (err) {
                             console.warn('Failed to send tool response back to Gemini:', err);
                         }
@@ -1264,6 +1272,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         try {
             if (geminiLiveSessionRef.current) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text: payload });
+                emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'text', source: 'viewport' });
             }
         } catch (e) {
             console.error('sendViewport failed:', e);
@@ -1279,6 +1288,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 geminiLiveSessionRef.current.sendRealtimeInput({
                     video: { data: base64Data, mimeType }
                 });
+                emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'video', source: 'visual' });
             }
         } catch (e) {
             console.error('sendMedia failed:', e);

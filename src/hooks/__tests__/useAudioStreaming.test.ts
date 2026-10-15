@@ -9,12 +9,12 @@ vi.mock('react', async (importOriginal) => ({
   })),
 }));
 
-const gemini = vi.hoisted(() => ({ connect: vi.fn(), configurations: [] as any[], sends: [] as ReturnType<typeof vi.fn>[] }));
+const gemini = vi.hoisted(() => ({ connect: vi.fn(), configurations: [] as any[], sends: [] as ReturnType<typeof vi.fn>[], toolSends: [] as ReturnType<typeof vi.fn>[] }));
 vi.mock('@google/genai', () => ({
   GoogleGenAI: class { live = { connect: gemini.connect }; },
   Modality: { AUDIO: 'AUDIO' },
   StartSensitivity: { START_SENSITIVITY_HIGH: 'high' },
-  FunctionResponseScheduling: {},
+  FunctionResponseScheduling: { SILENT: 'SILENT' },
 }));
 
 import { useAudioStreaming } from '../useAudioStreaming';
@@ -112,13 +112,17 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
   gemini.configurations = [];
   gemini.sends = [];
+  gemini.toolSends = [];
   gemini.connect.mockImplementation(async (configuration) => {
     gemini.configurations.push(configuration);
     configuration.callbacks.onopen();
     const sendRealtimeInput = vi.fn();
+    const sendToolResponse = vi.fn();
     gemini.sends.push(sendRealtimeInput);
+    gemini.toolSends.push(sendToolResponse);
     return {
       sendRealtimeInput,
+      sendToolResponse,
       close: () => {
         configuration.callbacks.onerror({ message: 'socket closed during cleanup' });
         configuration.callbacks.onclose({ code: 1006, reason: 'cleanup' });
@@ -142,6 +146,77 @@ describe('incoming model audio playback', () => {
   function sendParts(callbacks: { onmessage: (message: unknown) => void }, part: ReturnType<typeof pcmPart>, count = 10) {
     for (let index = 0; index < count; index++) callbacks.onmessage({ serverContent: { modelTurn: { parts: [part] } } });
   }
+
+  it('reports fixed outbound timing metadata without changing sends or provider interruption handling', async () => {
+    const diagnostics: Array<Record<string, unknown>> = [];
+    window.addEventListener('insyte-live-input', event => diagnostics.push((event as CustomEvent<Record<string, unknown>>).detail));
+    const callbacks = await startConnected();
+    renderAudio().sendText('PRIVATE_USER_TEXT');
+    renderAudio().sendViewport(640, 480, 2);
+    renderAudio().sendMedia('PRIVATE_IMAGE_DATA', 'image/png');
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    callbacks.onmessage({ toolCall: { functionCalls: [{ id: 'PRIVATE_CALL_ID', name: 'PRIVATE_TOOL_NAME', args: { privateArgument: 'PRIVATE_TOOL_TEXT' } }] } });
+    const sends = gemini.sends[0].mock.calls.map(([payload]) => payload);
+    expect(sends.slice(0, 4)).toEqual([
+      { text: 'Hello' },
+      { text: 'PRIVATE_USER_TEXT' },
+      { text: 'VISUAL_VIEWPORT {"width":640,"height":480,"devicePixelRatio":2}' },
+      { video: { data: 'PRIVATE_IMAGE_DATA', mimeType: 'image/png' } },
+    ]);
+    expect(sends[4]).toEqual({ audio: { data: expect.any(String), mimeType: 'audio/pcm;rate=16000' } });
+    expect(Buffer.from(sends[4].audio.data, 'base64').byteLength).toBe(64000);
+    expect(gemini.toolSends[0]).toHaveBeenCalledExactlyOnceWith({ functionResponses: [{
+      id: 'PRIVATE_CALL_ID', name: 'PRIVATE_TOOL_NAME',
+      response: { result: 'Tool is being called', scheduling: 'SILENT' },
+    }] });
+    expect(diagnostics.map(({ event, kind, source }) => ({ event, kind, source }))).toEqual([
+      { event: 'sent', kind: 'text', source: 'initial' },
+      { event: 'sent', kind: 'text', source: 'user' },
+      { event: 'sent', kind: 'text', source: 'viewport' },
+      { event: 'sent', kind: 'video', source: 'visual' },
+      { event: 'sent', kind: 'audio', source: 'microphone' },
+      { event: 'sent', kind: 'tool', source: 'tool' },
+    ]);
+    expect(diagnostics[4].audioBytes).toBe(64000);
+    sendParts(callbacks, pcmPart(16384), 1);
+    expect(renderAudio().isSpeaking).toBe(true);
+    callbacks.onmessage({ serverContent: { interrupted: true } });
+    expect(scheduledSources.every(source => source.stopped)).toBe(true);
+    expect(renderAudio().isSpeaking).toBe(false);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    expect(diagnostics.at(-1)).toEqual({ event: 'server-interrupted', timestampMs: Date.now(), connectionGeneration: 1 });
+    expect(diagnostics.every(detail => detail.timestampMs === Date.now() && detail.connectionGeneration === 1)).toBe(true);
+    expect(JSON.stringify(diagnostics)).not.toContain('PRIVATE_');
+  });
+
+  it('does not report a failed outbound send', async () => {
+    const diagnostics: unknown[] = [];
+    window.addEventListener('insyte-live-input', event => diagnostics.push((event as CustomEvent).detail));
+    await startConnected();
+    expect(diagnostics).toHaveLength(1);
+    gemini.sends[0].mockImplementationOnce(() => { throw new Error('PRIVATE_TRANSPORT_ERROR'); });
+    renderAudio().sendText('PRIVATE_FAILED_TEXT');
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it('keeps timing events tied to the replacement connection and ignores stale input callbacks', async () => {
+    const diagnostics: Array<Record<string, unknown>> = [];
+    window.addEventListener('insyte-live-input', event => diagnostics.push((event as CustomEvent<Record<string, unknown>>).detail));
+    const previous = await startConnected();
+    renderAudio().stopStreaming();
+    const current = await startConnected();
+    expect(diagnostics.map(detail => detail.connectionGeneration)).toEqual([1, 2]);
+    const previousCount = diagnostics.length;
+    previous.onmessage({ serverContent: { interrupted: true } });
+    audioFrame(0, 0.5);
+    audioFrame(0, 0.5);
+    expect(diagnostics).toHaveLength(previousCount);
+    renderAudio().sendViewport(640, 480, 2);
+    current.onmessage({ serverContent: { interrupted: true } });
+    expect(diagnostics.slice(previousCount).map(detail => detail.connectionGeneration)).toEqual([2, 2]);
+    expect(renderAudio().connectionStatus).toBe('connected');
+  });
 
   it('plays every audio part after a text part and flushes a short completed turn', async () => {
     const observed: number[] = [];
