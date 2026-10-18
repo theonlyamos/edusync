@@ -1,6 +1,8 @@
 import OpenAI from 'openai'
 import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server'
 import { buildVisualizationLayoutPrompt, type VisualizationDimensions } from '@/lib/visualization-layout'
+import { assertReactComponentSyntax } from '@/lib/lesson-artifacts/react-component-source'
+import { assertReactComponentBindings } from '@/lib/lesson-artifacts/react-component-bindings'
 
 interface OpenAIConfig {
   baseURL: string
@@ -93,12 +95,17 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 - Styling: Use common Tailwind layout, spacing, typography, palette, border, and shadow utilities only. Use inline \`style\` props for gradients, transforms, arbitrary values, and dynamic values. No arbitrary bracket classes, \`@import\`, or CSS variables.
 - Images: Use \`React.createElement('img', { src, alt, style })\`. Extract URLs from markdown syntax in the task description.
 
+### Optional coding workspace
+- Only for a programming lesson or an exercise that requires editing code, offer an explicit button that calls \`openCodeEditor({code: 'starter code', language: 'javascript'})\` in its click handler. Do not open it automatically or use it for ordinary science, maths, diagrams, quizzes, or other noncoding lessons.
+- React receives \`openCodeEditor\` as an injected helper. p5.js and Three.js can call \`window.openCodeEditor\`. No imports, Monaco scripts, editor options or URLs are needed.
+- Languages: javascript, typescript, python, html, css, json, java, c, cpp, csharp, sql, plaintext. Starter code is plain text, at most 50,000 characters. The workspace edits text; it does not execute code in the parent application.
+
 ### Three.js & p5.js Rules
 - Pure self-contained JavaScript only. No HTML, CSS, or boilerplate.
 - Images: p5.js → \`loadImage()\` / \`image()\`; Three.js → \`THREE.TextureLoader\`.
 
 ### Concealment Rule
-Never use technical terms — "React," "useState," "JavaScript," etc. — in the user-facing explanation. Explain the *concept*, not the code.
+Avoid implementation terms such as "React" or "useState" in the user-facing explanation unless programming itself is the lesson. Explain the concept being taught.
 
 ### Output
 Respond with a single \`display_visual_aid\` function call containing \`code\`, \`library\`, and \`explanation\`.`;
@@ -284,6 +291,10 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
       // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.
       const code = stripLeakedToolCalls(result.code)
       if (code.trim() && !codeLeaksToolName(code)) {
+        if (result.library === 'react') {
+          assertReactComponentSyntax(code)
+          assertReactComponentBindings(code)
+        }
         return { ...result, code }
       }
       console.warn(

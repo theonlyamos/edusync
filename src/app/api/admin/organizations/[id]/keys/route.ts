@@ -1,3 +1,4 @@
+import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
@@ -64,6 +65,10 @@ export async function POST(
             );
         }
 
+        const domains = allowedDomainsSchema.safeParse(allowed_domains);
+        if (!domains.success) {
+          return NextResponse.json({ error: domains.error.issues[0].message }, { status: 400 });
+        }
         // Verify organization exists
         const { data: org, error: orgError } = await supabase
             .from('organizations')
@@ -88,7 +93,7 @@ export async function POST(
                 api_key: apiKey,
                 name: name.trim(),
                 description: description?.trim() || null,
-                allowed_domains: allowed_domains || null,
+                allowed_domains: domains.data,
                 rate_limit_per_hour: rate_limit_per_hour || 100,
                 rate_limit_per_day: rate_limit_per_day || 1000,
                 expires_at: expires_at || null,

@@ -1,3 +1,4 @@
+import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
@@ -57,10 +58,14 @@ export async function PATCH(
 
         const { name, description, allowed_domains, is_active, rate_limit_per_hour, rate_limit_per_day, expires_at } = body;
 
+        const domains = allowedDomainsSchema.safeParse(allowed_domains);
+        if (!domains.success) {
+          return NextResponse.json({ error: domains.error.issues[0].message }, { status: 400 });
+        }
         const updateData: any = {};
         if (name !== undefined) updateData.name = name.trim();
         if (description !== undefined) updateData.description = description?.trim() || null;
-        if (allowed_domains !== undefined) updateData.allowed_domains = allowed_domains;
+        if (allowed_domains !== undefined) updateData.allowed_domains = domains.data;
         if (is_active !== undefined) updateData.is_active = is_active;
         if (rate_limit_per_hour !== undefined) updateData.rate_limit_per_hour = rate_limit_per_hour;
         if (rate_limit_per_day !== undefined) updateData.rate_limit_per_day = rate_limit_per_day;

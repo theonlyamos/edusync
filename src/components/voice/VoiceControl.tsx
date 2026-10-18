@@ -1,4 +1,4 @@
-import { useAudioStreaming, LessonContext, type ToolCallListener } from '@/hooks/useAudioStreaming';
+import { useAudioStreaming, LessonContext, type ToolCallListener, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
@@ -12,6 +12,7 @@ interface VoiceControlProps {
   topic?: string | null;
   lessonContext?: LessonContext;
   onError?: (error: string) => void;
+  onStartupFailed?: () => void;
   /** Return a promise from visual tools to report whether the visual reached the screen. */
   onToolCall?: ToolCallListener;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
@@ -22,9 +23,11 @@ interface VoiceControlProps {
   onFeedbackSubmit?: (feedback: any) => Promise<void>;
   onFeedbackClose?: () => void;
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
+  /** Called after the server charges (or reuses) a prepaid block of voice minutes. */
+  onCreditsUpdate?: (update: VoiceCreditsUpdate) => void;
 }
 
-export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady, onCreditsUpdate }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -38,6 +41,7 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     setOnAudioDataListener,
     setOnAiAudioDataListener,
     setOnRecordingsReady,
+    setOnCreditsUpdate,
     setSessionId,
     sendText,
     sendMedia,
@@ -52,6 +56,8 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
   setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
+  const activationAttemptedRef = useRef(false);
+  const activationGenerationRef = useRef(0);
   const [audioData, setAudioData] = useState(new Float32Array(0));
   const [aiAudioData, setAiAudioData] = useState(new Float32Array(0));
   const [vadActive, setVadActive] = useState(false);
@@ -81,22 +87,36 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     }
   }, [connectionStatus, stopStreaming, onCountdownEnd]);
 
+  useEffect(() => {
+    if (_streamingError) onError?.(_streamingError);
+  }, [_streamingError, onError]);
+
   // React to `active` prop changes
   useEffect(() => {
     const manage = async () => {
+      if (!active) {
+        if (activationAttemptedRef.current) activationGenerationRef.current += 1;
+        activationAttemptedRef.current = false;
+        if (isStreaming) stopStreaming();
+        return;
+      }
+      if (activationAttemptedRef.current) {
+        if (!isStreaming && _streamingError) onStartupFailed?.();
+        return;
+      }
+      activationAttemptedRef.current = true;
+      const generation = ++activationGenerationRef.current;
       try {
-        if (active && !isStreaming) {
-          await startStreaming();
-        } else if (!active && isStreaming) {
-          stopStreaming();
-        }
+        await startStreaming();
       } catch (err: any) {
+        if (generation !== activationGenerationRef.current) return;
         console.error('VoiceControl streaming error:', err);
         onError?.(err.message || 'Voice streaming failed');
+        onStartupFailed?.();
       }
     };
     void manage();
-  }, [active, isStreaming, startStreaming, stopStreaming, onError]);
+  }, [active, isStreaming, _streamingError, startStreaming, stopStreaming, onError, onStartupFailed]);
 
   // Register tool call listener
   useEffect(() => {
@@ -110,6 +130,11 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
       (onRecordingsReady as any)?.(payload);
     });
   }, [setOnRecordingsReady, onRecordingsReady]);
+
+  useEffect(() => {
+    setOnCreditsUpdate(onCreditsUpdate ?? null);
+    return () => setOnCreditsUpdate(null);
+  }, [onCreditsUpdate, setOnCreditsUpdate]);
 
   useEffect(() => {
     if (!setSessionId) return;
@@ -144,10 +169,6 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
   useEffect(() => {
     onConnectionStatusChange?.(connectionStatus);
   }, [connectionStatus, onConnectionStatusChange]);
-
-  useEffect(() => {
-    if (_streamingError) onError?.(_streamingError);
-  }, [_streamingError, onError]);
 
   useEffect(() => {
     onCountdownChange?.(countdown);

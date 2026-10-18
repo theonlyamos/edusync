@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage, FunctionResponseScheduling, StartSensitivity } from '@google/genai';
-import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
-import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
+import { GoogleGenAI, LiveServerMessage, FunctionResponseScheduling } from '@google/genai';
+import type { StudyIntent, StudyMode } from '@/lib/study-companion';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
-import { convertToWav } from '@/lib/audio/wav';
-import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
+import { PcmPlaybackQueue } from '@/lib/audio/pcm-playback-queue';
+import { emitLiveInputDiagnostic } from '@/lib/audio/live-input-diagnostics';
+import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
+import { buildLiveTokenRequest, liveTokenRenewDelay, type LiveTokenResponse } from '@/lib/live-tutor/live-token-request';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 import { createVisualStatusDelivery, isVisualToolName, VISUAL_PENDING_TOOL_RESPONSE, type VisualStatusReport } from '@/lib/visual-status';
 
@@ -21,6 +22,13 @@ export type UseAudioStreamingLiveOptions = {
  * VISUAL_STATUS message. Returning nothing keeps the old fire-and-forget behaviour.
  */
 export type ToolCallListener = (name: string, args: any, callId?: string) => void | Promise<VisualStatusReport | void>;
+
+export type VoiceCreditsUpdate = {
+    /** Balance after the server charged (or reused) the current voice block. */
+    remainingCredits: number;
+    /** Minutes charged by this token request; 0 when an already paid block was reused. */
+    minutesCharged: number;
+};
 
 export type LiveTranscriptionPayload = {
     role: 'user' | 'assistant';
@@ -57,6 +65,7 @@ interface AudioStreamingActions {
     setSaveOnlySpeech?: (enabled: boolean) => void;
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
     setOnTranscription?: (cb: ((payload: LiveTranscriptionPayload) => void) | null) => void;
+    setOnCreditsUpdate: (cb: ((update: VoiceCreditsUpdate) => void) | null) => void;
 }
 
 export interface LessonContext {
@@ -70,8 +79,6 @@ export interface LessonContext {
     activeObjective?: { id: string; text: string; position: number; revision: number };
 }
 
-const systemPrompt = EUREKA_TUTOR_SYSTEM_PROMPT;
-
 export function useAudioStreaming(
     topic?: string | null,
     lessonContext?: LessonContext,
@@ -84,17 +91,17 @@ export function useAudioStreaming(
     const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [showFeedbackForm, setShowFeedbackForm] = useState(false);
     const [feedbackTrigger, setFeedbackTrigger] = useState<'manual_stop' | 'connection_reset' | 'error' | null>(null);
-    const speakingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to hold mutable values that don't trigger re-renders
     const isStreamingRef = useRef(false);
+    const sessionGenerationRef = useRef(0);
+    const connectionGenerationRef = useRef(0);
     const audioContextRef = useRef<AudioContext | null>(null);
     const processorRef = useRef<AudioWorkletNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const playbackCtxRef = useRef<AudioContext | null>(null);
-    const nextPlaybackTimeRef = useRef<number>(0);
+    const playbackQueueRef = useRef<PcmPlaybackQueue | null>(null);
     const tutorTurnsRef = useRef(createTutorTurnTracker());
-    const decodingAudioRef = useRef(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micAnalyserRef = useRef<AnalyserNode | null>(null);
     const toolCallListenerRef = useRef<ToolCallListener | null>(null);
@@ -103,7 +110,6 @@ export function useAudioStreaming(
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
     const onVadStateListenerRef = useRef<((active: boolean, rms: number) => void) | null>(null);
-    const lastAttemptTimeRef = useRef<number>(0);
     const geminiLiveSessionRef = useRef<any>(null);
     const liveOptionsRef = useRef<UseAudioStreamingLiveOptions | undefined>(liveOptions);
     const lessonContextRef = useRef<LessonContext | undefined>(lessonContext);
@@ -119,8 +125,8 @@ export function useAudioStreaming(
     // Indirection refs: these callbacks are declared further down but referenced by
     // earlier-declared callbacks. Calling through a ref avoids the temporal-dead-zone
     // forward reference the bundler rejects, and keeps the existing xRef.current?.(...) idiom.
-    const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number) => Promise<void>) | null>(null);
-    const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], audioParts: string[]) => void) | null>(null);
+    const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number, forceRenewal?: boolean) => Promise<void>) | null>(null);
+    const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => void) | null>(null);
     const playGeminiAudioChunksRef = useRef<((rawData: string[]) => void) | null>(null);
     /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
     const liveUserTranscriptRef = useRef('');
@@ -130,6 +136,16 @@ export function useAudioStreaming(
     const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Server-side voice billing: the prepaid grant behind the current token, and
+    // the timer that asks for the next token shortly before this one expires.
+    const voiceGrantIdRef = useRef<string | null>(null);
+    const liveTokenRef = useRef<LiveTokenResponse | null>(null);
+    const tokenRenewFailureRef = useRef<unknown>(null);
+    const tokenRenewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const tokenExpireTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const pendingLiveConnectionRef = useRef<{ generation: number; promise: Promise<void> } | null>(null);
+    const stagedLiveResourcesRef = useRef<{ close: () => void } | null>(null);
+    const onCreditsUpdateRef = useRef<((update: VoiceCreditsUpdate) => void) | null>(null);
     // Auto-resume loop guards: cap rapid reconnects so a socket that keeps
     // closing right after connecting (e.g. after a tool turn) can't thrash forever.
     const sessionOpenedAtRef = useRef<number | null>(null);
@@ -166,9 +182,10 @@ export function useAudioStreaming(
     const vadMinSpeechMsRef = useRef<number>(150);
     const vadMinSilenceMsRef = useRef<number>(300);
 
-    const sendLiveText = useCallback((text: string) => {
+    const sendLiveText = useCallback((text: string, source: 'user' | 'quiz' | 'initial' = 'user') => {
         if (!geminiLiveSessionRef.current) throw new Error('Not connected');
         geminiLiveSessionRef.current.sendRealtimeInput({ text });
+        emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'text', source });
         tutorTurnsRef.current.sent();
     }, []);
 
@@ -188,15 +205,13 @@ export function useAudioStreaming(
             },
             isIdle: () => {
                 const current = lessonContextRef.current;
-                const playback = playbackCtxRef.current;
                 return current?.learningRunId === scope.runId && current.activeObjective?.id === scope.objectiveId
                     && current.activeObjective.revision === scope.objectiveRevision && !!geminiLiveSessionRef.current
-                    && !vadSpeechActiveRef.current && decodingAudioRef.current === 0
-                    && (!playback || playback.state === 'closed' || nextPlaybackTimeRef.current <= playback.currentTime)
+                    && !vadSpeechActiveRef.current && (!playbackQueueRef.current || playbackQueueRef.current.isIdle())
                     && tutorTurnsRef.current.isIdle();
             },
             send: (context) => {
-                sendLiveText(context);
+                sendLiveText(context, 'quiz');
             },
         });
         const refresh = (attempt = 0) => {
@@ -228,10 +243,8 @@ export function useAudioStreaming(
         if (connectionStatus !== 'connected') return;
         const delivery = createVisualStatusDelivery({
             isIdle: () => {
-                const playback = playbackCtxRef.current;
                 return !!geminiLiveSessionRef.current
-                    && !vadSpeechActiveRef.current && decodingAudioRef.current === 0
-                    && (!playback || playback.state === 'closed' || nextPlaybackTimeRef.current <= playback.currentTime)
+                    && !vadSpeechActiveRef.current && (!playbackQueueRef.current || playbackQueueRef.current.isIdle())
                     && tutorTurnsRef.current.isIdle();
             },
             send: (text) => {
@@ -348,7 +361,13 @@ export function useAudioStreaming(
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
+        stagedLiveResourcesRef.current?.close();
+        stagedLiveResourcesRef.current = null;
         tutorTurnsRef.current.reset();
+        const queue = playbackQueueRef.current;
+        playbackQueueRef.current = null;
+        queue?.stop();
+        playbackDestinationRef.current = null;
         // Disconnect and stop the audio processor
         processorRef.current?.disconnect();
         processorRef.current = null;
@@ -403,11 +422,13 @@ export function useAudioStreaming(
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
-
-        // Clear speaking timeout
-        if (speakingTimeoutRef.current) {
-            clearTimeout(speakingTimeoutRef.current);
-            speakingTimeoutRef.current = null;
+        if (tokenRenewTimeoutRef.current) {
+            clearTimeout(tokenRenewTimeoutRef.current);
+            tokenRenewTimeoutRef.current = null;
+        }
+        if (tokenExpireTimeoutRef.current) {
+            clearTimeout(tokenExpireTimeoutRef.current);
+            tokenExpireTimeoutRef.current = null;
         }
 
         liveUserTranscriptRef.current = '';
@@ -416,6 +437,14 @@ export function useAudioStreaming(
 
     // Function to handle stopping the stream
     const stopStreaming = useCallback(() => {
+        const stoppedGeneration = ++sessionGenerationRef.current;
+        const userRecorder = userRecorderRef.current;
+        const aiRecorder = aiRecorderRef.current;
+        const userChunks = userChunksRef.current;
+        const aiChunks = aiChunksRef.current;
+        const stoppedSessionId = currentSessionIdRef.current;
+        const durationMs = Date.now() - (sessionStartedAtRef.current || Date.now());
+        sessionStartedAtRef.current = null;
         // Mark as manual disconnect to prevent automatic reconnection
         isManualDisconnectRef.current = true;
 
@@ -426,46 +455,46 @@ export function useAudioStreaming(
 
         // Do not show feedback form on manual stop
 
-        // Clear resumption handle when manually stopping
-        sessionResumptionHandleRef.current = null;
+        const tokenExpiresAt = Date.parse(liveTokenRef.current?.expireTime ?? '');
+        if (!Number.isFinite(tokenExpiresAt) || tokenExpiresAt <= Date.now()) {
+            sessionResumptionHandleRef.current = null;
+            liveTokenRef.current = null;
+            tokenRenewFailureRef.current = null;
+        }
         isResumingSessionRef.current = false;
-        nextPlaybackTimeRef.current = 0;
 
         // Run the full cleanup for capture resources
         cleanupAudioResources();
 
         const stopAndCollect = async () => {
-            const stopRecorder = (rec: MediaRecorder | null, chunksRef: React.MutableRefObject<Blob[]>) => new Promise<Blob | null>((resolve) => {
+            const stopRecorder = (rec: MediaRecorder | null, chunks: Blob[]) => new Promise<Blob | null>((resolve) => {
                 if (!rec) return resolve(null);
                 const handler = () => {
                     rec?.removeEventListener('stop', handler as any);
-                    const blob = chunksRef.current.length > 0 ? new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' }) : null;
-                    chunksRef.current = [];
+                    const blob = chunks.length > 0 ? new Blob(chunks, { type: rec.mimeType || 'audio/webm' }) : null;
+                    chunks.length = 0;
                     resolve(blob);
                 };
                 rec.addEventListener('stop', handler as any);
                 try {
                     if (rec.state !== 'inactive') rec.stop();
+                    else handler();
                 } catch {
                     resolve(null);
                 }
             });
 
             const [userBlob, aiBlob] = await Promise.all([
-                stopRecorder(userRecorderRef.current, userChunksRef),
-                stopRecorder(aiRecorderRef.current, aiChunksRef),
+                stopRecorder(userRecorder, userChunks),
+                stopRecorder(aiRecorder, aiChunks),
             ]);
 
-            userRecorderRef.current = null;
-            aiRecorderRef.current = null;
-
-            const started = sessionStartedAtRef.current || Date.now();
-            const durationMs = Date.now() - started;
-            sessionStartedAtRef.current = null;
+            if (userRecorderRef.current === userRecorder) userRecorderRef.current = null;
+            if (aiRecorderRef.current === aiRecorder) aiRecorderRef.current = null;
 
             // Also finalize streaming parts if any
             try {
-                if (currentSessionIdRef.current) {
+                if (stoppedSessionId && stoppedGeneration === sessionGenerationRef.current) {
                     await waitForUploads();
                     const urlParams = new URLSearchParams(window.location.search);
                     const apiKey = urlParams.get('apiKey');
@@ -473,7 +502,9 @@ export function useAudioStreaming(
                     if (apiKey) {
                         headers['Authorization'] = `Bearer ${apiKey}`;
                     }
-                    await fetch(`/api/learning/sessions/${currentSessionIdRef.current}/recordings/finalize`, { method: 'POST', headers });
+                    if (stoppedGeneration === sessionGenerationRef.current) {
+                        await fetch(`/api/learning/sessions/${stoppedSessionId}/recordings/finalize`, { method: 'POST', headers });
+                    }
                 }
             } catch (err) { console.error('Failed to finalize session recordings', err); }
 
@@ -484,9 +515,18 @@ export function useAudioStreaming(
 
 
 
+    const handleStreamingFailure = useCallback((err: unknown, action: 'start' | 'resume', generation: number) => {
+        if (generation !== sessionGenerationRef.current) return;
+        stopStreaming();
+        setError(`Failed to ${action} streaming: ${err instanceof Error ? err.message : 'Voice connection failed'}`);
+    }, [stopStreaming]);
+
     // Main function to start the streaming process
     const startStreaming = useCallback(async () => {
         if (isStreamingRef.current) return;
+        const generation = ++sessionGenerationRef.current;
+        userRecorderRef.current = null;
+        aiRecorderRef.current = null;
 
         // Reset manual disconnect flag when starting
         isManualDisconnectRef.current = false;
@@ -502,15 +542,14 @@ export function useAudioStreaming(
         let stream: MediaStream | null = null;
 
         try {
-            const now = Date.now();
-            if (now - lastAttemptTimeRef.current < 2500) {
-                throw new Error('Retrying too quickly – waiting before next attempt');
-            }
-            lastAttemptTimeRef.current = now;
             // --- Step 1: Get microphone access and sample rate ---
             stream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true }
             });
+            if (generation !== sessionGenerationRef.current) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+            }
             streamRef.current = stream;
             sessionStartedAtRef.current = Date.now();
 
@@ -524,201 +563,147 @@ export function useAudioStreaming(
             await startGeminiLiveSessionRef.current?.(stream, sampleRate);
 
         } catch (err: any) {
+            if (generation !== sessionGenerationRef.current) return;
             console.error('Failed to start streaming:', err);
-            setError(`Failed to start streaming: ${err.message}`);
-            stopStreaming(); // Use stopStreaming for full cleanup on failure
-            setConnectionStatus('disconnected');
+            handleStreamingFailure(err, 'start', generation);
+            throw err;
         }
-    }, [stopStreaming, cleanupAudioResources]);
+    }, [handleStreamingFailure]);
 
     // Browser-based Gemini Live connection
-    const startGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number) => {
+    const connectGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number, forceRenewal = false) => {
+        const generation = sessionGenerationRef.current;
+        let connectionGeneration: number | null = null;
+        let connectionClosed = false;
+        let connectionOpened = false;
+        let setupError: Error | null = null;
+        let stagedSession: any = null;
+        let stagedContext: AudioContext | null = null;
+        let stagedProcessor: AudioWorkletNode | null = null;
+        let promoted = false;
+        const ownsRequest = () => generation === sessionGenerationRef.current;
+        const ownsConnection = () => ownsRequest() && connectionGeneration !== null && connectionGeneration === connectionGenerationRef.current;
+        const acceptsEvents = () => ownsConnection() && !connectionClosed;
+        const stagedResources = { close: () => {
+            connectionClosed = true;
+            try { stagedProcessor?.disconnect(); } catch (error) { console.warn('Failed to disconnect staged audio processor', error); }
+            if (stagedContext && stagedContext.state !== 'closed') {
+                void stagedContext.close().catch(error => console.warn('Failed to close staged audio context', error));
+            }
+            try { stagedSession?.close(); } catch (error) { console.warn('Failed to close staged live session', error); }
+        } };
+        stagedLiveResourcesRef.current = stagedResources;
         try {
-            // Get ephemeral token
+            // Get an ephemeral token. The server builds the Live config (model,
+            // system prompt, tools) and locks it into the token, and charges
+            // voice time up front for billed users.
             const urlParams = new URLSearchParams(window.location.search);
             const apiKey = urlParams.get('apiKey');
-            const headers: Record<string, string> = {};
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (apiKey) {
                 headers['Authorization'] = `Bearer ${apiKey}`;
             }
-            const tokenResponse = await fetch('/api/genai/ephemeral', {
-                method: 'POST',
-                headers
-            });
-            if (!tokenResponse.ok) {
-                throw new Error('Failed to get ephemeral token');
+            const variant = liveOptionsRef.current?.variant ?? 'tutor';
+            const isStudyCompanion = variant === 'studyCompanion';
+            const lessonCtx = lessonContextRef.current;
+            const cachedToken = liveTokenRef.current;
+            const cachedExpiresAt = Date.parse(cachedToken?.expireTime ?? '');
+            const reuseToken = !forceRenewal && cachedToken && cachedExpiresAt > Date.now()
+                && (cachedToken.billing || sessionResumptionHandleRef.current);
+            let liveToken: LiveTokenResponse;
+            if (reuseToken) {
+                if (!sessionResumptionHandleRef.current) {
+                    throw new Error('The paid voice session cannot be resumed without its resumption handle. Please try again after this block ends.');
+                }
+                liveToken = cachedToken;
+            } else {
+                if (cachedToken && cachedExpiresAt <= Date.now()) {
+                    liveTokenRef.current = null;
+                    sessionResumptionHandleRef.current = null;
+                    tokenRenewFailureRef.current = null;
+                }
+                const tokenResponse = await fetch('/api/genai/ephemeral', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(buildLiveTokenRequest({
+                        grantId: voiceGrantIdRef.current,
+                        sessionId: currentSessionIdRef.current,
+                        resumptionHandle: sessionResumptionHandleRef.current,
+                        variant,
+                        topic: topicRef.current,
+                        gradeLevel: liveOptionsRef.current?.gradeLevel,
+                        studyMode: liveOptionsRef.current?.studyMode,
+                        studyIntent: liveOptionsRef.current?.studyIntent,
+                        lesson: lessonCtx,
+                    })),
+                });
+                if (!ownsRequest()) return;
+                if (!tokenResponse.ok) {
+                    if (tokenResponse.status === 403) voiceGrantIdRef.current = null;
+                    throw new VoiceTokenRequestError(tokenResponse.status);
+                }
+                liveToken = await tokenResponse.json() as LiveTokenResponse;
+                if (!ownsRequest()) return;
+                liveTokenRef.current = liveToken;
+                tokenRenewFailureRef.current = null;
+                if (liveToken.billing) {
+                    voiceGrantIdRef.current = liveToken.billing.grantId;
+                    onCreditsUpdateRef.current?.({
+                        remainingCredits: liveToken.billing.remainingCredits,
+                        minutesCharged: liveToken.billing.minutesCharged,
+                    });
+                }
             }
-            const { token } = await tokenResponse.json();
+            const { token, model, config: lockedConfig, expireTime } = liveToken;
+            const expiresAt = Date.parse(expireTime);
+            const expireConnection = () => {
+                tokenExpireTimeoutRef.current = null;
+                handleStreamingFailure(tokenRenewFailureRef.current ?? new Error('The paid voice block has ended. Please reconnect to continue.'), 'resume', generation);
+            };
+            if (!tokenExpireTimeoutRef.current && Number.isFinite(expiresAt)) {
+                tokenExpireTimeoutRef.current = setTimeout(expireConnection, Math.max(0, expiresAt - Date.now()));
+            }
 
             const ai = new GoogleGenAI({
                 apiKey: token,
                 httpOptions: { apiVersion: 'v1alpha' }
             });
 
-            // Configuration is locked server-side via liveConnectConstraints
-            // No need to pass config since it's pre-configured in the ephemeral token
-
             const responseQueue: LiveServerMessage[] = [];
-            const audioParts: string[] = [];
-
-            // Build context addition based on lesson context or topic (read refs — startGeminiLiveSession is []-memoized)
-            let contextAddition = '';
-            const lessonCtx = lessonContextRef.current;
-            const topicNow = topicRef.current;
-
-            if (lessonCtx?.title && lessonCtx.learningRunId && lessonCtx.activeObjective) {
-                contextAddition = `\n\n${buildObjectiveTutorPromptContext({
-                    lessonTitle: lessonCtx.title,
-                    subject: lessonCtx.subject,
-                    gradeLevel: lessonCtx.gradeLevel,
-                    objectiveText: lessonCtx.activeObjective.text,
-                    lessonContent: lessonCtx.content,
-                })}`;
-            } else if (lessonCtx?.title) {
-                const objectiveText = Array.isArray(lessonCtx.objectives)
-                    ? lessonCtx.objectives.map((objective) => `- ${objective}`).join('\n')
-                    : lessonCtx.objectives;
-                contextAddition = `
-
-### **Lesson Context**
-
-You are helping a student learn material from a specific lesson:
-- **Lesson:** ${lessonCtx.title}
-- **Subject:** ${lessonCtx.subject || 'Not specified'}
-- **Grade Level:** ${lessonCtx.gradeLevel || 'Not specified'}
-
-**Learning Objectives:**
-${objectiveText || 'No specific objectives provided.'}
-
-**Lesson Content:**
-${lessonCtx.content ? lessonCtx.content.substring(0, 2000) + (lessonCtx.content.length > 2000 ? '...' : '') : 'No content provided.'}
-
-Focus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes. When the student asks questions, relate answers back to the lesson objectives.
-`;
-            } else if (topicNow) {
-                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topicNow}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
-            }
-
-            const variant = liveOptionsRef.current?.variant ?? 'tutor';
-            const isStudyCompanion = variant === 'studyCompanion';
-
-            let finalSystemPrompt: string;
-            if (isStudyCompanion) {
-                const gl = liveOptionsRef.current?.gradeLevel?.trim() || 'the learner';
-                const sm = liveOptionsRef.current?.studyMode ?? 'companion';
-                const si = liveOptionsRef.current?.studyIntent ?? 'general';
-                const lessonHint =
-                    lessonCtx?.title && lessonCtx.title.trim().length > 0
-                        ? {
-                            title: lessonCtx.title,
-                            subject: lessonCtx.subject || 'general',
-                            objectives: Array.isArray(lessonCtx.objectives)
-                                ? lessonCtx.objectives.join('\n')
-                                : lessonCtx.objectives ?? null,
-                            content: lessonCtx.content ?? null,
-                        }
-                        : undefined;
-                finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
-            } else {
-                finalSystemPrompt = systemPrompt + contextAddition;
-            }
-
-            const visualizationToolDeclaration = {
-                name: 'generate_visualization_description',
-                description:
-                    'Generates an interactive visual or on-screen quiz for the learner. Call when a diagram, simulation, manipulable demo, or interactive/visual quiz would help more than voice alone.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        task_description: {
-                            type: 'string',
-                            description:
-                                'Detailed description: type (illustration, simulation, visual quiz), layout, interactions, feedback, labels. For quizzes, specify prompts, choices, and correct-answer feedback.',
-                        },
-                    },
-                    required: ['task_description'],
-                },
-            };
-
-            const objectiveArtifactToolDeclaration = {
-                name: 'request_learning_artifact',
-                description: 'Shows the next teacher-reviewed visualization or quiz for the active objective, generating a fallback only after reviewed activities are exhausted.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        kind: { type: 'string', enum: ['visualization', 'quiz'] },
-                        taskDescription: { type: 'string', description: 'A short description of the concept or check the learner needs.' },
-                    },
-                    required: ['kind', 'taskDescription'],
-                },
-            };
-
-            const tutorTools = [
-                { googleSearch: {} },
-                {
-                    functionDeclarations: [
-                        lessonCtx?.learningRunId ? objectiveArtifactToolDeclaration : visualizationToolDeclaration,
-                        {
-                            name: 'set_topic',
-                            description:
-                                'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
-                            parameters: {
-                                type: 'object',
-                                properties: {
-                                    topic: {
-                                        type: 'string',
-                                        description: 'A concise 3–8 word title describing the current main topic.',
-                                    },
-                                },
-                                required: ['topic'],
-                            },
-                        },
-                    ],
-                },
-            ];
-
-            /** Study Companion Live: function calls only (no Google Search); single viz/quiz tool per product constraint. */
-            const studyCompanionLiveTools = [{ functionDeclarations: [visualizationToolDeclaration] }];
 
             const connectConfig: any = {
-                model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    proactivity: { proactiveAudio: true },
-                    realtimeInputConfig: {
-                        automaticActivityDetection: {
-                            disabled: false,
-                            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-                        }
-                    },
-                    systemInstruction: finalSystemPrompt,
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
-                    },
-                    contextWindowCompression: {
-                        slidingWindow: {}
-                    },
-                    sessionResumption: {
-                        handle: sessionResumptionHandleRef.current || undefined
-                    },
-                    tools: isStudyCompanion ? studyCompanionLiveTools : tutorTools,
-                    ...(isStudyCompanion
-                        ? { inputAudioTranscription: {}, outputAudioTranscription: {} }
-                        : {}),
-                },
+                model,
+                config: reuseToken ? { ...lockedConfig, sessionResumption: { handle: sessionResumptionHandleRef.current } } : lockedConfig,
                 callbacks: {
                     onopen: () => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        connectionOpened = true;
+                        if (!acceptsEvents()) return;
                         tutorTurnsRef.current.reset();
                         setConnectionStatus('connected');
                         isResumingSessionRef.current = false;
                         sessionOpenedAtRef.current = Date.now();
                     },
                     onmessage: (message: LiveServerMessage) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            responseQueue.push(message);
+                            return;
+                        }
+                        if (!acceptsEvents()) return;
                         tutorTurnsRef.current.received(message);
                         responseQueue.push(message);
-                        processGeminiResponseQueueRef.current?.(responseQueue, audioParts);
+                        processGeminiResponseQueueRef.current?.(responseQueue, acceptsEvents);
                     },
                     onerror: (e: ErrorEvent) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            connectionClosed = true;
+                            setupError = new Error(`Gemini error: ${e.message}`);
+                            if (!geminiLiveSessionRef.current) handleStreamingFailure(setupError, 'resume', generation);
+                            return;
+                        }
+                        if (!acceptsEvents() || isManualDisconnectRef.current) return;
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
                         setConnectionStatus('disconnected');
@@ -726,10 +711,21 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         geminiLiveSessionRef.current = null;
 
                         // Don't show feedback form for errors - let auto-resume handle it
-                        // Clear resumption handle on error
-                        sessionResumptionHandleRef.current = null;
+                        if (!liveTokenRef.current?.billing) sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            connectionClosed = true;
+                            setupError = new Error('Live voice connection ended. Please try again.');
+                            if (!geminiLiveSessionRef.current) {
+                                stopStreaming();
+                                setError(setupError.message);
+                            }
+                            return;
+                        }
+                        if (!acceptsEvents()) return;
+                        connectionClosed = true;
                         // Surface the real close reason for diagnostics.
                         console.warn('[Gemini Live] socket closed', { code: e.code, reason: e.reason });
 
@@ -742,6 +738,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         // drop; reset the rapid-reconnect counter so resumption can work.
                         if (openedAt && Date.now() - openedAt >= RESUME_STABLE_MS) {
                             resumeAttemptsRef.current = 0;
+                        }
+                        if (pendingLiveConnectionRef.current?.generation === generation && stagedLiveResourcesRef.current) {
+                            setConnectionStatus('connecting');
+                            return;
                         }
 
                         // Enter the resume path only when there's a handle (original
@@ -756,7 +756,8 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             hasHandleOrRetrying;
 
                         if (!shouldTryResume) {
-                            setConnectionStatus('disconnected');
+                            stopStreaming();
+                            setError('Live voice connection ended. Please try again.');
                             return;
                         }
 
@@ -768,20 +769,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                             );
                             sessionResumptionHandleRef.current = null;
                             resumeAttemptsRef.current = 0;
-                            isManualDisconnectRef.current = true;
                             setError('Live session ended: the connection kept dropping. Please try again.');
-                            cleanupAudioResources();
-                            setIsStreaming(false);
-                            isStreamingRef.current = false;
-                            setIsSpeaking(false);
-                            setConnectionStatus('disconnected');
+                            stopStreaming();
                             return;
                         }
 
                         resumeAttemptsRef.current += 1;
                         // After the first rapid failure, drop a possibly-stale resumption
                         // handle so the next attempt is a clean fresh connect.
-                        if (resumeAttemptsRef.current >= 2) {
+                        if (resumeAttemptsRef.current >= 2 && !liveTokenRef.current?.billing) {
                             sessionResumptionHandleRef.current = null;
                         }
 
@@ -789,35 +785,30 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                         const delay = Math.min(1000 * 2 ** (resumeAttemptsRef.current - 1), 8000);
                         setConnectionStatus('connecting');
                         reconnectTimeoutRef.current = setTimeout(() => {
-                            if (!isStreamingRef.current || isManualDisconnectRef.current) return;
+                            if (!ownsConnection() || !isStreamingRef.current || isManualDisconnectRef.current) return;
                             isResumingSessionRef.current = true;
-                            startGeminiLiveSessionRef.current?.(streamRef.current!, 16000);
+                            void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((err: unknown) => {
+                                handleStreamingFailure(err, 'resume', generation);
+                            });
                         }, delay);
                     }
                 }
             };
 
             const geminiSession = await ai.live.connect(connectConfig);
-
-            geminiLiveSessionRef.current = geminiSession;
-
-            // Set up audio capture and send to Gemini
+            stagedSession = geminiSession;
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
             const audioContext = new AudioContext({ sampleRate });
-            audioContextRef.current = audioContext;
+            stagedContext = audioContext;
             const source = audioContext.createMediaStreamSource(stream);
-            // Create mic analyser for VAD visualization
+            let micAnalyser: AnalyserNode | null = null;
             try {
-                micAnalyserRef.current = audioContext.createAnalyser();
-                micAnalyserRef.current.fftSize = 256;
-                micAnalyserRef.current.smoothingTimeConstant = 0.8;
-                source.connect(micAnalyserRef.current);
+                micAnalyser = audioContext.createAnalyser();
+                micAnalyser.fftSize = 256;
+                micAnalyser.smoothingTimeConstant = 0.8;
+                source.connect(micAnalyser);
             } catch { /* best-effort cleanup; failure is non-fatal */ }
-
-            // Ensure we are not double-sending by disconnecting any previous processor
-            if (processorRef.current) {
-                try { processorRef.current.disconnect(); } catch { /* best-effort cleanup; failure is non-fatal */ }
-                processorRef.current = null;
-            }
 
             try {
                 await audioContext.audioWorklet.addModule('/audio-processor.js');
@@ -825,11 +816,14 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 console.error('Failed to add audio worklet module.', e);
                 throw new Error('Failed to load audio processor.');
             }
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
 
             const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
+            stagedProcessor = workletNode;
 
             workletNode.port.onmessage = (event) => {
-                if (!isStreamingRef.current || !geminiLiveSessionRef.current) return;
+                if (!acceptsEvents() || !isStreamingRef.current || !geminiLiveSessionRef.current) return;
 
                 if (event.data.type === 'audioData') {
                     const float32Chunk = new Float32Array(event.data.data);
@@ -921,6 +915,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                                 mimeType: `audio/pcm;rate=${sampleRate}`
                             }
                         });
+                        emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'audio', source: 'microphone', audioBytes: uint8Array.byteLength });
                     } catch (err) {
                         // Socket may be closing/closed; drop this frame
                     }
@@ -931,7 +926,62 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             try {
                 workletNode.connect(audioContext.destination);
             } catch { /* best-effort cleanup; failure is non-fatal */ }
+            const initialMessage = sessionResumptionHandleRef.current
+                ? 'Continue'
+                : isStudyCompanion
+                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
+                    : 'Hello';
+            geminiSession.sendRealtimeInput({ text: initialMessage });
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
+            const previousCaptureContext = audioContextRef.current;
+            const previousProcessor = processorRef.current;
+            const previousMicAnalyser = micAnalyserRef.current;
+            connectionGeneration = ++connectionGenerationRef.current;
+            promoted = true;
+            if (stagedLiveResourcesRef.current === stagedResources) stagedLiveResourcesRef.current = null;
+            geminiLiveSessionRef.current = geminiSession;
+            audioContextRef.current = audioContext;
+            micAnalyserRef.current = micAnalyser;
             processorRef.current = workletNode;
+            try { previousProcessor?.disconnect(); } catch (error) { console.warn('Failed to disconnect previous audio processor', error); }
+            try { previousMicAnalyser?.disconnect(); } catch (error) { console.warn('Failed to disconnect previous microphone analyser', error); }
+            if (previousCaptureContext && previousCaptureContext.state !== 'closed') {
+                void previousCaptureContext.close().catch(error => console.warn('Failed to close previous audio context', error));
+            }
+            if (connectionOpened) connectConfig.callbacks.onopen();
+            const queuedMessages = responseQueue.splice(0);
+            for (const message of queuedMessages) connectConfig.callbacks.onmessage(message);
+            if (!acceptsEvents()) return;
+            emitLiveInputDiagnostic({ event: 'sent', connectionGeneration, kind: 'text', source: 'initial' });
+            tutorTurnsRef.current.sent();
+            if (tokenExpireTimeoutRef.current) clearTimeout(tokenExpireTimeoutRef.current);
+            tokenExpireTimeoutRef.current = Number.isFinite(expiresAt) ? setTimeout(expireConnection, Math.max(0, expiresAt - Date.now())) : null;
+            if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
+            const renewDelay = tokenRenewFailureRef.current ? null : liveTokenRenewDelay(expireTime);
+            tokenRenewTimeoutRef.current = renewDelay === null ? null : setTimeout(() => {
+                tokenRenewTimeoutRef.current = null;
+                if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                isResumingSessionRef.current = true;
+                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000, true)
+                    .then(() => {
+                        try { geminiSession.close(); } catch (error) { console.warn('Failed to close replaced live session', error); }
+                    })
+                    .catch((err: unknown) => {
+                        if (!ownsRequest() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                        tokenRenewFailureRef.current = err;
+                        isResumingSessionRef.current = false;
+                        if (acceptsEvents()) return;
+                        if (sessionResumptionHandleRef.current && Date.parse(liveTokenRef.current?.expireTime ?? '') > Date.now()) {
+                            isResumingSessionRef.current = true;
+                            void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((resumeError: unknown) => {
+                                handleStreamingFailure(resumeError, 'resume', generation);
+                            });
+                            return;
+                        }
+                        handleStreamingFailure(err, 'resume', generation);
+                    });
+            }, renewDelay);
 
             // Initialize MediaRecorder AFTER AudioWorklet is connected
             // This ensures VAD state is being updated before recording starts
@@ -950,19 +1000,22 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
             try {
                 if (typeof MediaRecorder !== 'undefined') {
                     const mimeType = pickType();
-                    userChunksRef.current = [];
-                    userRecorderRef.current = new MediaRecorder(stream, { mimeType });
-                    userRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                    const chunks: Blob[] = [];
+                    userChunksRef.current = chunks;
+                    const recorder = new MediaRecorder(stream, { mimeType });
+                    userRecorderRef.current = recorder;
+                    recorder.ondataavailable = (e: BlobEvent) => {
                         if (e.data && e.data.size > 0) {
                             // Gate saving by VAD if enabled
-                            if (saveOnlySpeechRef.current) {
+                            if (saveOnlySpeechRef.current && userRecorderRef.current === recorder) {
                                 const include = vadSpeechSinceLastChunkRef.current || vadSpeechActiveRef.current;
                                 vadSpeechSinceLastChunkRef.current = false;
                                 if (!include) {
                                     return; // drop silent chunk
                                 }
                             }
-                            userChunksRef.current.push(e.data);
+                            chunks.push(e.data);
+                            if (userRecorderRef.current !== recorder) return;
                             pendingUserChunkQueueRef.current.push(e.data);
                             maybeUploadSegment('user');
                         }
@@ -972,25 +1025,38 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
             } catch { /* best-effort cleanup; failure is non-fatal */ }
 
-            const initialMessage = sessionResumptionHandleRef.current
-                ? 'Continue'
-                : isStudyCompanion
-                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
-                    : 'Hello';
-            sendLiveText(initialMessage);
-
         } catch (error: any) {
+            if (!ownsRequest()) return;
             console.error('Failed to start Gemini Live session:', error);
             throw error;
+        } finally {
+            if (!promoted) stagedResources.close();
+            if (stagedLiveResourcesRef.current === stagedResources) stagedLiveResourcesRef.current = null;
         }
-    }, [cleanupAudioResources, maybeUploadSegment, sendLiveText]);
+    }, [maybeUploadSegment, sendLiveText, handleStreamingFailure, stopStreaming]);
+
+    const startGeminiLiveSession = useCallback((stream: MediaStream, sampleRate: number, forceRenewal = false) => {
+        const generation = sessionGenerationRef.current;
+        if (pendingLiveConnectionRef.current?.generation === generation) return pendingLiveConnectionRef.current.promise;
+        const promise = connectGeminiLiveSession(stream, sampleRate, forceRenewal);
+        const pending = { generation, promise };
+        pendingLiveConnectionRef.current = pending;
+        const clearPending = () => {
+            if (pendingLiveConnectionRef.current === pending) pendingLiveConnectionRef.current = null;
+        };
+        void promise.then(clearPending, clearPending);
+        return promise;
+    }, [connectGeminiLiveSession]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
-    const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], audioParts: string[]) => {
-        const FRAGMENT_PARTS = 10;
+    const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => {
         const MAX_MESSAGES_PER_FRAME = 10; // Process max 10 messages per animation frame
 
         const processMessages = () => {
+            if (!acceptsEvents()) {
+                responseQueue.length = 0;
+                return;
+            }
             let messagesProcessed = 0;
 
             const flushUserTranscript = () => {
@@ -1006,7 +1072,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 onTranscriptionListenerRef.current?.({ role: 'assistant', text: t, finished: true });
             };
 
-            while (responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
+            while (acceptsEvents() && responseQueue.length > 0 && messagesProcessed < MAX_MESSAGES_PER_FRAME) {
                 messagesProcessed++;
                 const message = responseQueue.shift();
 
@@ -1026,15 +1092,11 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
 
                 if (message?.serverContent && (message as any).serverContent.interrupted) {
-                    audioParts.length = 0;
+                    const connectionGeneration = connectionGenerationRef.current;
                     liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
-                    if (playbackCtxRef.current && playbackCtxRef.current.state !== 'closed') {
-                        playbackCtxRef.current.close();
-                    }
-                    playbackCtxRef.current = null;
-                    analyserRef.current = null;
-                    nextPlaybackTimeRef.current = 0;
+                    playbackQueueRef.current?.interrupt();
+                    emitLiveInputDiagnostic({ event: 'server-interrupted', connectionGeneration });
                     continue;
                 }
 
@@ -1112,7 +1174,9 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
                         // Answer Gemini right away so it keeps talking while the visual is prepared.
                         try {
-                            geminiLiveSessionRef.current?.sendToolResponse({
+                            const session = geminiLiveSessionRef.current;
+                            if (!session) continue;
+                            session.sendToolResponse({
                                 functionResponses: [
                                     {
                                         id: fn.id || '',
@@ -1124,6 +1188,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                                     }
                                 ]
                             });
+                            emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'tool', source: 'tool' });
                         } catch (err) {
                             console.warn('Failed to send tool response back to Gemini:', err);
                         }
@@ -1131,25 +1196,20 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
 
                 // Handle audio data
-                if (message?.serverContent?.modelTurn?.parts) {
-                    const part = message.serverContent.modelTurn.parts[0];
-                    if (part?.inlineData?.data) {
-                        audioParts.push(part.inlineData.data);
-                    }
-                }
-
-                const shouldFlush =
-                    audioParts.length >= FRAGMENT_PARTS ||
-                    (message?.serverContent?.turnComplete && audioParts.length > 0);
-
-                if (shouldFlush) {
-                    playGeminiAudioChunksRef.current?.(audioParts.slice());
-                    audioParts.length = 0;
+                const audioParts = message?.serverContent?.modelTurn?.parts?.flatMap(part => {
+                    const audio = part.inlineData;
+                    return audio?.data && (!audio.mimeType || audio.mimeType.startsWith('audio/pcm')) ? [audio.data] : [];
+                });
+                if (audioParts?.length && acceptsEvents()) playGeminiAudioChunksRef.current?.(audioParts);
+                if (message?.serverContent?.turnComplete) {
+                    playbackQueueRef.current?.completeTurn();
+                } else if (message?.serverContent?.generationComplete) {
+                    playbackQueueRef.current?.completeTurn('generation-complete');
                 }
             }
 
             // If there are more messages, schedule processing for next animation frame
-            if (responseQueue.length > 0) {
+            if (acceptsEvents() && responseQueue.length > 0) {
                 requestAnimationFrame(processMessages);
             }
         };
@@ -1159,17 +1219,16 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     }, []);
 
     // Play audio chunks from Gemini
-    const playGeminiAudioChunks = useCallback(async (rawData: string[]) => {
-        decodingAudioRef.current += 1;
+    const playGeminiAudioChunks = useCallback((rawData: string[]) => {
+        if (!isStreamingRef.current) return;
         try {
-            // Single decode path via convertToWav (avoid duplicate base64→PCM work per chunk).
-            const wavBuffer = convertToWav(rawData, 24000);
-
             let ctx = playbackCtxRef.current;
             if (!ctx || ctx.state === 'closed') {
+                playbackQueueRef.current?.stop();
+                playbackQueueRef.current = null;
+                playbackDestinationRef.current = null;
                 ctx = new AudioContext({ sampleRate: 24000 });
                 playbackCtxRef.current = ctx;
-                nextPlaybackTimeRef.current = ctx.currentTime;
             }
 
             if (!playbackDestinationRef.current) {
@@ -1194,12 +1253,15 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                     }
                     return 'audio/webm';
                 };
-                aiChunksRef.current = [];
+                const chunks: Blob[] = [];
+                aiChunksRef.current = chunks;
                 try {
-                    aiRecorderRef.current = new MediaRecorder(playbackDestinationRef.current.stream, { mimeType: pickType() });
-                    aiRecorderRef.current.ondataavailable = (e: BlobEvent) => {
+                    const recorder = new MediaRecorder(playbackDestinationRef.current.stream, { mimeType: pickType() });
+                    aiRecorderRef.current = recorder;
+                    recorder.ondataavailable = (e: BlobEvent) => {
                         if (e.data && e.data.size > 0) {
-                            aiChunksRef.current.push(e.data);
+                            chunks.push(e.data);
+                            if (aiRecorderRef.current !== recorder) return;
                             pendingAiChunkQueueRef.current.push(e.data);
                             maybeUploadSegment('ai');
                         }
@@ -1223,55 +1285,29 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 }
             }
 
-            const audioBuffer = await ctx.decodeAudioData(wavBuffer.buffer as ArrayBuffer);
-            const float32Data = audioBuffer.getChannelData(0);
-            onAiAudioDataListenerRef.current?.(float32Data);
-            const source = ctx.createBufferSource();
-            source.buffer = audioBuffer;
-
-            // Connect through analyser for visualization if available
-            try {
-                if (analyserRef.current && analyserRef.current.context.state !== 'closed') {
-                    source.connect(analyserRef.current);
-                } else {
-                    source.connect(ctx.destination);
-                }
-                if (playbackDestinationRef.current) {
-                    try { source.connect(playbackDestinationRef.current); } catch { /* best-effort cleanup; failure is non-fatal */ }
-                }
-            } catch (e) {
-                console.error('Failed to connect audio source:', e);
-                try {
-                    source.connect(ctx.destination);
-                } catch (fallbackError) {
-                    console.error('Failed to connect to destination:', fallbackError);
-                    throw new Error('Unable to connect audio source');
-                }
+            if (!playbackQueueRef.current) {
+                const context = ctx;
+                const analyser = analyserRef.current;
+                const destination = playbackDestinationRef.current;
+                const generation = sessionGenerationRef.current;
+                const queue: PcmPlaybackQueue = new PcmPlaybackQueue(context, {
+                    connect: source => {
+                        source.connect(analyser && analyser.context === context ? analyser : context.destination);
+                        if (destination?.context === context) source.connect(destination);
+                    },
+                    onSamples: samples => {
+                        if (playbackQueueRef.current === queue && generation === sessionGenerationRef.current) onAiAudioDataListenerRef.current?.(samples);
+                    },
+                    onPlayingChange: playing => {
+                        if (playbackQueueRef.current === queue && generation === sessionGenerationRef.current) setIsSpeaking(playing);
+                    },
+                    onDiagnostic: detail => window.dispatchEvent(new CustomEvent('insyte-audio-playback', { detail })),
+                });
+                playbackQueueRef.current = queue;
             }
-
-            const startAt = Math.max(nextPlaybackTimeRef.current, ctx.currentTime + 0.05);
-            source.start(startAt);
-            nextPlaybackTimeRef.current = startAt + audioBuffer.duration;
-
-            setIsSpeaking(true);
-            // Clear any existing timeout to prevent premature stopping
-            if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
-
-            // Calculate when this chunk will finish playing
-            const timeUntilEnd = (startAt + audioBuffer.duration - ctx.currentTime) * 1000;
-            // A small buffer to ensure the audio has fully finished.
-            const endTime = Math.max(0, timeUntilEnd) + 250;
-
-            speakingTimeoutRef.current = setTimeout(() => {
-                if (playbackCtxRef.current && nextPlaybackTimeRef.current <= playbackCtxRef.current.currentTime + 0.1) {
-                    setIsSpeaking(false);
-                }
-            }, endTime);
-
-        } catch (e) {
-            console.error('Failed to play Gemini audio chunks:', e);
-        } finally {
-            decodingAudioRef.current -= 1;
+            for (const data of rawData) playbackQueueRef.current?.enqueue(data);
+        } catch {
+            console.error('Failed to play Gemini audio chunks');
         }
     }, [maybeUploadSegment]);
 
@@ -1282,8 +1318,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         processGeminiResponseQueueRef.current = processGeminiResponseQueue;
         playGeminiAudioChunksRef.current = playGeminiAudioChunks;
     }, [startGeminiLiveSession, processGeminiResponseQueue, playGeminiAudioChunks]);
-
-    // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
     const setToolCallListener = useCallback((cb: ToolCallListener) => {
         toolCallListenerRef.current = cb;
@@ -1321,6 +1355,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         try {
             if (geminiLiveSessionRef.current) {
                 geminiLiveSessionRef.current.sendRealtimeInput({ text: payload });
+                emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'text', source: 'viewport' });
             }
         } catch (e) {
             console.error('sendViewport failed:', e);
@@ -1336,6 +1371,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 geminiLiveSessionRef.current.sendRealtimeInput({
                     video: { data: base64Data, mimeType }
                 });
+                emitLiveInputDiagnostic({ event: 'sent', connectionGeneration: connectionGenerationRef.current, kind: 'video', source: 'visual' });
             }
         } catch (e) {
             console.error('sendMedia failed:', e);
@@ -1398,6 +1434,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         onVadStateListenerRef.current = cb;
     }, []);
 
+    const setOnCreditsUpdate = useCallback((cb: ((update: VoiceCreditsUpdate) => void) | null) => {
+        onCreditsUpdateRef.current = cb;
+    }, []);
+
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
         return () => {
@@ -1433,5 +1473,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         setSaveOnlySpeech,
         setOnVadStateListener,
         setOnTranscription,
+        setOnCreditsUpdate,
     };
 }

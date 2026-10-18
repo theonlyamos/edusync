@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
+import type { VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import { Loader2, Send, StopCircle, X, ChevronLeft, ChevronRight, AlertTriangle, MessageSquare, PanelLeftClose, PanelRightClose, RefreshCw } from 'lucide-react';
@@ -15,11 +16,11 @@ import dynamic from 'next/dynamic';
 import axios from 'axios';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
 /** How long a new visual may take to render before the tutor is told it failed. */
 const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
-const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
@@ -58,7 +59,6 @@ function HomeComponent() {
   const [credits, setCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(true);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
-  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
@@ -85,6 +85,10 @@ function HomeComponent() {
   } | null>(null);
 
   const showOverlay = (mode === 'record') && (!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm;
+  const handleVoiceStartupFailed = useCallback(() => {
+    setVoiceActive(false);
+    setSessionManuallyStopped(true);
+  }, []);
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -102,12 +106,6 @@ function HomeComponent() {
   };
 
   const handleVoiceStop = async () => {
-    // Clear credit deduction interval
-    if (creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-
     if (currentSessionId) {
       try { await axios.patch(`/api/learning/sessions/${currentSessionId}`, { status: 'ended', ended: true }); } catch { /* best-effort cleanup; failure is non-fatal */ }
       setCurrentSessionId(null);
@@ -144,13 +142,7 @@ function HomeComponent() {
     setGeneratingVisualization(false);
     setShowCreditWarning(false);
     setSessionManuallyStopped(false);
-
-    // Clear any intervals
-    if (creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [voiceActive, handleVoiceStop, creditDeductionInterval]);
+  }, [voiceActive, handleVoiceStop]);
 
   const handleFeedbackFormChange = (show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -405,7 +397,7 @@ function HomeComponent() {
       const container = vizRef.current as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
       isCapturingRef.current = true;
-      toPng(container, { pixelRatio: 1 })
+      toPng(container, { pixelRatio: 1, filter: node => !(node instanceof Element && node.closest('[data-lesson-coding-workspace]')) })
         .then((dataUrl) => {
           window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
         })
@@ -561,67 +553,18 @@ function HomeComponent() {
     }
   }, [mode, recordingsChecked, sessionIdFromUrl, currentSessionId, voiceActive, sessionManuallyStopped]);
 
-  // Start credit deduction when voice becomes active and connected
-  useEffect(() => {
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      if (credits === null || creditsLoading) {
-        return;
-      }
-      if (credits !== null && credits < 1) {
-        setShowCreditWarning(true);
-        handleVoiceStop();
-        return;
-      }
-
-      // Start deducting credits every minute
-      const interval = setInterval(async () => {
-        try {
-          const response = await axios.post('/api/credits/deduct-minute', {
-            sessionId: currentSessionId
-          });
-
-          if (response.data.success) {
-            const newCredits = response.data.remainingCredits;
-            setCredits(newCredits);
-
-            // Dispatch credit update event for layout
-            window.dispatchEvent(new CustomEvent('creditUpdate', {
-              detail: { credits: newCredits }
-            }));
-
-            // Show warning if credits are low
-            if (newCredits <= 5 && newCredits > 0) {
-              setShowCreditWarning(true);
-              setTimeout(() => setShowCreditWarning(false), 5000);
-            }
-
-            // Stop session if no credits left
-            if (newCredits <= 0) {
-              setError('Session ended: No credits remaining');
-              handleVoiceStop();
-            }
-          } else {
-            setError('Session ended: ' + response.data.error);
-            handleVoiceStop();
-          }
-        } catch (error: any) {
-          console.error('Failed to deduct credits:', error);
-          if (error.response?.status === 402) {
-            setError('Session ended: Insufficient credits');
-            handleVoiceStop();
-          }
-        }
-      }, 60000); // Every minute
-
-      setCreditDeductionInterval(interval);
+  // Voice time is charged on the server in prepaid blocks when each voice
+  // token is issued; this only keeps the balance on screen in sync.
+  const handleCreditsUpdate = useCallback(({ remainingCredits }: VoiceCreditsUpdate) => {
+    setCredits(remainingCredits);
+    window.dispatchEvent(new CustomEvent('creditUpdate', {
+      detail: { credits: remainingCredits }
+    }));
+    if (remainingCredits <= 5) {
+      setShowCreditWarning(true);
+      setTimeout(() => setShowCreditWarning(false), 5000);
     }
-
-    // Cleanup interval when voice stops or disconnects
-    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
+  }, []);
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 relative overflow-hidden">
@@ -639,8 +582,10 @@ function HomeComponent() {
                 <StartButtonOverlay
                   onStart={() => {
                     setMode('record');
+                    setError('');
                     setVoiceActive(true);
                   }}
+                  error={error}
                   connectionStatus={connectionStatus}
                   creditsLoading={creditsLoading}
                   outOfCredits={credits !== null && credits <= 0}
@@ -705,6 +650,7 @@ function HomeComponent() {
                         sessionId={currentSessionId || sessionIdFromUrl}
                         topic={topic}
                         onError={setError}
+                        onStartupFailed={handleVoiceStartupFailed}
                         onToolCall={handleToolCall}
                         onConnectionStatusChange={setConnectionStatus}
                         onCountdownEnd={handleCountdownEnd}
@@ -713,6 +659,7 @@ function HomeComponent() {
                         onFeedbackSubmit={handleFeedbackSubmit}
                         onFeedbackClose={handleFeedbackClose}
                         onRecordingsReady={handleRecordingsReady}
+                        onCreditsUpdate={handleCreditsUpdate}
                       />
                     )}
                     {error && (
@@ -765,9 +712,10 @@ function HomeComponent() {
             {/* Right Panel - Preview/Code Editor */}
             <div data-visualization-viewport className="min-w-0 flex-1 flex flex-col ml-0 overflow-y-auto" ref={vizRef}>
               {code && library ? (
+                <LearningActivityToolbar buttonClassName="h-9 w-9">
                 <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {/* Chat Panel Toggle - Only show on large screens */}
                         <Button
@@ -790,7 +738,7 @@ function HomeComponent() {
                         </Button>
                         <CardTitle>{getLibraryDisplayName()} Visualization</CardTitle>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                         {debugMode && (
                           <ToggleGroup
                             type="single"
@@ -852,6 +800,7 @@ function HomeComponent() {
                         >
                           <RefreshCw className="w-4 h-4" />
                         </Button>
+                        {show === 'render' && <LearningActivityExpandSlot />}
                         {visualizations.length > 0 && (
                           <div className="flex items-center gap-2">
                             <Button size="icon" variant="ghost" className="group hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization">
@@ -884,14 +833,7 @@ function HomeComponent() {
                       {show === 'code' && (
                         !generatingVisualization ? (
                           <div className="h-full">
-                            <Editor
-                              data={{
-                                initialCode: code,
-                                language: library === 'react' ? 'javascript' : 'javascript',
-                                tests: [],
-                              }}
-                              onSubmit={() => { }}
-                            />
+                            <pre className="h-full overflow-auto whitespace-pre-wrap rounded border p-3 text-sm"><code>{code}</code></pre>
                           </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center">
@@ -905,6 +847,7 @@ function HomeComponent() {
                     </div>
                   </CardContent>
                 </Card>
+                </LearningActivityToolbar>
               ) : (
                 generatingVisualization ? (
                   <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">

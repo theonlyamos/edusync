@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
+import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,15 +87,15 @@ function ApiKeysContent() {
   const createApiKey = async () => {
     try {
       setError(null);
-      const domains = newKeyData.allowed_domains
-        .split('\n')
-        .map(d => d.trim())
-        .filter(d => d.length > 0);
+      const domains = allowedDomainsSchema.safeParse(newKeyData.allowed_domains);
+      if (!domains.success) {
+        throw new Error(domains.error.issues[0].message);
+      }
 
       const payload: any = {
         name: newKeyData.name,
         description: newKeyData.description || null,
-        allowed_domains: domains.length > 0 ? domains : null,
+        allowed_domains: domains.data,
       };
 
       if (organizationId) {
@@ -110,7 +111,7 @@ function ApiKeysContent() {
 
       setVisibleKeys(new Set([response.data.apiKey.id]));
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create API key');
+      setError(err.response?.data?.error || err.message || 'Failed to create API key');
     }
   };
 
@@ -246,7 +247,7 @@ function ApiKeysContent() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="domains">Allowed Domains (one per line, optional)</Label>
+                  <Label htmlFor="domains">Allowed Domains (comma or newline separated, optional)</Label>
                   <Textarea
                     id="domains"
                     value={newKeyData.allowed_domains}
@@ -255,7 +256,7 @@ function ApiKeysContent() {
                     rows={3}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Leave empty to allow all domains. Use * for wildcards (e.g., *.example.com)
+                    Leave empty to allow all domains. Use ASCII hostnames or *.example.com, without protocols, ports or paths.
                   </p>
                 </div>
                 <div className="flex gap-2">

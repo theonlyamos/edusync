@@ -60,6 +60,11 @@ export const SANDBOX_RESPONSIVE_SCRIPT = `
     }
 
     updateViewport();
+    window.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && window.parent !== window) {
+        window.parent.postMessage({ type: 'lesson-viewer-escape' }, '*');
+      }
+    });
     window.addEventListener('resize', updateViewport);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', updateViewport);
     new ResizeObserver(updateViewport).observe(document.documentElement);

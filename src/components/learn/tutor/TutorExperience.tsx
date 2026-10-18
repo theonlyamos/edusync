@@ -11,18 +11,18 @@ import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
-import { LessonContext } from '@/hooks/useAudioStreaming';
+import type { LessonContext, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
 import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
 /** How long a new visual may take to render before the tutor is told it failed. */
 const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
-const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
@@ -76,7 +76,6 @@ export const TutorExperience = ({
   const [credits, setCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(creditsEnabled);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
-  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const vizOnlyRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +100,7 @@ export const TutorExperience = ({
   } | null>(null);
   const previousSessionIdRef = useRef<string | null>(null);
   const lastEndedSessionIdRef = useRef<string | null>(null);
+  const handleVoiceStartupFailed = useCallback(() => setVoiceActive(false), []);
 
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
@@ -120,12 +120,6 @@ export const TutorExperience = ({
   };
 
   const handleVoiceStop = async () => {
-    // Clear credit deduction interval (embed only)
-    if (creditsEnabled && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-
     if (currentSessionId) {
       try {
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
@@ -159,15 +153,10 @@ export const TutorExperience = ({
     vizDispatch({ type: 'SET_GENERATING', payload: false });
     setSessionManuallyStopped(false);
 
-    // Clear any intervals (embed only)
     if (creditsEnabled) {
       setShowCreditWarning(false);
-      if (creditDeductionInterval) {
-        clearInterval(creditDeductionInterval);
-        setCreditDeductionInterval(null);
-      }
     }
-  }, [voiceActive, handleVoiceStop, creditDeductionInterval, lessonContext, getFeedback, creditsEnabled]);
+  }, [voiceActive, handleVoiceStop, lessonContext, getFeedback, creditsEnabled]);
 
   const handleFeedbackFormChange = useCallback((show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -293,17 +282,6 @@ export const TutorExperience = ({
         return null;
     }
   }, [code, library, handleRendererError, handleRendererReady, handleSketchError]);
-
-  const editorData = useMemo(
-    () => ({
-      initialCode: code,
-      language: library === 'react' ? 'javascript' : 'javascript',
-      tests: [],
-    }),
-    [code, library]
-  );
-
-  const handleEditorSubmit = useCallback(() => { }, []);
 
   const handleToolCall = async (name: string, args: any, callId?: string): Promise<VisualStatusReport | void> => {
     if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
@@ -467,7 +445,8 @@ export const TutorExperience = ({
             if (
               node.classList?.contains('monaco-editor') ||
               node.classList?.contains('monaco-aria-container') ||
-              node.closest?.('.monaco-editor')
+              node.closest?.('.monaco-editor') ||
+              node.closest?.('[data-lesson-coding-workspace]')
             ) {
               return false;
             }
@@ -641,73 +620,19 @@ export const TutorExperience = ({
     return () => observer.disconnect();
   }, []);
 
-  // Start credit deduction when voice becomes active and connected (embed only)
-  useEffect(() => {
+  // Voice time is charged on the server in prepaid blocks when each voice
+  // token is issued; this only keeps the balance on screen in sync.
+  const handleCreditsUpdate = useCallback(({ remainingCredits }: VoiceCreditsUpdate) => {
     if (!creditsEnabled) return;
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      if (credits === null || creditsLoading) {
-        return;
-      }
-      if (credits !== null && credits < 1) {
-        setShowCreditWarning(true);
-        handleVoiceStop();
-        return;
-      }
-
-      // Start deducting credits every minute
-      const interval = setInterval(async () => {
-        try {
-          const response = await axios.post('/api/credits/deduct-minute', {
-            sessionId: currentSessionId
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...authHeaders,
-            }
-          });
-
-          if (response.data.success) {
-            const newCredits = response.data.remainingCredits;
-            setCredits(newCredits);
-
-            // Dispatch credit update event for layout
-            window.dispatchEvent(new CustomEvent('creditUpdate', {
-              detail: { credits: newCredits }
-            }));
-
-            // Show warning if credits are low
-            if (newCredits <= 5 && newCredits > 0) {
-              setShowCreditWarning(true);
-              setTimeout(() => setShowCreditWarning(false), 5000);
-            }
-
-            // Stop session if no credits left
-            if (newCredits <= 0) {
-              setError('Session ended: No credits remaining');
-              handleVoiceStop();
-            }
-          } else {
-            setError('Session ended: ' + response.data.error);
-            handleVoiceStop();
-          }
-        } catch (error: any) {
-          console.error('Failed to deduct credits:', error);
-          if (error.response?.status === 402) {
-            setError('Session ended: Insufficient credits');
-            handleVoiceStop();
-          }
-        }
-      }, 60000); // Every minute
-
-      setCreditDeductionInterval(interval);
+    setCredits(remainingCredits);
+    window.dispatchEvent(new CustomEvent('creditUpdate', {
+      detail: { credits: remainingCredits }
+    }));
+    if (remainingCredits <= 5) {
+      setShowCreditWarning(true);
+      setTimeout(() => setShowCreditWarning(false), 5000);
     }
-
-    // Cleanup interval when voice stops or disconnects
-    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
+  }, [creditsEnabled]);
 
   const lessonIndicator = (
     <div className="absolute top-3 left-3 right-3 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-md border sm:top-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-4">
@@ -767,8 +692,10 @@ export const TutorExperience = ({
           {creditsEnabled ? (
             <StartButtonOverlay
               onStart={() => {
+                setError('');
                 setVoiceActive(true);
               }}
+              error={error}
               connectionStatus={connectionStatus}
               creditsLoading={creditsLoading}
               outOfCredits={credits !== null && credits <= 0}
@@ -777,8 +704,10 @@ export const TutorExperience = ({
           ) : (
             <StartButtonOverlay
               onStart={() => {
+                setError('');
                 setVoiceActive(true);
               }}
+              error={error}
               connectionStatus={connectionStatus}
               hideCredits={true}
             />
@@ -804,6 +733,7 @@ export const TutorExperience = ({
             </CardContent>
           </Card>
         ) : code && library ? (
+          <LearningActivityToolbar>
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
               <div className="relative w-full z-10 flex flex-wrap items-center justify-end gap-2">
@@ -818,8 +748,8 @@ export const TutorExperience = ({
                       <ToggleGroupItem value="code">Code</ToggleGroupItem>
                     </ToggleGroup>
                   )}
-                  {visualizations.length > 0 && (
-                    <div className="flex items-center gap-2 bg-background/95">
+                  <div className="flex items-center gap-2 bg-background/95">
+                    {visualizations.length > 0 && (
                       <Button
                         size="icon"
                         variant="ghost"
@@ -830,14 +760,19 @@ export const TutorExperience = ({
                       >
                         <RefreshCw className="w-4 h-4" />
                       </Button>
+                    )}
+                    {show === 'render' && <LearningActivityExpandSlot />}
+                    {visualizations.length > 0 && (
+                      <>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization" aria-label="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization" aria-label="Next visualization">
                         <ChevronRight className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -853,17 +788,7 @@ export const TutorExperience = ({
                     {renderVisualization}
                   </div>
                 )}
-                {!preparingActivity && (
-                  <div
-                    className="h-full"
-                    style={{ display: show === 'code' ? 'block' : 'none' }}
-                  >
-                    <Editor
-                      data={editorData}
-                      onSubmit={handleEditorSubmit}
-                    />
-                  </div>
-                )}
+                {!preparingActivity && show === 'code' && <pre className="h-full overflow-auto whitespace-pre-wrap rounded border p-3 text-sm"><code>{code}</code></pre>}
                 {preparingActivity && (
                   <div className="h-full flex flex-col items-center justify-center">
                     <Loader2 className="w-10 h-10 animate-spin mr-2" />
@@ -875,6 +800,7 @@ export const TutorExperience = ({
               </div>
             </CardContent>
           </Card>
+          </LearningActivityToolbar>
         ) : (
           preparingActivity ? (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
@@ -913,6 +839,7 @@ export const TutorExperience = ({
           topic={topic}
           lessonContext={lessonContext}
           onError={setError}
+          onStartupFailed={handleVoiceStartupFailed}
           onToolCall={handleToolCall}
           onConnectionStatusChange={setConnectionStatus}
           onCountdownEnd={handleCountdownEnd}
@@ -920,6 +847,7 @@ export const TutorExperience = ({
           onFeedbackFormChange={handleFeedbackFormChange}
           onFeedbackSubmit={handleFeedbackSubmit}
           onFeedbackClose={handleFeedbackClose}
+          onCreditsUpdate={handleCreditsUpdate}
         />
       </div>
 
