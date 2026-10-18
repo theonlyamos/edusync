@@ -11,6 +11,7 @@ import { useAudioStreaming } from '@/hooks/useAudioStreaming';
 import type { InteractiveElement, StudyIntent, StudyMessage, StudyMode, VoiceInteractiveGenEvent } from './types';
 import { MAX_EXPLANATION_LENGTH, MAX_INTERACTIVE_CODE_LENGTH } from '@/lib/study-companion';
 import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
+import type { VisualStatusReport } from '@/lib/visual-status';
 import { LiveWaveformStrip } from './LiveWaveformStrip';
 
 interface ComposerProps {
@@ -94,13 +95,13 @@ export function Composer({
   }, []);
 
   useEffect(() => {
-    voice.setToolCallListener((name, args) => {
+    voice.setToolCallListener((name, args): Promise<VisualStatusReport | void> | void => {
       if (name !== 'generate_visualization_description') return;
       const notify = onVoiceInteractiveGenRef.current;
       if (!notify) return;
 
       const raw = typeof args?.task_description === 'string' ? args.task_description.trim() : '';
-      if (!raw) return;
+      if (!raw) return Promise.resolve<VisualStatusReport>({ status: 'failed', reason: 'No description was given for the visual' });
 
       const now = Date.now();
       if (raw === vizDedupeRef.current.task && now - vizDedupeRef.current.at < 3000) {
@@ -124,7 +125,8 @@ export function Composer({
       };
       notify({ type: 'placeholder', placeholderId, message: placeholderMsg });
 
-      void (async () => {
+      // Resolves with what reached the chat so the voice tutor only talks about what's there.
+      return (async (): Promise<VisualStatusReport | void> => {
         try {
           const theme =
             typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -159,13 +161,17 @@ export function Composer({
             interactiveElements: [element],
           };
           notify({ type: 'success', replaceId: placeholderId, message });
+          return { status: 'ready', taskDescription: raw, explanation };
         } catch (e) {
-          if (e instanceof DOMException && e.name === 'AbortError') return;
+          if (e instanceof DOMException && e.name === 'AbortError') {
+            return { status: 'failed', taskDescription: raw, reason: 'A newer visual replaced this one' };
+          }
           notify({
             type: 'error',
             replaceId: placeholderId,
             description: e instanceof Error ? e.message : undefined,
           });
+          return { status: 'failed', taskDescription: raw, reason: e instanceof Error ? e.message : 'The visual could not be generated' };
         }
       })();
     });

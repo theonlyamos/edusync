@@ -17,6 +17,10 @@ import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
+
+/** How long a new visual may take to render before the tutor is told it failed. */
+const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
 const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
@@ -79,6 +83,8 @@ export const TutorExperience = ({
   const isCapturingRef = useRef(false);
   const showRef = useRef<'render' | 'code'>('render');
   const regenerationAttemptsRef = useRef(0);
+  // Resolves when the sandbox reports the current visual rendered or failed.
+  const renderWaiterRef = useRef(createRenderWaiter());
   const MAX_REGENERATION_ATTEMPTS = 2;
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [themeColors, setThemeColors] = useState<{
@@ -240,6 +246,7 @@ export const TutorExperience = ({
       }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
+      renderWaiterRef.current.failed(e.message || 'Failed to regenerate visualization');
     } finally {
       vizDispatch({ type: 'SET_GENERATING', payload: false });
     }
@@ -253,6 +260,7 @@ export const TutorExperience = ({
     if (regenerationAttemptsRef.current > MAX_REGENERATION_ATTEMPTS) {
       setError(`Visualization failed to render after ${MAX_REGENERATION_ATTEMPTS} attempts. ${errMsg}`);
       console.error('Max regeneration attempts reached:', errMsg);
+      renderWaiterRef.current.failed(errMsg);
       return;
     }
 
@@ -264,19 +272,27 @@ export const TutorExperience = ({
     }
   }, [handleRegenerateVisualization]);
 
+  const handleRendererReady = useCallback(() => {
+    renderWaiterRef.current.ready();
+  }, []);
+
+  const handleSketchError = useCallback((errMsg: string) => {
+    renderWaiterRef.current.failed(errMsg);
+  }, []);
+
   const renderVisualization = useMemo(() => {
     if (!code || !library) return null;
 
     switch (library) {
       case 'react':
-        return <ReactRenderer code={code} onError={handleRendererError} />;
+        return <ReactRenderer code={code} onError={handleRendererError} onReady={handleRendererReady} />;
       case 'p5':
       case 'three':
-        return <LiveSketch code={code} library={library} />;
+        return <LiveSketch code={code} library={library} onReady={handleRendererReady} onError={handleSketchError} />;
       default:
         return null;
     }
-  }, [code, library, handleRendererError]);
+  }, [code, library, handleRendererError, handleRendererReady, handleSketchError]);
 
   const editorData = useMemo(
     () => ({
@@ -289,21 +305,25 @@ export const TutorExperience = ({
 
   const handleEditorSubmit = useCallback(() => { }, []);
 
-  const handleToolCall = async (name: string, args: any, callId?: string) => {
+  const handleToolCall = async (name: string, args: any, callId?: string): Promise<VisualStatusReport | void> => {
     if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
+      const taskDescription: string | undefined = typeof args?.taskDescription === 'string'
+        ? args.taskDescription
+        : typeof args?.task_description === 'string' ? args.task_description : undefined;
       try {
         const kind = normalizeRequestedArtifactKind(args?.kind);
         const requestId = callId
           ? `voice:${objectiveLearning.runId}:${callId}`
           : `voice:${objectiveLearning.runId}:${crypto.randomUUID()}`;
-        const taskDescription = typeof args?.taskDescription === 'string'
-          ? args.taskDescription
-          : typeof args?.task_description === 'string' ? args.task_description : undefined;
-        await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+        const attachment = await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+        const title = typeof attachment?.artifact?.payload?.title === 'string' ? attachment.artifact.payload.title : undefined;
+        const kindLabel = attachment?.artifact?.kind?.replace(/_/g, ' ') ?? kind;
+        return { status: 'ready', taskDescription, explanation: title ? `${kindLabel}: "${title}"` : kindLabel };
       } catch (artifactError) {
-        setError(artifactError instanceof Error ? artifactError.message : 'The learning activity could not be prepared');
+        const message = artifactError instanceof Error ? artifactError.message : 'The learning activity could not be prepared';
+        setError(message);
+        return { status: 'failed', taskDescription, reason: message };
       }
-      return;
     }
     if (name === 'generate_visualization_description') {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
@@ -332,6 +352,8 @@ export const TutorExperience = ({
         regenerationAttemptsRef.current = 0; // Reset retry counter for new visualization
         setError(''); // Clear any previous error
 
+        // Start waiting before the new code is set so the renderer's ready/error signal isn't missed.
+        const rendered = renderWaiterRef.current.wait(VISUAL_RENDER_TIMEOUT_MS);
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
@@ -352,8 +374,14 @@ export const TutorExperience = ({
             );
           } catch (err) { console.error('Failed to persist generated visualization', err) }
         }
+        vizDispatch({ type: 'SET_GENERATING', payload: false });
+        const outcome = await rendered;
+        return outcome.ok
+          ? { status: 'ready', taskDescription: args.task_description, explanation: vizData.explanation }
+          : { status: 'failed', taskDescription: args.task_description, reason: outcome.reason };
       } catch (e: any) {
         setError(e.message || 'Unknown error');
+        return { status: 'failed', taskDescription: args?.task_description, reason: e.message || 'The visual could not be generated' };
       } finally {
         vizDispatch({ type: 'SET_GENERATING', payload: false });
       }

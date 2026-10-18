@@ -6,6 +6,7 @@ import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/aud
 import { convertToWav } from '@/lib/audio/wav';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
+import { createVisualStatusDelivery, isVisualToolName, VISUAL_PENDING_TOOL_RESPONSE, type VisualStatusReport } from '@/lib/visual-status';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion';
@@ -13,6 +14,13 @@ export type UseAudioStreamingLiveOptions = {
     studyMode?: StudyMode;
     studyIntent?: StudyIntent;
 };
+
+/**
+ * Tool call handler. For visual tools, return a promise that resolves once the
+ * visual has rendered or failed; the result is passed back to the tutor as a
+ * VISUAL_STATUS message. Returning nothing keeps the old fire-and-forget behaviour.
+ */
+export type ToolCallListener = (name: string, args: any, callId?: string) => void | Promise<VisualStatusReport | void>;
 
 export type LiveTranscriptionPayload = {
     role: 'user' | 'assistant';
@@ -34,7 +42,7 @@ interface AudioStreamingActions {
     startStreaming: () => Promise<void>;
     stopStreaming: () => void;
     clearError: () => void;
-    setToolCallListener: (cb: (name: string, args: any, callId?: string) => void) => void;
+    setToolCallListener: (cb: ToolCallListener) => void;
     setOnAudioDataListener: (cb: (data: Float32Array<ArrayBufferLike>) => void) => void;
     setOnAiAudioDataListener: (cb: (data: Float32Array) => void) => void;
     setOnRecordingsReady: (cb: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) => void;
@@ -89,7 +97,8 @@ export function useAudioStreaming(
     const decodingAudioRef = useRef(0);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micAnalyserRef = useRef<AnalyserNode | null>(null);
-    const toolCallListenerRef = useRef<((name: string, args: any, callId?: string) => void) | null>(null);
+    const toolCallListenerRef = useRef<ToolCallListener | null>(null);
+    const visualStatusDeliveryRef = useRef<ReturnType<typeof createVisualStatusDelivery> | null>(null);
     const onAudioDataListenerRef = useRef<((data: Float32Array<ArrayBufferLike>) => void) | null>(null);
     const onAiAudioDataListenerRef = useRef<((data: Float32Array) => void) | null>(null);
     const onRecordingsReadyRef = useRef<((payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void) | null>(null);
@@ -213,6 +222,32 @@ export function useAudioStreaming(
             window.removeEventListener('online', onOnline);
         };
     }, [connectionStatus, feedbackRunId, feedbackObjectiveId, feedbackRevision, sendLiveText]);
+
+    // Tell the tutor whether each visual actually reached the screen, once nobody is speaking.
+    useEffect(() => {
+        if (connectionStatus !== 'connected') return;
+        const delivery = createVisualStatusDelivery({
+            isIdle: () => {
+                const playback = playbackCtxRef.current;
+                return !!geminiLiveSessionRef.current
+                    && !vadSpeechActiveRef.current && decodingAudioRef.current === 0
+                    && (!playback || playback.state === 'closed' || nextPlaybackTimeRef.current <= playback.currentTime)
+                    && tutorTurnsRef.current.isIdle();
+            },
+            send: (text) => {
+                sendLiveText(text);
+            },
+        });
+        visualStatusDeliveryRef.current = delivery;
+        const timer = setInterval(() => {
+            try { delivery.flush(); } catch { /* Not connected right now; the message stays queued. */ }
+        }, 250);
+        return () => {
+            clearInterval(timer);
+            delivery.dispose();
+            if (visualStatusDeliveryRef.current === delivery) visualStatusDeliveryRef.current = null;
+        };
+    }, [connectionStatus, sendLiveText]);
 
     // Audio batching to reduce main thread processing frequency
     const audioBatchRef = useRef<Float32Array[]>([]);
@@ -1054,17 +1089,36 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
                 // Handle tool calls
                 if (message?.toolCall?.functionCalls && message.toolCall.functionCalls.length > 0) {
                     for (const fn of message.toolCall.functionCalls) {
-                        toolCallListenerRef.current?.(fn.name || '', fn.args, fn.id || undefined);
+                        const toolName = fn.name || '';
+                        let listenerResult: ReturnType<ToolCallListener> | undefined;
+                        try {
+                            listenerResult = toolCallListenerRef.current?.(toolName, fn.args, fn.id || undefined);
+                        } catch (err) {
+                            console.error('Tool call listener failed:', err);
+                        }
+                        // Visual handlers that return a promise report the real outcome later.
+                        const tracksVisualStatus = isVisualToolName(toolName)
+                            && !!listenerResult && typeof (listenerResult as Promise<unknown>).then === 'function';
+                        if (tracksVisualStatus) {
+                            (listenerResult as Promise<VisualStatusReport | void>)
+                                .then((report) => { if (report) visualStatusDeliveryRef.current?.enqueue(report); })
+                                .catch((err) => {
+                                    visualStatusDeliveryRef.current?.enqueue({
+                                        status: 'failed',
+                                        reason: err instanceof Error ? err.message : 'The visual could not be prepared',
+                                    });
+                                });
+                        }
 
-                        // Send response back to Gemini
+                        // Answer Gemini right away so it keeps talking while the visual is prepared.
                         try {
                             geminiLiveSessionRef.current?.sendToolResponse({
                                 functionResponses: [
                                     {
                                         id: fn.id || '',
-                                        name: fn.name || '',
+                                        name: toolName,
                                         response: {
-                                            result: 'Tool is being called',
+                                            result: tracksVisualStatus ? VISUAL_PENDING_TOOL_RESPONSE : 'Tool is being called',
                                             scheduling: FunctionResponseScheduling.SILENT
                                         }
                                     }
@@ -1231,7 +1285,7 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
     // PCM→WAV conversion lives in '@/lib/audio/wav' (pure, unit-tested).
 
-    const setToolCallListener = useCallback((cb: (name: string, args: any, callId?: string) => void) => {
+    const setToolCallListener = useCallback((cb: ToolCallListener) => {
         toolCallListenerRef.current = cb;
     }, []);
 

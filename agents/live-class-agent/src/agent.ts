@@ -6,7 +6,10 @@ import { z } from 'zod'
 import {
   EUREKA_TUTOR_SYSTEM_PROMPT,
   LIVE_CLASS_AGENT_SECRET_HEADER,
+  VISUAL_PENDING_TOOL_RESPONSE,
+  formatVisualStatusMessage,
   type LiveClassRoomLessonMetadata as RoomMetaLesson,
+  type VisualStatusReport,
 } from '@edusync/shared'
 
 const appBase = (process.env.LIVE_CLASS_APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
@@ -102,6 +105,7 @@ function postInBackground(
   path: string,
   body: Record<string, unknown>,
   onSuccess?: (data: unknown) => void,
+  onFailure?: (reason: string) => void,
 ): void {
   void (async () => {
     try {
@@ -113,19 +117,47 @@ function postInBackground(
       if (!res.ok) {
         const t = await res.text()
         console.error(`[live-class-agent] ${path} failed:`, t)
+        onFailure?.(`The request failed (${res.status})`)
         return
       }
       if (onSuccess) {
+        let data: unknown
         try {
-          onSuccess(await res.json())
+          data = await res.json()
         } catch {
           console.error(`[live-class-agent] ${path}: invalid JSON response`)
+          onFailure?.('The server sent an unreadable response')
+          return
         }
+        onSuccess(data)
       }
     } catch (e) {
       console.error(`[live-class-agent] ${path} error:`, e)
+      onFailure?.(e instanceof Error ? e.message : 'The request failed')
     }
   })()
+}
+
+/** The running session for this job, so background work can talk back to the model. */
+let activeSession: voice.AgentSession | null = null
+
+/**
+ * Tell the model whether a visual actually reached the class. The tool call was
+ * answered immediately with a "being prepared" message, so without this the
+ * model would talk about visuals that never appeared.
+ */
+function reportVisualStatus(report: VisualStatusReport): void {
+  const session = activeSession
+  if (!session) return
+  const guidance =
+    report.status === 'ready'
+      ? 'The visual is now on the students\' screens. Briefly point them to it and invite them to try it. Do not read this message aloud.'
+      : 'The visual did not reach the students. Do not refer to it as if it were on screen. Say briefly that the picture did not come through and keep teaching out loud. Do not read this message aloud.'
+  try {
+    session.generateReply({ instructions: `${formatVisualStatusMessage(report)}\n\n${guidance}` })
+  } catch (e) {
+    console.error('[live-class-agent] reportVisualStatus failed:', e)
+  }
 }
 
 const generateVisualizationDescription = llm.tool({
@@ -148,11 +180,20 @@ const generateVisualizationDescription = llm.tool({
       },
       (data) => {
         if (data && typeof data === 'object' && 'id' in data) {
-          broadcastToRoom(room, { type: 'visualization', ...(data as Record<string, unknown>) })
+          const viz = data as Record<string, unknown>
+          broadcastToRoom(room, { type: 'visualization', ...viz })
+          reportVisualStatus({
+            status: 'ready',
+            taskDescription: task_description,
+            explanation: typeof viz.explanation === 'string' ? viz.explanation : undefined,
+          })
+        } else {
+          reportVisualStatus({ status: 'failed', taskDescription: task_description, reason: 'No visual was saved' })
         }
       },
+      (reason) => reportVisualStatus({ status: 'failed', taskDescription: task_description, reason }),
     )
-    return 'Visualization is being generated. Students will see it shortly. Continue teaching.'
+    return VISUAL_PENDING_TOOL_RESPONSE
   },
 })
 
@@ -204,6 +245,11 @@ export default defineAgent({
         instructions:
           'You are Eureka, a live class tutor. Multiple students may speak. Teach visually and call tools as specified in your instructions.',
       }),
+    })
+
+    activeSession = session
+    ctx.addShutdownCallback(async () => {
+      if (activeSession === session) activeSession = null
     })
 
     await session.start({
