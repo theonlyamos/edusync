@@ -94,27 +94,143 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         finally { mutationObserver.takeRecords(); }
       });
     }
+    function effectivelyHidden(element, svg) {
+      for (var node = element; node && node !== svg.parentElement; node = node.parentElement) {
+        var style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return true;
+      }
+      return false;
+    }
     function intersects(a, b, gap) {
-      return a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top;
+      if (!(a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top)) return false;
+      if (!b.points) return true;
+      var margin = gap + b.pad;
+      return b.points.some(function (point) {
+        return point.x > a.left - margin && point.x < a.right + margin && point.y > a.top - margin && point.y < a.bottom + margin;
+      });
+    }
+    function outline(shape, step) {
+      var length = shape.getTotalLength();
+      if (!Number.isFinite(length)) return null;
+      var points = [];
+      var count = Math.min(400, Math.max(1, Math.ceil(length / step)));
+      for (var index = 0; index <= count; index++) points.push(shape.getPointAtLength(length * index / count));
+      return points;
+    }
+    function markerFootprint(svg, edge, side, value, length, matrix) {
+      var match = /url\\(\\s*["']?#([^"')\\s]+)["']?\\s*\\)/.exec(value);
+      var marker = match && svg.ownerDocument.getElementById(match[1]);
+      if (!marker || marker.tagName.toLowerCase() !== 'marker') return null;
+      var width = marker.markerWidth.baseVal.value;
+      var height = marker.markerHeight.baseVal.value;
+      if (!(width > 0 && height > 0)) return [];
+      var sx = 1, sy = 1, tx = 0, ty = 0;
+      var box = marker.viewBox.baseVal;
+      if (marker.hasAttribute('viewBox') && box && box.width > 0 && box.height > 0) {
+        var ratio = marker.preserveAspectRatio.baseVal;
+        sx = width / box.width;
+        sy = height / box.height;
+        if (ratio.align !== 1) {
+          sx = sy = ratio.meetOrSlice === 2 ? Math.max(sx, sy) : Math.min(sx, sy);
+          tx = (width - box.width * sx) * ([0, 0, 0, 0.5, 1, 0, 0.5, 1, 0, 0.5, 1][ratio.align] || 0);
+          ty = (height - box.height * sy) * ([0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1][ratio.align] || 0);
+        }
+        tx -= box.x * sx;
+        ty -= box.y * sy;
+      }
+      var scale = marker.getAttribute('markerUnits') === 'userSpaceOnUse' ? 1 : parseFloat(getComputedStyle(edge).strokeWidth);
+      if (!Number.isFinite(scale) || scale < 0) return null;
+      var screenScale = Math.hypot(matrix.a, matrix.b);
+      var clipped = getComputedStyle(marker).overflow !== 'visible';
+      // Sample painted marker geometry in viewport units; unsupported content falls back to the clipped viewport.
+      var step = Math.max(0.01, 1 / Math.max(0.0001, Math.min(sx, sy) * scale * screenScale));
+      var local = [];
+      var stroke = 0;
+      var known = Array.from(marker.children).every(function (child) {
+        var tag = child.tagName.toLowerCase();
+        if (tag === 'title' || tag === 'desc') return true;
+        if (typeof child.getTotalLength !== 'function' || child.hasAttribute('transform')) return false;
+        var points = outline(child, step);
+        if (!points) return false;
+        var childStyle = getComputedStyle(child);
+        if (childStyle.stroke !== 'none') stroke = Math.max(stroke, parseFloat(childStyle.strokeWidth) || 0);
+        points.forEach(function (point) { local.push({ x: point.x * sx + tx, y: point.y * sy + ty }); });
+        return true;
+      });
+      if (!known || !local.length) {
+        if (!clipped) return null;
+        local = [];
+        var edges = [[0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]];
+        edges.forEach(function (line) {
+          var count = Math.max(1, Math.ceil(Math.hypot(line[2] - line[0], line[3] - line[1]) * scale * screenScale));
+          for (var index = 0; index <= count; index++) local.push({ x: line[0] + (line[2] - line[0]) * index / count, y: line[1] + (line[3] - line[1]) * index / count });
+        });
+        stroke = 0;
+      }
+      if (clipped) {
+        var inset = stroke * Math.max(sx, sy) / 2;
+        local = local.filter(function (point) { return point.x >= -inset && point.x <= width + inset && point.y >= -inset && point.y <= height + inset; });
+      }
+      var refX = marker.refX.baseVal.value * sx + tx;
+      var refY = marker.refY.baseVal.value * sy + ty;
+      var at = side === 'start' ? 0 : length;
+      var anchor = edge.getPointAtLength(at);
+      var orient = (marker.getAttribute('orient') || '0').trim();
+      var angle;
+      if (orient === 'auto' || orient === 'auto-start-reverse') {
+        var before = edge.getPointAtLength(Math.max(0, at - 0.01));
+        var after = edge.getPointAtLength(Math.min(length, at + 0.01));
+        angle = Math.atan2(after.y - before.y, after.x - before.x);
+        if (orient === 'auto-start-reverse' && side === 'start') angle += Math.PI;
+      } else {
+        var degrees = /^(-?[\\d.]+(?:e-?\\d+)?)(deg|rad|grad|turn)?$/i.exec(orient);
+        if (!degrees) return null;
+        var unit = (degrees[2] || 'deg').toLowerCase();
+        angle = Number(degrees[1]) * (unit === 'rad' ? 1 : unit === 'grad' ? Math.PI / 200 : unit === 'turn' ? 2 * Math.PI : Math.PI / 180);
+      }
+      var cos = Math.cos(angle), sin = Math.sin(angle);
+      var tip = anchor.matrixTransform(matrix);
+      var points = local.map(function (point) {
+        var dx = (point.x - refX) * scale, dy = (point.y - refY) * scale;
+        var mapped = svg.createSVGPoint();
+        mapped.x = anchor.x + dx * cos - dy * sin;
+        mapped.y = anchor.y + dx * sin + dy * cos;
+        return mapped.matrixTransform(matrix);
+      });
+      points.push(tip);
+      var xs = points.map(function (point) { return point.x; });
+      var ys = points.map(function (point) { return point.y; });
+      var pad = stroke * Math.max(sx, sy) * scale * screenScale / 2;
+      return [{ left: Math.min.apply(null, xs) - pad, right: Math.max.apply(null, xs) + pad, top: Math.min.apply(null, ys) - pad, bottom: Math.max.apply(null, ys) + pad, x: tip.x, y: tip.y, points: points, pad: pad }];
     }
     function markedEdgeTips(svg) {
       var tips = [];
+      var marked = false;
+      var supported = true;
       svg.querySelectorAll('line, path, polyline').forEach(function (edge) {
         if (edge.closest('defs, marker')) return;
         try {
+          var style = getComputedStyle(edge);
+          var sides = ['start', 'end'].filter(function (side) {
+            var marker = style.getPropertyValue('marker-' + side) || edge.getAttribute('marker-' + side);
+            return marker && marker.trim().toLowerCase() !== 'none';
+          });
+          if (!sides.length) return;
+          marked = true;
+          if (effectivelyHidden(edge, svg)) return;
           var matrix = edge.getScreenCTM();
           var length = edge.getTotalLength();
           if (!matrix || !Number.isFinite(length)) return;
-          var style = getComputedStyle(edge);
-          ['start', 'end'].forEach(function (side) {
-            var marker = style.getPropertyValue('marker-' + side) || edge.getAttribute('marker-' + side);
-            if (!marker || marker.trim().toLowerCase() === 'none') return;
-            var point = edge.getPointAtLength(side === 'start' ? 0 : length).matrixTransform(matrix);
-            if (Number.isFinite(point.x) && Number.isFinite(point.y)) tips.push({ left: point.x, right: point.x, top: point.y, bottom: point.y });
+          sides.forEach(function (side) {
+            var footprint = markerFootprint(svg, edge, side, style.getPropertyValue('marker-' + side) || edge.getAttribute('marker-' + side), length, matrix);
+            if (footprint === null) { supported = false; return; }
+            footprint.forEach(function (box) {
+              if ([box.left, box.right, box.top, box.bottom].every(Number.isFinite)) tips.push(box);
+            });
           });
-        } catch (_) { /* Invalid edge geometry must not interrupt the label pass. */ }
+        } catch (_) { supported = false; }
       });
-      return tips;
+      return supported && marked ? tips : null;
     }
     function restore(label) {
       var original = originals.get(label);
@@ -142,7 +258,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       var matrix = svg.getScreenCTM();
       if (!svg.hasAttribute('viewBox') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24) { remember(); return; }
       var tips = markedEdgeTips(svg);
-      if (!tips.length) { remember(); return; }
+      if (!tips) { remember(); return; }
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
       var bounds = svg.getBoundingClientRect();
       var circles = Array.from(svg.querySelectorAll('circle')).map(function (circle) { return circle.getBoundingClientRect(); });
@@ -167,18 +283,36 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
           if (!transformed) eligible.add(label);
         }
       });
-      var placed = [];
-      visible.forEach(function (label) {
+      function reset(label) {
         var original = originals.get(label);
-        if (eligible.has(label)) {
+        if (original.transform === null) label.removeAttribute('transform');
+        else label.setAttribute('transform', original.transform);
+        label.style.fontSize = original.font;
+      }
+      function clipped(rect) {
+        return rect.left < bounds.left - 0.5 || rect.top < bounds.top - 0.5 || rect.right > bounds.right + 0.5 || rect.bottom > bounds.bottom + 0.5;
+      }
+      // Greedy placement depends on order, so labels that could not be placed get the first pick on a retry.
+      function attempt(order) {
+        visible.forEach(function (label) { if (eligible.has(label)) reset(label); });
+        var placed = new Map();
+        var failed = [];
+        var movement = 0;
+        visible.forEach(function (label) { if (!eligible.has(label)) placed.set(label, baseline.get(label)); });
+        order.forEach(function (label) {
+          if (!eligible.has(label)) return;
+          var original = originals.get(label);
           var size = parseFloat(getComputedStyle(label).fontSize);
           if (size * matrix.a < 14) label.style.fontSize = (14 / matrix.a) + 'px';
           var rect = label.getBoundingClientRect();
           var best;
           var distance = Infinity;
-          var obstacles = placed.slice();
-          circles.forEach(function (circle) { if (!intersects(baseline.get(label), circle, 0)) obstacles.push(circle); });
-          tips.forEach(function (tip) { if (!intersects(baseline.get(label), tip, -0.5)) obstacles.push(tip); });
+          var obstacles = Array.from(placed.values());
+          var authored = baseline.get(label);
+          circles.forEach(function (circle) { if (!intersects(authored, circle, 0)) obstacles.push(circle); });
+          tips.forEach(function (tip) {
+            if (!(tip.x > authored.left && tip.x < authored.right && tip.y > authored.top && tip.y < authored.bottom)) obstacles.push(tip);
+          });
           if (rect.width <= bounds.width - 8 && rect.height <= bounds.height - 8) {
             var left = Math.max(bounds.left + 4, Math.min(rect.left, bounds.right - rect.width - 4));
             var top = Math.max(bounds.top + 4, Math.min(rect.top, bounds.bottom - rect.height - 4));
@@ -189,6 +323,9 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
                 { left: left, top: other.bottom + 3 }, { left: left, top: other.top - rect.height - 3 },
                 { left: aligned, top: other.bottom + 3 }, { left: aligned, top: other.top - rect.height - 3 });
             });
+            for (var dy = -48; dy <= 48; dy += 2) {
+              for (var dx = -48; dx <= 48; dx += 2) candidates.push({ left: rect.left + dx, top: rect.top + dy });
+            }
             candidates.forEach(function (candidate) {
               candidate.right = candidate.left + rect.width;
               candidate.bottom = candidate.top + rect.height;
@@ -198,27 +335,45 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
               distance = shift;
             });
           }
-          if (!best) label.style.fontSize = original.font;
-          else if (distance > 0.01) label.setAttribute('transform', 'translate(' + ((best.left - rect.left) / matrix.a) + ' ' + ((best.top - rect.top) / matrix.d) + ')');
-        }
-        placed.push(label.getBoundingClientRect());
-      });
-      function clipped(rect) {
-        return rect.left < bounds.left - 0.5 || rect.top < bounds.top - 0.5 || rect.right > bounds.right + 0.5 || rect.bottom > bounds.bottom + 0.5;
-      }
-      var invalid = visible.some(function (label, index) {
-        if (clipped(placed[index]) && !clipped(baseline.get(label))) return true;
-        return visible.slice(0, index).some(function (other, previous) {
-          return intersects(placed[index], placed[previous], -0.5) && !intersects(baseline.get(label), baseline.get(other), -0.5);
+          if (!best) {
+            label.style.fontSize = original.font;
+            failed.push(label);
+          } else if (distance > 0.01) {
+            label.setAttribute('transform', 'translate(' + ((best.left - rect.left) / matrix.a) + ' ' + ((best.top - rect.top) / matrix.d) + ')');
+            movement += distance;
+          }
+          placed.set(label, label.getBoundingClientRect());
         });
-      });
-      labels.forEach(function (label) {
-        var original = originals.get(label);
-        if (invalid) {
-          if (original.transform === null) label.removeAttribute('transform');
-          else label.setAttribute('transform', original.transform);
-          label.style.fontSize = original.font;
-        }
+        var invalid = visible.some(function (label, index) {
+          var rect = placed.get(label);
+          if (clipped(rect) && !clipped(baseline.get(label))) return true;
+          return visible.slice(0, index).some(function (other) {
+            return intersects(rect, placed.get(other), -0.5) && !intersects(baseline.get(label), baseline.get(other), -0.5);
+          });
+        });
+        return {
+          order: order, failed: failed, movement: movement, invalid: invalid,
+          state: visible.map(function (label) { return { transform: label.getAttribute('transform'), font: label.style.fontSize }; }),
+        };
+      }
+      function better(a, b) {
+        if (a.invalid !== b.invalid) return !a.invalid;
+        if (a.failed.length !== b.failed.length) return a.failed.length < b.failed.length;
+        return a.movement < b.movement - 0.01;
+      }
+      var chosen = attempt(visible);
+      var result = chosen;
+      for (var retry = 0; retry < 4 && result.failed.length; retry++) {
+        var first = result.failed;
+        result = attempt(first.concat(result.order.filter(function (label) { return first.indexOf(label) < 0; })));
+        if (better(result, chosen)) chosen = result;
+      }
+      visible.forEach(function (label, index) {
+        if (chosen.invalid) { reset(label); return; }
+        var state = chosen.state[index];
+        if (state.transform === null) label.removeAttribute('transform');
+        else label.setAttribute('transform', state.transform);
+        label.style.fontSize = state.font;
       });
       remember();
     }

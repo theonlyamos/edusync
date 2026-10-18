@@ -62,6 +62,8 @@ function loadHarness() {
   const sources = {
     '@/lib/lesson-artifacts/react-sandbox-runtime': compile('src/lib/lesson-artifacts/react-sandbox-runtime.ts'),
     '@/lib/lesson-artifacts/sandbox-responsive': compile('src/lib/lesson-artifacts/sandbox-responsive.ts'),
+    '@/lib/lesson-artifacts/react-component-source': compile('src/lib/lesson-artifacts/react-component-source.ts'),
+    '@/lib/lesson-artifacts/coding-editor-bridge': compile('src/lib/lesson-artifacts/coding-editor-bridge.ts'),
     renderer: compile('src/components/lessons/ReactRenderer.tsx'),
     reducer: compile('src/reducers/visualizationReducer.ts'),
   };
@@ -77,7 +79,7 @@ function loadHarness() {
 const assets=${safe(assets)}, sources=${safe(sources)}, fixture=${safe(fixture)};
 window.__blockedFetches=[];
 window.fetch=async function(url){const key=Object.keys(assets).find(k=>({'react':'/lesson-runtime/react-18.3.1.production.min.js','reactDom':'/lesson-runtime/react-dom-18.3.1.production.min.js','tailwindCss':'/lesson-runtime/tailwind.generated.css'})[k]===url);if(!key){window.__blockedFetches.push(String(url));throw Error('Offline fixture blocked fetch: '+url);}return {ok:true,text:async()=>assets[key]};};
-const cache={react:React,'./VisualizationSkeleton':{VisualizationSkeleton:()=>React.createElement('div',null,'Loading')}};
+const cache={react:React,'./VisualizationSkeleton':{VisualizationSkeleton:()=>React.createElement('div',null,'Loading')},'./LearningActivityView':{LearningActivityView:props=>React.createElement(React.Fragment,null,props.children)},'./CodingWorkspace':{CodingWorkspace:()=>null}};
 function require(name){if(cache[name])return cache[name];if(!sources[name])throw Error('Unbundled harness module: '+name);const module={exports:{}};cache[name]=module.exports;new Function('module','exports','require',sources[name])(module,module.exports,require);return cache[name]=module.exports;}
 const Renderer=require('renderer').ReactRenderer, {vizReducer,initialVizState}=require('reducer');
 function App(){const [state,dispatch]=React.useReducer(vizReducer,initialVizState,s=>vizReducer(s,{type:'LOAD_VISUALIZATIONS',payload:[{...fixture,id:'photosynthesis'},{...fixture,code:fixture.code+String.fromCharCode(10),id:'second-visualization'}]}));window.__history=state;return React.createElement(React.Fragment,null,React.createElement('div',{id:'history'},React.createElement('button',{onClick:()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex-1}),disabled:state.currentVizIndex===0},'Previous'),React.createElement('span',null,(state.currentVizIndex+1)+' / '+state.visualizations.length),React.createElement('button',{onClick:()=>dispatch({type:'SET_CURRENT_VIZ_INDEX',payload:state.currentVizIndex+1}),disabled:state.currentVizIndex===state.visualizations.length-1},'Next')),React.createElement('div',{id:'preview'},React.createElement(Renderer,{code:state.code,onError:error=>window.__renderError=error,onReady:()=>window.__readyCount=(window.__readyCount||0)+1})));}
@@ -86,8 +88,43 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(A
   };
 }
 
+// Independent painted-arrowhead oracle: samples each visible marker's own path outline through DOMMatrix.
+const PAINTED_MARKERS = `svg => Array.from(svg.querySelectorAll('line, path, polyline')).flatMap(edge => {
+  if (edge.closest('defs, marker')) return [];
+  for (let node = edge; node && node !== svg.parentElement; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+  }
+  const style = getComputedStyle(edge);
+  const length = edge.getTotalLength();
+  const ctm = edge.getScreenCTM();
+  return ['start', 'end'].flatMap(side => {
+    const value = style.getPropertyValue('marker-' + side) || edge.getAttribute('marker-' + side) || '';
+    const id = /#([^"')]+)/.exec(value);
+    const marker = id && document.getElementById(id[1]);
+    if (!marker) return [];
+    const at = side === 'start' ? 0 : length;
+    const point = edge.getPointAtLength(at);
+    const before = edge.getPointAtLength(Math.max(0, at - .01)), after = edge.getPointAtLength(Math.min(length, at + .01));
+    const orient = marker.getAttribute('orient') || '0';
+    let angle = orient.startsWith('auto') ? Math.atan2(after.y - before.y, after.x - before.x) * 180 / Math.PI : Number(orient);
+    if (orient === 'auto-start-reverse' && side === 'start') angle += 180;
+    const scale = marker.getAttribute('markerUnits') === 'userSpaceOnUse' ? 1 : parseFloat(style.strokeWidth);
+    const matrix = new DOMMatrix([ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f]).translate(point.x, point.y).rotate(angle).scale(scale)
+      .translate(-marker.refX.baseVal.value, -marker.refY.baseVal.value);
+    return Array.from(marker.querySelectorAll('path')).flatMap(shape => {
+      const total = shape.getTotalLength();
+      return Array.from({ length: 81 }, (_, index) => {
+        const sample = shape.getPointAtLength(total * index / 80);
+        const mapped = new DOMPoint(sample.x, sample.y).matrixTransform(matrix);
+        return { edge: edge.id || edge.tagName.toLowerCase(), side, x: mapped.x, y: mapped.y };
+      });
+    });
+  });
+})`;
+
 // Evaluated inside the renderer's opaque-origin iframe, using browser geometry.
-function geometry() {
+function geometry(painted) {
   return Array.from(document.querySelectorAll('svg')).filter(svg => !svg.closest('.recharts-wrapper,.leaflet-container')).map(svg => {
     const bounds = svg.getBoundingClientRect();
     const texts = Array.from(svg.querySelectorAll('text')).filter(el => el.getBoundingClientRect().width > 0 && getComputedStyle(el).visibility !== 'hidden').map(el => {
@@ -117,8 +154,14 @@ function geometry() {
       const bottom = Math.min(texts[a].y + texts[a].height, texts[b].y + texts[b].height);
       if (right > left + .5 && bottom > top + .5) overlaps.push({ a: texts[a].text, b: texts[b].text, area: (right - left) * (bottom - top) });
     }
+    const paint = painted(svg);
+    const arrowheadsCovered = Array.from(svg.querySelectorAll('text')).flatMap(label => {
+      const rect = label.getBoundingClientRect();
+      const hits = [...new Set(paint.filter(point => point.x > rect.left && point.x < rect.right && point.y > rect.top && point.y < rect.bottom).map(point => point.edge + ':' + point.side))];
+      return hits.length ? [{ label: label.textContent, hits }] : [];
+    });
     const clipped = texts.filter(t => t.x < -.5 || t.y < -.5 || t.x + t.width > bounds.width + .5 || t.y + t.height > bounds.height + .5);
-    return { width: bounds.width, height: bounds.height, texts, overlaps, clipped, arrowTipsCovered };
+    return { width: bounds.width, height: bounds.height, texts, overlaps, clipped, arrowTipsCovered, arrowheadsCovered, paintedPoints: paint.length };
   });
 }
 
@@ -147,6 +190,8 @@ function assertGeometry(stage, width) {
     assert.deepEqual(svg.overlaps, [], `Overlapping SVG labels at ${width}px`);
     assert.deepEqual(svg.clipped, [], `Clipped SVG labels at ${width}px`);
     assert.deepEqual(svg.arrowTipsCovered, [], `Label covers its arrow tip at ${width}px`);
+    assert(svg.paintedPoints > 0, `Arrowhead oracle sampled no marker paint at ${width}px`);
+    assert.deepEqual(svg.arrowheadsCovered, [], `Label covers a painted arrowhead at ${width}px`);
     assert.deepEqual(svg.texts.map(t => [t.authoredX, t.authoredY]), [['410', '57'], ['10', '135'], ['255', '318'], ['50', '325'], ['410', '60'], ['420', '82']], 'Authored anchors changed');
     for (const text of svg.texts) {
       assert(text.fontSize >= 13.99, `Unreadable SVG label ${text.text}: ${text.fontSize}px`);
@@ -160,7 +205,7 @@ async function collisionCases(context, html, report, outputDir) {
     const item = { name: `collision-${viewport.width}`, viewport, assertionsPassed: false };
     report.cases.push(item);
     const { page, frame } = await openFixture(context, html, viewport);
-    item.before = await frame.evaluate(geometry);
+    item.before = await frame.evaluate(`(${geometry})(${PAINTED_MARKERS})`);
     assertGeometry(item.before, viewport.width);
     await page.screenshot({ path: path.join(outputDir, `${item.name}.png`), fullPage: true });
     const beforeAnswer = await frame.locator('body').innerText();
@@ -174,7 +219,7 @@ async function collisionCases(context, html, report, outputDir) {
     item.resizeTo = opposite;
     await page.setViewportSize(opposite);
     await settle(frame);
-    item.after = await frame.evaluate(geometry);
+    item.after = await frame.evaluate(`(${geometry})(${PAINTED_MARKERS})`);
     assertGeometry(item.after, opposite.width);
     item.statePreserved = await frame.evaluate(() => window.__fixtureIdentity === 'same-scene') && await frame.locator('body').innerText() === feedback && await page.evaluate(() => window.__readyCount) === 1;
     assert(item.statePreserved, 'Quiz scene reset during resize');
@@ -183,11 +228,11 @@ async function collisionCases(context, html, report, outputDir) {
     for (let repeat = 0; repeat < 3; repeat++) {
       await page.setViewportSize(viewport);
       await settle(frame);
-      assert.deepEqual(await frame.evaluate(geometry), item.before, 'SVG label positions drift after repeated resize');
+      assert.deepEqual(await frame.evaluate(`(${geometry})(${PAINTED_MARKERS})`), item.before, 'SVG label positions drift after repeated resize');
       assert.equal(await frame.locator('body').innerText(), feedback, 'Quiz feedback reset on repeated resize');
       await page.setViewportSize(opposite);
       await settle(frame);
-      assert.deepEqual(await frame.evaluate(geometry), item.after, 'SVG label positions drift after reciprocal resize');
+      assert.deepEqual(await frame.evaluate(`(${geometry})(${PAINTED_MARKERS})`), item.after, 'SVG label positions drift after reciprocal resize');
       assert.equal(await frame.locator('body').innerText(), feedback, 'Quiz feedback reset on reciprocal resize');
     }
     await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -546,6 +591,25 @@ async function cssMarkerTransitions(frame, item) {
   assert.equal(item.postCssTransitionMeasurements.htmlTimer, 0, 'HTML timer relaid out labels after CSS marker transitions');
 }
 
+// A hidden marked edge paints nothing, so it must not push its label away or block enlargement.
+async function hiddenEdgeTransitions(frame, item) {
+  const visibleStage = await frame.evaluate(readEdgeGeometry);
+  item.hiddenEdges = [];
+  for (const [name, value] of [['opacity', '0'], ['visibility', 'hidden']]) {
+    await frame.evaluate(([attribute, setting]) => document.getElementById('nonadjacent-line').setAttribute(attribute, setting), [name, value]);
+    await settle(frame);
+    const hidden = (await frame.evaluate(readEdgeGeometry)).find(svg => svg.id === 'edge-nonadjacent-line');
+    const label = hidden.labels.find(value => value.id === 'edge-nonadjacent-line-label');
+    assert(label.fontSize >= 13.99, `Hidden edge (${name}) blocked label enlargement: ${label.fontSize}px`);
+    assert.equal(label.transform, null, `Hidden edge (${name}) still displaced its label`);
+    assert(label.enlargedUnshiftedCovered.length > 0, `Hidden edge (${name}) fixture no longer overlaps the enlarged label`);
+    item.hiddenEdges.push({ attribute: name, movement: label.movement, fontSize: label.fontSize });
+    await frame.evaluate(attribute => document.getElementById('nonadjacent-line').removeAttribute(attribute), name);
+    await settle(frame);
+    assert.deepEqual(await frame.evaluate(readEdgeGeometry), visibleStage, `Label placement not restored after ${name} edge returned`);
+  }
+}
+
 async function endpointCase(context, html, report, outputDir) {
   for (const viewport of viewports) {
     const item = { name: `svg-edge-endpoints-${viewport.width}`, viewport, assertionsPassed: false };
@@ -583,6 +647,7 @@ async function endpointCase(context, html, report, outputDir) {
     assert.deepEqual(authoredEdges(item.scaled), authoredEdges(item.before), 'Authored edge geometry changed under non-unit CTM');
     await page.screenshot({ path: path.join(outputDir, `${item.name}-scaled.png`), fullPage: true });
     await cssMarkerTransitions(frame, item);
+    await hiddenEdgeTransitions(frame, item);
     item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
     item.repeatedResizeDrift = false;
     item.assertionsPassed = true;
