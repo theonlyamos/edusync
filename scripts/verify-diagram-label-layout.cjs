@@ -686,6 +686,29 @@ async function nodeShapeTransitions(frame, item) {
   assert.deepEqual(await frame.evaluate(readEdgeGeometry), visibleStage, 'Label placement not restored after node shape checks');
 }
 
+// Unpainted marker content draws nothing, so it must not enlarge the arrowhead obstacle.
+async function unpaintedMarkerTransition(frame) {
+  const before = await frame.evaluate(readEdgeGeometry);
+  await frame.evaluate(() => {
+    const marker = document.getElementById('endpointArrow');
+    marker.setAttribute('overflow', 'visible');
+    [['fill', 'none'], ['opacity', '0'], ['visibility', 'hidden']].forEach(([name, value], index) => {
+      const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      ghost.setAttribute('class', 'unpainted-marker-part');
+      Object.entries({ x: -30 - index, y: -30, width: 64, height: 64, [name]: value }).forEach(([key, setting]) => ghost.setAttribute(key, String(setting)));
+      marker.appendChild(ghost);
+    });
+  });
+  await settle(frame);
+  assert.deepEqual(await frame.evaluate(readEdgeGeometry), before, 'Unpainted marker content changed label placement');
+  await frame.evaluate(() => {
+    document.querySelectorAll('.unpainted-marker-part').forEach(node => node.remove());
+    document.getElementById('endpointArrow').removeAttribute('overflow');
+  });
+  await settle(frame);
+  assert.deepEqual(await frame.evaluate(readEdgeGeometry), before, 'Label placement not restored after unpainted marker check');
+}
+
 async function endpointCase(context, html, report, outputDir) {
   for (const viewport of viewports) {
     const item = { name: `svg-edge-endpoints-${viewport.width}`, viewport, assertionsPassed: false };
@@ -725,6 +748,7 @@ async function endpointCase(context, html, report, outputDir) {
     await cssMarkerTransitions(frame, item);
     await hiddenEdgeTransitions(frame, item);
     await nodeShapeTransitions(frame, item);
+    await unpaintedMarkerTransition(frame);
     item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
     item.repeatedResizeDrift = false;
     item.assertionsPassed = true;

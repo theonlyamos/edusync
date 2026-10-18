@@ -109,6 +109,14 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         return point.x > a.left - margin && point.x < a.right + margin && point.y > a.top - margin && point.y < a.bottom + margin;
       });
     }
+    function unpainted(child, marker) {
+      for (var node = child; node && node !== marker; node = node.parentElement) {
+        var style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0) return true;
+      }
+      var paint = getComputedStyle(child);
+      return (paint.fill === 'none' || Number(paint.fillOpacity) === 0) && (paint.stroke === 'none' || Number(paint.strokeOpacity) === 0 || parseFloat(paint.strokeWidth) === 0);
+    }
     function outline(shape, step) {
       var length = shape.getTotalLength();
       if (!Number.isFinite(length)) return null;
@@ -149,6 +157,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       var known = Array.from(marker.children).every(function (child) {
         var tag = child.tagName.toLowerCase();
         if (tag === 'title' || tag === 'desc') return true;
+        if (unpainted(child, marker)) return true;
         if (typeof child.getTotalLength !== 'function' || child.hasAttribute('transform')) return false;
         var points = outline(child, step);
         if (!points) return false;
@@ -203,6 +212,10 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       var pad = stroke * Math.max(sx, sy) * scale * screenScale / 2;
       return [{ left: Math.min.apply(null, xs) - pad, right: Math.max.apply(null, xs) + pad, top: Math.min.apply(null, ys) - pad, bottom: Math.max.apply(null, ys) + pad, x: tip.x, y: tip.y, points: points, pad: pad }];
     }
+    // Raw SVG charts often have arrowheaded axes and no accessible name; numeric tick labels give them away.
+    function numericLabels(labels) {
+      return labels.filter(function (label) { return /^[-+\\u2212]?[$\\u00a3\\u20ac]?\\d[\\d,.]*\\s*(?:%|[a-z\\u00b0\\u00b5]{0,3})$/i.test((label.textContent || '').trim()); }).length;
+    }
     function markedEdgeTips(svg) {
       var tips = [];
       var marked = false;
@@ -256,7 +269,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         });
       }
       var matrix = svg.getScreenCTM();
-      if (!svg.hasAttribute('viewBox') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24) { remember(); return; }
+      if (!svg.hasAttribute('viewBox') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24 || numericLabels(labels) >= 3) { remember(); return; }
       var tips = markedEdgeTips(svg);
       if (!tips) { remember(); return; }
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
