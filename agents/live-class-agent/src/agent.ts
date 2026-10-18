@@ -82,18 +82,23 @@ const agentHeaders = {
   [LIVE_CLASS_AGENT_SECRET_HEADER]: agentSecret,
 } as const
 
-function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): void {
+/** Resolves true once the payload was published to the room, false if it could not be. */
+async function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): Promise<boolean> {
   const lp = room.localParticipant
   if (!lp) {
     console.warn('[live-class-agent] broadcastToRoom: no localParticipant')
-    return
+    return false
   }
-  void lp
-    .publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+  try {
+    await lp.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
       reliable: true,
       topic: 'agent',
     })
-    .catch((e) => console.error('[live-class-agent] publishData failed:', e))
+    return true
+  } catch (e) {
+    console.error('[live-class-agent] publishData failed:', e)
+    return false
+  }
 }
 
 /**
@@ -181,11 +186,14 @@ const generateVisualizationDescription = llm.tool({
       (data) => {
         if (data && typeof data === 'object' && 'id' in data) {
           const viz = data as Record<string, unknown>
-          broadcastToRoom(room, { type: 'visualization', ...viz })
-          reportVisualStatus({
-            status: 'ready',
-            taskDescription: task_description,
-            explanation: typeof viz.explanation === 'string' ? viz.explanation : undefined,
+          void broadcastToRoom(room, { type: 'visualization', ...viz }).then((delivered) => {
+            reportVisualStatus(delivered
+              ? {
+                  status: 'ready',
+                  taskDescription: task_description,
+                  explanation: typeof viz.explanation === 'string' ? viz.explanation : undefined,
+                }
+              : { status: 'failed', taskDescription: task_description, reason: 'The visual could not be sent to the class' })
           })
         } else {
           reportVisualStatus({ status: 'failed', taskDescription: task_description, reason: 'No visual was saved' })
@@ -207,7 +215,7 @@ const setTopic = llm.tool({
     const t = typeof topic === 'string' ? topic.trim() : ''
     if (!t) return 'No topic text was provided.'
     const { room, sessionId } = requireSessionContext()
-    broadcastToRoom(room, { type: 'set_topic', topic: t })
+    void broadcastToRoom(room, { type: 'set_topic', topic: t })
     postInBackground('/api/live-classes/agent/persist-session-topic', {
       session_id: sessionId,
       topic: t,

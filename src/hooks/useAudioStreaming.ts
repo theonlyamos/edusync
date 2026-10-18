@@ -239,8 +239,9 @@ export function useAudioStreaming(
     }, [connectionStatus, feedbackRunId, feedbackObjectiveId, feedbackRevision, sendLiveText]);
 
     // Tell the tutor whether each visual actually reached the screen, once nobody is speaking.
+    // The queue outlives individual connections, so a report that settles while
+    // the socket is reconnecting is still delivered once it is back.
     useEffect(() => {
-        if (connectionStatus !== 'connected') return;
         const delivery = createVisualStatusDelivery({
             isIdle: () => {
                 return !!geminiLiveSessionRef.current
@@ -252,15 +253,18 @@ export function useAudioStreaming(
             },
         });
         visualStatusDeliveryRef.current = delivery;
-        const timer = setInterval(() => {
-            try { delivery.flush(); } catch { /* Not connected right now; the message stays queued. */ }
-        }, 250);
         return () => {
-            clearInterval(timer);
             delivery.dispose();
             if (visualStatusDeliveryRef.current === delivery) visualStatusDeliveryRef.current = null;
         };
-    }, [connectionStatus, sendLiveText]);
+    }, [sendLiveText]);
+    useEffect(() => {
+        if (connectionStatus !== 'connected') return;
+        const timer = setInterval(() => {
+            try { visualStatusDeliveryRef.current?.flush(); } catch { /* Not connected right now; the message stays queued. */ }
+        }, 250);
+        return () => clearInterval(timer);
+    }, [connectionStatus]);
 
     // Audio batching to reduce main thread processing frequency
     const audioBatchRef = useRef<Float32Array[]>([]);
@@ -447,6 +451,8 @@ export function useAudioStreaming(
         sessionStartedAtRef.current = null;
         // Mark as manual disconnect to prevent automatic reconnection
         isManualDisconnectRef.current = true;
+        // Statuses for visuals from this session must not reach a later one.
+        visualStatusDeliveryRef.current?.clear();
 
         setIsStreaming(false);
         isStreamingRef.current = false;

@@ -185,6 +185,30 @@ describe('visual status with prepaid live connections', () => {
     expect(visualMessages()).toEqual(['VISUAL_STATUS {"status":"failed","reason":"Renderer failed"}']);
   });
 
+  it('delivers a visual status that settles while the socket is reconnecting', async () => {
+    const callbacks = await startConnected();
+    let finishVisual!: (report: { status: 'ready'; explanation: string }) => void;
+    renderAudio().setToolCallListener(() => new Promise(resolve => { finishVisual = resolve; }));
+    callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'visual-handle' } });
+    callbacks.onmessage({ toolCall: { functionCalls: [{ id: 'visual-drop', name: 'generate_visualization_description', args: {} }] } });
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ token: 'synthetic-resume-token' }));
+    callbacks.onclose({ code: 1006, reason: 'drop while the visual renders' });
+    renderAudio();
+    expect(renderAudio().connectionStatus).not.toBe('connected');
+    finishVisual({ status: 'ready', explanation: 'A number line' });
+    await settleHook();
+    await vi.advanceTimersByTimeAsync(2000);
+    renderAudio();
+    expect(gemini.configurations).toHaveLength(2);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    gemini.configurations[1].callbacks.onmessage({ serverContent: { turnComplete: true } });
+    await vi.advanceTimersByTimeAsync(1000);
+    const resumedVisualMessages = gemini.sends[1].mock.calls
+      .map(([payload]) => payload.text as string | undefined)
+      .filter(text => text?.startsWith('VISUAL_STATUS '));
+    expect(resumedVisualMessages).toEqual(['VISUAL_STATUS {"status":"ready","onScreen":"A number line"}']);
+  });
+
   it('keeps nonvisual tool responses immediate without queuing a visual report', async () => {
     const callbacks = await startConnected();
     renderAudio().setToolCallListener(() => Promise.resolve({ status: 'ready', explanation: 'Ignored' }));

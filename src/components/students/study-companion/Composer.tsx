@@ -11,8 +11,11 @@ import { useAudioStreaming } from '@/hooks/useAudioStreaming';
 import type { InteractiveElement, StudyIntent, StudyMessage, StudyMode, VoiceInteractiveGenEvent } from './types';
 import { MAX_EXPLANATION_LENGTH, MAX_INTERACTIVE_CODE_LENGTH } from '@/lib/study-companion';
 import { requestVisualizationFromGenAi } from '@/lib/request-visualization';
-import type { VisualStatusReport } from '@/lib/visual-status';
+import { waitForElementRender, type VisualStatusReport } from '@/lib/visual-status';
 import { LiveWaveformStrip } from './LiveWaveformStrip';
+
+/** How long a voice visual may take to render before the tutor is told it failed. */
+const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
 interface ComposerProps {
   value: string;
@@ -160,8 +163,13 @@ export function Composer({
             intent,
             interactiveElements: [element],
           };
+          // Report the outcome only once the card has actually rendered (or failed).
+          const rendered = waitForElementRender(element.id, VISUAL_RENDER_TIMEOUT_MS, ac.signal);
           notify({ type: 'success', replaceId: placeholderId, message });
-          return { status: 'ready', taskDescription: raw, explanation };
+          const outcome = await rendered;
+          return outcome.ok
+            ? { status: 'ready', taskDescription: raw, explanation }
+            : { status: 'failed', taskDescription: raw, reason: outcome.reason };
         } catch (e) {
           if (e instanceof DOMException && e.name === 'AbortError') {
             return { status: 'failed', taskDescription: raw, reason: 'A newer visual replaced this one' };

@@ -4,6 +4,8 @@ import {
   createVisualStatusDelivery,
   formatVisualStatusMessage,
   isVisualToolName,
+  reportElementRender,
+  waitForElementRender,
 } from '../visual-status';
 
 describe('formatVisualStatusMessage', () => {
@@ -96,5 +98,30 @@ describe('isVisualToolName', () => {
     expect(isVisualToolName('generate_visualization_description')).toBe(true);
     expect(isVisualToolName('request_learning_artifact')).toBe(true);
     expect(isVisualToolName('set_topic')).toBe(false);
+  });
+});
+
+describe('waitForElementRender', () => {
+  it('resolves with the card render outcome for that element only', async () => {
+    const rendered = waitForElementRender('element-a', 30_000);
+    reportElementRender('element-b', { ok: true });
+    reportElementRender('element-a', { ok: false, reason: 'Syntax error in generated code' });
+    reportElementRender('element-a', { ok: true });
+    await expect(rendered).resolves.toEqual({ ok: false, reason: 'Syntax error in generated code' });
+  });
+
+  it('fails when the card never reports or a newer visual replaces it', async () => {
+    vi.useFakeTimers();
+    try {
+      const timedOut = waitForElementRender('slow-element', 1_000);
+      vi.advanceTimersByTime(1_000);
+      await expect(timedOut).resolves.toEqual({ ok: false, reason: 'The visual did not finish loading' });
+      const controller = new AbortController();
+      const replaced = waitForElementRender('replaced-element', 1_000, controller.signal);
+      controller.abort();
+      await expect(replaced).resolves.toMatchObject({ ok: false });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

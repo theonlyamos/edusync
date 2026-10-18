@@ -80,3 +80,32 @@ export function createRenderWaiter(timers: {
     get pending() { return settle !== null; },
   };
 }
+
+const elementRenderListeners = new Map<string, (outcome: RenderOutcome) => void>();
+
+/**
+ * Waits for the interactive element with this id to report its first render
+ * outcome (see reportElementRender). Used where the code that generates a
+ * visual is not the component that renders it.
+ */
+export function waitForElementRender(id: string, timeoutMs: number, signal?: AbortSignal): Promise<RenderOutcome> {
+  return new Promise<RenderOutcome>((resolve) => {
+    const finish = (outcome: RenderOutcome) => {
+      if (elementRenderListeners.get(id) !== finish) return;
+      elementRenderListeners.delete(id);
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(outcome);
+    };
+    const onAbort = () => finish({ ok: false, reason: 'A newer visual replaced this one before it loaded' });
+    const timer = setTimeout(() => finish({ ok: false, reason: 'The visual did not finish loading' }), timeoutMs);
+    elementRenderListeners.set(id, finish);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Called by the component that renders an interactive element once it has rendered or failed. */
+export function reportElementRender(id: string, outcome: RenderOutcome): void {
+  elementRenderListeners.get(id)?.(outcome);
+}
