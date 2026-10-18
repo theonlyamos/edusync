@@ -2,7 +2,7 @@ import { createServerSupabase } from '@/lib/supabase.server';
 
 /**
  * Server-side billing for Gemini Live voice time (see migration
- * 20261018120000_voice_session_grants.sql).
+ * 20261018105346_voice_session_grants.sql).
  *
  * The browser talks to Gemini directly, so the server never sees the audio.
  * What it does control is how long each token works. Every billed token is
