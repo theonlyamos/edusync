@@ -105,9 +105,20 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       if (!(a.left < b.right + gap && a.right + gap > b.left && a.top < b.bottom + gap && a.bottom + gap > b.top)) return false;
       if (!b.points) return true;
       var margin = gap + b.pad;
-      return b.points.some(function (point) {
+      if (b.points.some(function (point) {
         return point.x > a.left - margin && point.x < a.right + margin && point.y > a.top - margin && point.y < a.bottom + margin;
-      });
+      })) return true;
+      // No outline point near the rect: it overlaps only if it sits wholly inside a filled marker shape.
+      var center = { x: (a.left + a.right) / 2, y: (a.top + a.bottom) / 2 };
+      return !!b.fills && (!b.clip || inside(center, b.clip)) && b.fills.some(function (polygon) { return inside(center, polygon); });
+    }
+    function inside(point, polygon) {
+      var hit = false;
+      for (var index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+        var a = polygon[index], b = polygon[previous];
+        if ((a.y > point.y) !== (b.y > point.y) && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
+      }
+      return hit;
     }
     function unpainted(child, marker) {
       for (var node = child; node && node !== marker; node = node.parentElement) {
@@ -153,6 +164,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       // Sample painted marker geometry in viewport units; unsupported content falls back to the clipped viewport.
       var step = Math.max(0.01, 1 / Math.max(0.0001, Math.min(sx, sy) * scale * screenScale));
       var local = [];
+      var fills = [];
       var stroke = 0;
       var known = Array.from(marker.children).every(function (child) {
         var tag = child.tagName.toLowerCase();
@@ -163,12 +175,15 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         if (!points) return false;
         var childStyle = getComputedStyle(child);
         if (childStyle.stroke !== 'none') stroke = Math.max(stroke, parseFloat(childStyle.strokeWidth) || 0);
-        points.forEach(function (point) { local.push({ x: point.x * sx + tx, y: point.y * sy + ty }); });
+        var mapped = points.map(function (point) { return { x: point.x * sx + tx, y: point.y * sy + ty }; });
+        Array.prototype.push.apply(local, mapped);
+        if (childStyle.fill !== 'none' && Number(childStyle.fillOpacity) !== 0) fills.push(mapped);
         return true;
       });
       if (!known || !local.length) {
         if (!clipped) return null;
         local = [];
+        fills = [[{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }]];
         var edges = [[0, 0, width, 0], [width, 0, width, height], [width, height, 0, height], [0, height, 0, 0]];
         edges.forEach(function (line) {
           var count = Math.max(1, Math.ceil(Math.hypot(line[2] - line[0], line[3] - line[1]) * scale * screenScale));
@@ -199,22 +214,40 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       }
       var cos = Math.cos(angle), sin = Math.sin(angle);
       var tip = anchor.matrixTransform(matrix);
-      var points = local.map(function (point) {
+      function project(point) {
         var dx = (point.x - refX) * scale, dy = (point.y - refY) * scale;
         var mapped = svg.createSVGPoint();
         mapped.x = anchor.x + dx * cos - dy * sin;
         mapped.y = anchor.y + dx * sin + dy * cos;
         return mapped.matrixTransform(matrix);
-      });
+      }
+      var points = local.map(project);
       points.push(tip);
+      var screenFills = fills.map(function (polygon) { return polygon.map(project); });
+      var clip = clipped ? [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }].map(project) : null;
       var xs = points.map(function (point) { return point.x; });
       var ys = points.map(function (point) { return point.y; });
       var pad = stroke * Math.max(sx, sy) * scale * screenScale / 2;
-      return [{ left: Math.min.apply(null, xs) - pad, right: Math.max.apply(null, xs) + pad, top: Math.min.apply(null, ys) - pad, bottom: Math.max.apply(null, ys) + pad, x: tip.x, y: tip.y, points: points, pad: pad }];
+      return [{ left: Math.min.apply(null, xs) - pad, right: Math.max.apply(null, xs) + pad, top: Math.min.apply(null, ys) - pad, bottom: Math.max.apply(null, ys) + pad, x: tip.x, y: tip.y, points: points, pad: pad, fills: screenFills, clip: clip }];
     }
-    // Raw SVG charts often have arrowheaded axes and no accessible name; numeric tick labels give them away.
-    function numericLabels(labels) {
-      return labels.filter(function (label) { return /^[-+\\u2212]?[$\\u00a3\\u20ac]?\\d[\\d,.]*\\s*(?:%|[a-z\\u00b0\\u00b5]{0,3})$/i.test((label.textContent || '').trim()); }).length;
+    // Raw SVG charts often have arrowheaded axes and no accessible name. Their numeric tick labels sit on one
+    // shared row or column; numbered flowchart steps usually do not, and a diagram's own name wins outright.
+    function looksLikeChart(svg, labels) {
+      if (/\\b(?:flow\\s*chart|flowchart|concept\\s+map|mind\\s+map|diagram|cycle|process|steps?|sequence|timeline|food\\s+(?:web|chain)|graph\\s+of\\s+nodes|knowledge\\s+graph)\\b/i.test(svg.getAttribute('aria-label') || '')) return false;
+      var ticks = labels.filter(function (label) { return /^[-+\\u2212]?[$\\u00a3\\u20ac]?\\d[\\d,.]*\\s*(?:%|[a-z\\u00b0\\u00b5]{0,3})$/i.test((label.textContent || '').trim()); }).map(function (label) {
+        return { x: label.x.baseVal.length ? label.x.baseVal.getItem(0).value : 0, y: label.y.baseVal.length ? label.y.baseVal.getItem(0).value : 0 };
+      });
+      if (ticks.length < 3) return false;
+      function aligned(axis) {
+        var groups = {};
+        ticks.forEach(function (tick) { var key = Math.round(tick[axis]); groups[key] = (groups[key] || 0) + 1; });
+        return Object.keys(groups).some(function (key) {
+          var count = 0;
+          for (var offset = -1; offset <= 1; offset++) count += groups[Number(key) + offset] || 0;
+          return count >= 3;
+        });
+      }
+      return aligned('x') || aligned('y');
     }
     function markedEdgeTips(svg) {
       var tips = [];
@@ -269,7 +302,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         });
       }
       var matrix = svg.getScreenCTM();
-      if (!svg.hasAttribute('viewBox') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24 || numericLabels(labels) >= 3) { remember(); return; }
+      if (!svg.hasAttribute('viewBox') || svg.closest('.recharts-wrapper, .leaflet-container') || /\\b(?:(?:bar|line|pie|area|scatter|bubble|donut|doughnut|radar)\\s+(?:chart|graph|plot)|(?:geographic|geographical|world|country|street|political|topographic)\\s+map|data\\s+(?:chart|plot)|histogram|scatterplot|choropleth)\\b/i.test(svg.getAttribute('aria-label') || '') || svg.querySelector('svg, textPath, animate, animateTransform') || !matrix || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > 0.0001 || Math.abs(matrix.b) > 0.0001 || Math.abs(matrix.c) > 0.0001 || labels.length > 24 || looksLikeChart(svg, labels)) { remember(); return; }
       var tips = markedEdgeTips(svg);
       if (!tips) { remember(); return; }
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
@@ -418,7 +451,7 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
         return Array.from(record.addedNodes).some(function (node) { return node.nodeType === 1 && (node.tagName.toLowerCase() === 'svg' || node.querySelector('svg')); });
       })) schedule();
     });
-    mutationObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label', 'transform', 'class', 'style', 'marker-start', 'marker-mid', 'marker-end', 'opacity', 'visibility', 'display'] });
+    mutationObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['x', 'y', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'points', 'rotate', 'font-size', 'width', 'height', 'viewBox', 'preserveAspectRatio', 'aria-label', 'transform', 'class', 'style', 'marker-start', 'marker-mid', 'marker-end', 'opacity', 'visibility', 'display', 'markerWidth', 'markerHeight', 'markerUnits', 'refX', 'refY', 'orient', 'overflow', 'fill', 'stroke', 'stroke-width', 'fill-opacity', 'stroke-opacity'] });
     schedule();
   })();
 `;

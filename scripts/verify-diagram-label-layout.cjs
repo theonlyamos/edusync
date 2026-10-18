@@ -268,7 +268,7 @@ function readControls() {
 function assertControls(values, stage) {
   const semanticIds = ['flowchart-evaporation', 'flowchart-rainfall', 'concept-map-producer', 'concept-map-consumer'];
   for (const label of values) {
-    if (label.id === 'visible-label' || semanticIds.includes(label.id)) continue;
+    if (label.id === 'visible-label' || semanticIds.includes(label.id) || /^(?:numbered|scattered)-step-/.test(label.id)) continue;
     assert.equal(label.font, '', `${label.id}: authored font changed ${stage}`);
     assert.equal(label.transform, label.id === 'svg-transform-label' ? 'translate(6 0)' : null, `${label.id}: authored transform changed ${stage}`);
     assert.equal(label.rotate, label.id === 'rotated-label' ? '20' : null, `${label.id}: authored rotation changed ${stage}`);
@@ -276,6 +276,9 @@ function assertControls(values, stage) {
   for (const id of [...semanticIds, 'named-chart-label', 'data-chart-label', 'geographic-map-label', 'chart-label', 'map-label']) {
     assert(values.some(label => label.id === id), `Semantic control missing ${id}`);
   }
+  const numberedSteps = values.filter(label => /^(?:numbered|scattered)-step-/.test(label.id));
+  assert.equal(numberedSteps.length, 6, 'Numbered step controls missing');
+  for (const label of numberedSteps) assert(label.renderedFont >= 13.99, `${label.id}: numbered diagram step treated as a chart ${stage}: ${label.renderedFont}px`);
   const semanticLabels = values.filter(label => semanticIds.includes(label.id));
   for (const label of semanticLabels) {
     assert(label.renderedFont >= 13.99, `${label.id}: unreadable semantic diagram label ${stage}: ${label.renderedFont}px`);
@@ -709,6 +712,63 @@ async function unpaintedMarkerTransition(frame) {
   assert.deepEqual(await frame.evaluate(readEdgeGeometry), before, 'Label placement not restored after unpainted marker check');
 }
 
+// Growing the marker in place must rerun placement, and no label may sit on the marker's filled interior.
+async function markerGeometryTransition(frame, item) {
+  const before = await frame.evaluate(readEdgeGeometry);
+  const paintedLabels = () => frame.evaluate(() => {
+    const svg = document.getElementById('edge-nonadjacent-line');
+    const edge = document.getElementById('nonadjacent-line');
+    const marker = document.getElementById('endpointArrow');
+    const shape = marker.querySelector('path');
+    const ctm = edge.getScreenCTM();
+    const length = edge.getTotalLength();
+    const tip = edge.getPointAtLength(length), back = edge.getPointAtLength(length - .01);
+    const box = marker.viewBox.baseVal;
+    const viewScale = marker.hasAttribute('viewBox') ? marker.markerWidth.baseVal.value / box.width : 1;
+    const toMarker = new DOMMatrix([ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f]).translate(tip.x, tip.y)
+      .rotate(Math.atan2(tip.y - back.y, tip.x - back.x) * 180 / Math.PI).scale(parseFloat(getComputedStyle(edge).strokeWidth)).scale(viewScale)
+      .translate(-marker.refX.baseVal.value, -marker.refY.baseVal.value).inverse();
+    return Array.from(svg.querySelectorAll('text')).map(label => {
+      const rect = label.getBoundingClientRect();
+      const samples = [];
+      for (let i = 1; i < 6; i++) for (let j = 1; j < 4; j++) samples.push(new DOMPoint(rect.left + rect.width * i / 6, rect.top + rect.height * j / 4));
+      const point = svg.createSVGPoint();
+      return { id: label.id, painted: samples.some(sample => {
+        const local = sample.matrixTransform(toMarker);
+        point.x = local.x; point.y = local.y;
+        return shape.isPointInFill(point);
+      }) };
+    });
+  });
+  item.markerGeometry = [];
+  await frame.evaluate(() => {
+    const marker = document.getElementById('endpointArrow');
+    marker.setAttribute('viewBox', '0 0 4 4');
+    marker.setAttribute('overflow', 'visible');
+  });
+  await settle(frame);
+  // 24 units exercises the marker-attribute observer; 96 units puts the label wholly inside the filled arrowhead.
+  for (const size of [24, 96]) {
+    await frame.evaluate(value => {
+      const marker = document.getElementById('endpointArrow');
+      marker.setAttribute('markerWidth', String(value));
+      marker.setAttribute('markerHeight', String(value));
+    }, size);
+    await settle(frame);
+    const labels = await paintedLabels();
+    assert.deepEqual(labels.filter(label => label.painted), [], `Label sits on a ${size}-unit marker's filled interior`);
+    item.markerGeometry.push({ size, labels });
+  }
+  await frame.evaluate(() => {
+    const marker = document.getElementById('endpointArrow');
+    ['viewBox', 'overflow'].forEach(name => marker.removeAttribute(name));
+    marker.setAttribute('markerWidth', '4');
+    marker.setAttribute('markerHeight', '4');
+  });
+  await settle(frame);
+  assert.deepEqual(await frame.evaluate(readEdgeGeometry), before, 'Label placement not restored after marker geometry check');
+}
+
 async function endpointCase(context, html, report, outputDir) {
   for (const viewport of viewports) {
     const item = { name: `svg-edge-endpoints-${viewport.width}`, viewport, assertionsPassed: false };
@@ -749,6 +809,7 @@ async function endpointCase(context, html, report, outputDir) {
     await hiddenEdgeTransitions(frame, item);
     await nodeShapeTransitions(frame, item);
     await unpaintedMarkerTransition(frame);
+    await markerGeometryTransition(frame, item);
     item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
     item.repeatedResizeDrift = false;
     item.assertionsPassed = true;
