@@ -2,18 +2,31 @@ import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
 import { createServerSupabase } from '@/lib/supabase.server';
-import { addCredits } from '@/lib/credits';
 import {
     buildLiveConnectConfig,
     getLiveModel,
     liveTokenRequestSchema,
 } from '@/lib/live-tutor/live-connect-config';
-import { allowVoiceTokenRequest, grantVoiceMinutes } from '@/lib/live-tutor/voice-billing';
+import { allowVoiceTokenRequest, finalizeVoiceTokenIssuance, grantVoiceMinutes } from '@/lib/live-tutor/voice-billing';
 
 /** Students using their school's tutor are not charged credits; tokens still expire. */
 const UNBILLED_TOKEN_MINUTES = 30;
 /** A token must open its Live session within this window. */
 const NEW_SESSION_WINDOW_MS = 60 * 1000;
+
+const LOCKED_SETUP_FIELDS = [
+    'model',
+    'generationConfig',
+    'systemInstruction',
+    'tools',
+    'realtimeInputConfig',
+    'contextWindowCompression',
+    'inputAudioTranscription',
+    'outputAudioTranscription',
+    'proactivity',
+    'avatarConfig',
+    'safetySettings',
+];
 
 async function ownsLearningSession(
     sessionId: string,
@@ -78,6 +91,7 @@ export async function POST(request: NextRequest) {
         const now = Date.now();
         let expireTime: Date;
         let billing: { grantId: string; minutesCharged: number; remainingCredits: number } | null = null;
+        let issuance: { grantId: string; issuanceId: string } | null = null;
 
         if (billed) {
             const grant = await grantVoiceMinutes({
@@ -95,13 +109,14 @@ export async function POST(request: NextRequest) {
             if (grant.status === 'not_found') {
                 return NextResponse.json({ error: 'Voice session not found' }, { status: 403 });
             }
-            if (grant.status === 'too_many_reconnects') {
+            if (grant.status === 'active_grant' || grant.status === 'pending_issuance') {
                 return NextResponse.json(
-                    { error: 'Too many reconnects for this voice session. Please start a new session.' },
-                    { status: 429 },
+                    { error: grant.status === 'active_grant' ? 'Resume with the existing voice token' : 'Voice token issuance is already pending' },
+                    { status: 409 },
                 );
             }
             expireTime = grant.expiresAt;
+            issuance = { grantId: grant.grantId, issuanceId: grant.issuanceId };
             billing = {
                 grantId: grant.grantId,
                 minutesCharged: grant.minutesCharged,
@@ -113,35 +128,37 @@ export async function POST(request: NextRequest) {
 
         const newSessionExpireTime = new Date(Math.min(now + NEW_SESSION_WINDOW_MS, expireTime.getTime()));
         const config = buildLiveConnectConfig(input);
+        const constrainedConfig = { ...config };
+        Reflect.deleteProperty(constrainedConfig, 'sessionResumption');
 
         let tokenName: string | undefined;
         try {
             const ai = new GoogleGenAI({ apiKey });
-            // liveConnectConstraints without lockAdditionalFields locks every
-            // setup field: the token cannot be used with another model,
-            // system prompt, tool set or resumption handle.
             const token = await ai.authTokens.create({
                 config: {
                     uses: 1,
                     expireTime: expireTime.toISOString(),
                     newSessionExpireTime: newSessionExpireTime.toISOString(),
-                    liveConnectConstraints: { model, config: config as never },
+                    liveConnectConstraints: { model, config: constrainedConfig as never },
+                    lockAdditionalFields: LOCKED_SETUP_FIELDS,
                     httpOptions: { apiVersion: 'v1alpha' },
                 },
             });
             tokenName = token.name;
             if (!tokenName) throw new Error('Gemini returned a token without a name');
         } catch (error) {
-            if (billing && billing.minutesCharged > 0) {
-                const refund = await addCredits(
-                    auth.userId,
-                    billing.minutesCharged,
-                    'Refund: voice session could not be started',
-                    'refund',
-                );
-                if (!refund.success) console.error('Failed to refund voice minutes:', refund.error);
+            if (issuance) {
+                try {
+                    await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: false });
+                } catch (refundError) {
+                    console.error('Failed to roll back voice token issuance:', refundError);
+                }
             }
             throw error;
+        }
+
+        if (issuance) {
+            await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: true });
         }
 
         return NextResponse.json({

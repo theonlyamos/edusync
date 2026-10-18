@@ -116,7 +116,7 @@ export function useAudioStreaming(
     // Indirection refs: these callbacks are declared further down but referenced by
     // earlier-declared callbacks. Calling through a ref avoids the temporal-dead-zone
     // forward reference the bundler rejects, and keeps the existing xRef.current?.(...) idiom.
-    const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number) => Promise<void>) | null>(null);
+    const startGeminiLiveSessionRef = useRef<((stream: MediaStream, sampleRate: number, forceRenewal?: boolean) => Promise<void>) | null>(null);
     const processGeminiResponseQueueRef = useRef<((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => void) | null>(null);
     const playGeminiAudioChunksRef = useRef<((rawData: string[]) => void) | null>(null);
     /** Study Companion: buffer live transcripts; flush on turnComplete / finished / fallback (see processGeminiResponseQueue). */
@@ -130,7 +130,12 @@ export function useAudioStreaming(
     // Server-side voice billing: the prepaid grant behind the current token, and
     // the timer that asks for the next token shortly before this one expires.
     const voiceGrantIdRef = useRef<string | null>(null);
+    const liveTokenRef = useRef<LiveTokenResponse | null>(null);
+    const tokenRenewFailureRef = useRef<unknown>(null);
     const tokenRenewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const tokenExpireTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const pendingLiveConnectionRef = useRef<{ generation: number; promise: Promise<void> } | null>(null);
+    const stagedLiveResourcesRef = useRef<{ close: () => void } | null>(null);
     const onCreditsUpdateRef = useRef<((update: VoiceCreditsUpdate) => void) | null>(null);
     // Auto-resume loop guards: cap rapid reconnects so a socket that keeps
     // closing right after connecting (e.g. after a tool turn) can't thrash forever.
@@ -323,6 +328,8 @@ export function useAudioStreaming(
 
     // Centralized cleanup function
     const cleanupAudioResources = useCallback(() => {
+        stagedLiveResourcesRef.current?.close();
+        stagedLiveResourcesRef.current = null;
         tutorTurnsRef.current.reset();
         const queue = playbackQueueRef.current;
         playbackQueueRef.current = null;
@@ -386,6 +393,10 @@ export function useAudioStreaming(
             clearTimeout(tokenRenewTimeoutRef.current);
             tokenRenewTimeoutRef.current = null;
         }
+        if (tokenExpireTimeoutRef.current) {
+            clearTimeout(tokenExpireTimeoutRef.current);
+            tokenExpireTimeoutRef.current = null;
+        }
 
         liveUserTranscriptRef.current = '';
         liveAssistantTranscriptRef.current = '';
@@ -411,8 +422,12 @@ export function useAudioStreaming(
 
         // Do not show feedback form on manual stop
 
-        // Clear resumption handle when manually stopping
-        sessionResumptionHandleRef.current = null;
+        const tokenExpiresAt = Date.parse(liveTokenRef.current?.expireTime ?? '');
+        if (!Number.isFinite(tokenExpiresAt) || tokenExpiresAt <= Date.now()) {
+            sessionResumptionHandleRef.current = null;
+            liveTokenRef.current = null;
+            tokenRenewFailureRef.current = null;
+        }
         isResumingSessionRef.current = false;
 
         // Run the full cleanup for capture resources
@@ -523,12 +538,28 @@ export function useAudioStreaming(
     }, [handleStreamingFailure]);
 
     // Browser-based Gemini Live connection
-    const startGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number) => {
+    const connectGeminiLiveSession = useCallback(async (stream: MediaStream, sampleRate: number, forceRenewal = false) => {
         const generation = sessionGenerationRef.current;
-        const connectionGeneration = ++connectionGenerationRef.current;
+        let connectionGeneration: number | null = null;
         let connectionClosed = false;
-        const ownsConnection = () => generation === sessionGenerationRef.current && connectionGeneration === connectionGenerationRef.current;
+        let connectionOpened = false;
+        let setupError: Error | null = null;
+        let stagedSession: any = null;
+        let stagedContext: AudioContext | null = null;
+        let stagedProcessor: AudioWorkletNode | null = null;
+        let promoted = false;
+        const ownsRequest = () => generation === sessionGenerationRef.current;
+        const ownsConnection = () => ownsRequest() && connectionGeneration !== null && connectionGeneration === connectionGenerationRef.current;
         const acceptsEvents = () => ownsConnection() && !connectionClosed;
+        const stagedResources = { close: () => {
+            connectionClosed = true;
+            try { stagedProcessor?.disconnect(); } catch (error) { console.warn('Failed to disconnect staged audio processor', error); }
+            if (stagedContext && stagedContext.state !== 'closed') {
+                void stagedContext.close().catch(error => console.warn('Failed to close staged audio context', error));
+            }
+            try { stagedSession?.close(); } catch (error) { console.warn('Failed to close staged live session', error); }
+        } };
+        stagedLiveResourcesRef.current = stagedResources;
         try {
             // Get an ephemeral token. The server builds the Live config (model,
             // system prompt, tools) and locks it into the token, and charges
@@ -542,35 +573,62 @@ export function useAudioStreaming(
             const variant = liveOptionsRef.current?.variant ?? 'tutor';
             const isStudyCompanion = variant === 'studyCompanion';
             const lessonCtx = lessonContextRef.current;
-            const tokenResponse = await fetch('/api/genai/ephemeral', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(buildLiveTokenRequest({
-                    grantId: voiceGrantIdRef.current,
-                    sessionId: currentSessionIdRef.current,
-                    resumptionHandle: sessionResumptionHandleRef.current,
-                    variant,
-                    topic: topicRef.current,
-                    gradeLevel: liveOptionsRef.current?.gradeLevel,
-                    studyMode: liveOptionsRef.current?.studyMode,
-                    studyIntent: liveOptionsRef.current?.studyIntent,
-                    lesson: lessonCtx,
-                })),
-            });
-            if (!ownsConnection()) return;
-            if (!tokenResponse.ok) {
-                // A grant the server no longer recognizes can't be reused; start a fresh one next time.
-                if (tokenResponse.status === 403) voiceGrantIdRef.current = null;
-                throw new VoiceTokenRequestError(tokenResponse.status);
-            }
-            const { token, model, config: lockedConfig, expireTime, billing } = await tokenResponse.json() as LiveTokenResponse;
-            if (!ownsConnection()) return;
-            if (billing) {
-                voiceGrantIdRef.current = billing.grantId;
-                onCreditsUpdateRef.current?.({
-                    remainingCredits: billing.remainingCredits,
-                    minutesCharged: billing.minutesCharged,
+            const cachedToken = liveTokenRef.current;
+            const cachedExpiresAt = Date.parse(cachedToken?.expireTime ?? '');
+            const reuseToken = !forceRenewal && cachedToken && cachedExpiresAt > Date.now()
+                && (cachedToken.billing || sessionResumptionHandleRef.current);
+            let liveToken: LiveTokenResponse;
+            if (reuseToken) {
+                if (!sessionResumptionHandleRef.current) {
+                    throw new Error('The paid voice session cannot be resumed without its resumption handle. Please try again after this block ends.');
+                }
+                liveToken = cachedToken;
+            } else {
+                if (cachedToken && cachedExpiresAt <= Date.now()) {
+                    liveTokenRef.current = null;
+                    sessionResumptionHandleRef.current = null;
+                    tokenRenewFailureRef.current = null;
+                }
+                const tokenResponse = await fetch('/api/genai/ephemeral', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(buildLiveTokenRequest({
+                        grantId: voiceGrantIdRef.current,
+                        sessionId: currentSessionIdRef.current,
+                        resumptionHandle: sessionResumptionHandleRef.current,
+                        variant,
+                        topic: topicRef.current,
+                        gradeLevel: liveOptionsRef.current?.gradeLevel,
+                        studyMode: liveOptionsRef.current?.studyMode,
+                        studyIntent: liveOptionsRef.current?.studyIntent,
+                        lesson: lessonCtx,
+                    })),
                 });
+                if (!ownsRequest()) return;
+                if (!tokenResponse.ok) {
+                    if (tokenResponse.status === 403) voiceGrantIdRef.current = null;
+                    throw new VoiceTokenRequestError(tokenResponse.status);
+                }
+                liveToken = await tokenResponse.json() as LiveTokenResponse;
+                if (!ownsRequest()) return;
+                liveTokenRef.current = liveToken;
+                tokenRenewFailureRef.current = null;
+                if (liveToken.billing) {
+                    voiceGrantIdRef.current = liveToken.billing.grantId;
+                    onCreditsUpdateRef.current?.({
+                        remainingCredits: liveToken.billing.remainingCredits,
+                        minutesCharged: liveToken.billing.minutesCharged,
+                    });
+                }
+            }
+            const { token, model, config: lockedConfig, expireTime } = liveToken;
+            const expiresAt = Date.parse(expireTime);
+            const expireConnection = () => {
+                tokenExpireTimeoutRef.current = null;
+                handleStreamingFailure(tokenRenewFailureRef.current ?? new Error('The paid voice block has ended. Please reconnect to continue.'), 'resume', generation);
+            };
+            if (!tokenExpireTimeoutRef.current && Number.isFinite(expiresAt)) {
+                tokenExpireTimeoutRef.current = setTimeout(expireConnection, Math.max(0, expiresAt - Date.now()));
             }
 
             const ai = new GoogleGenAI({
@@ -580,12 +638,13 @@ export function useAudioStreaming(
 
             const responseQueue: LiveServerMessage[] = [];
 
-            // The token only accepts this exact config, so use the server's copy as-is.
             const connectConfig: any = {
                 model,
-                config: lockedConfig,
+                config: reuseToken ? { ...lockedConfig, sessionResumption: { handle: sessionResumptionHandleRef.current } } : lockedConfig,
                 callbacks: {
                     onopen: () => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        connectionOpened = true;
                         if (!acceptsEvents()) return;
                         tutorTurnsRef.current.reset();
                         setConnectionStatus('connected');
@@ -593,12 +652,24 @@ export function useAudioStreaming(
                         sessionOpenedAtRef.current = Date.now();
                     },
                     onmessage: (message: LiveServerMessage) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            responseQueue.push(message);
+                            return;
+                        }
                         if (!acceptsEvents()) return;
                         tutorTurnsRef.current.received(message);
                         responseQueue.push(message);
                         processGeminiResponseQueueRef.current?.(responseQueue, acceptsEvents);
                     },
                     onerror: (e: ErrorEvent) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            connectionClosed = true;
+                            setupError = new Error(`Gemini error: ${e.message}`);
+                            if (!geminiLiveSessionRef.current) handleStreamingFailure(setupError, 'resume', generation);
+                            return;
+                        }
                         if (!acceptsEvents() || isManualDisconnectRef.current) return;
                         console.error('Gemini Live session error:', e.message);
                         setError(`Gemini error: ${e.message}`);
@@ -607,10 +678,19 @@ export function useAudioStreaming(
                         geminiLiveSessionRef.current = null;
 
                         // Don't show feedback form for errors - let auto-resume handle it
-                        // Clear resumption handle on error
-                        sessionResumptionHandleRef.current = null;
+                        if (!liveTokenRef.current?.billing) sessionResumptionHandleRef.current = null;
                     },
                     onclose: (e: CloseEvent) => {
+                        if (!ownsRequest() || connectionClosed) return;
+                        if (connectionGeneration === null) {
+                            connectionClosed = true;
+                            setupError = new Error('Live voice connection ended. Please try again.');
+                            if (!geminiLiveSessionRef.current) {
+                                stopStreaming();
+                                setError(setupError.message);
+                            }
+                            return;
+                        }
                         if (!acceptsEvents()) return;
                         connectionClosed = true;
                         // Surface the real close reason for diagnostics.
@@ -625,6 +705,10 @@ export function useAudioStreaming(
                         // drop; reset the rapid-reconnect counter so resumption can work.
                         if (openedAt && Date.now() - openedAt >= RESUME_STABLE_MS) {
                             resumeAttemptsRef.current = 0;
+                        }
+                        if (pendingLiveConnectionRef.current?.generation === generation && stagedLiveResourcesRef.current) {
+                            setConnectionStatus('connecting');
+                            return;
                         }
 
                         // Enter the resume path only when there's a handle (original
@@ -660,7 +744,7 @@ export function useAudioStreaming(
                         resumeAttemptsRef.current += 1;
                         // After the first rapid failure, drop a possibly-stale resumption
                         // handle so the next attempt is a clean fresh connect.
-                        if (resumeAttemptsRef.current >= 2) {
+                        if (resumeAttemptsRef.current >= 2 && !liveTokenRef.current?.billing) {
                             sessionResumptionHandleRef.current = null;
                         }
 
@@ -679,54 +763,19 @@ export function useAudioStreaming(
             };
 
             const geminiSession = await ai.live.connect(connectConfig);
-            if (!acceptsEvents()) {
-                geminiSession.close();
-                return;
-            }
-
-            geminiLiveSessionRef.current = geminiSession;
-
-            // The token stops working when its paid block ends. Reconnect with the
-            // resumption handle shortly before that; the new token request renews
-            // the block on the server (or ends the session when credits run out).
-            if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
-            const renewDelay = liveTokenRenewDelay(expireTime);
-            tokenRenewTimeoutRef.current = renewDelay === null ? null : setTimeout(() => {
-                tokenRenewTimeoutRef.current = null;
-                if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
-                const previousSession = geminiSession;
-                isResumingSessionRef.current = true;
-                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000)
-                    .then(() => {
-                        try { previousSession.close(); } catch { /* already closed */ }
-                    })
-                    .catch((err: unknown) => {
-                        handleStreamingFailure(err, 'resume', generation);
-                    });
-            }, renewDelay);
-
-            // Set up audio capture and send to Gemini. A reconnect replaces the
-            // previous capture context, so close it instead of leaking it.
-            const previousCaptureContext = audioContextRef.current;
-            if (previousCaptureContext && previousCaptureContext.state !== 'closed') {
-                void previousCaptureContext.close().catch(() => { /* best-effort cleanup */ });
-            }
+            stagedSession = geminiSession;
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
             const audioContext = new AudioContext({ sampleRate });
-            audioContextRef.current = audioContext;
+            stagedContext = audioContext;
             const source = audioContext.createMediaStreamSource(stream);
-            // Create mic analyser for VAD visualization
+            let micAnalyser: AnalyserNode | null = null;
             try {
-                micAnalyserRef.current = audioContext.createAnalyser();
-                micAnalyserRef.current.fftSize = 256;
-                micAnalyserRef.current.smoothingTimeConstant = 0.8;
-                source.connect(micAnalyserRef.current);
+                micAnalyser = audioContext.createAnalyser();
+                micAnalyser.fftSize = 256;
+                micAnalyser.smoothingTimeConstant = 0.8;
+                source.connect(micAnalyser);
             } catch { /* best-effort cleanup; failure is non-fatal */ }
-
-            // Ensure we are not double-sending by disconnecting any previous processor
-            if (processorRef.current) {
-                try { processorRef.current.disconnect(); } catch { /* best-effort cleanup; failure is non-fatal */ }
-                processorRef.current = null;
-            }
 
             try {
                 await audioContext.audioWorklet.addModule('/audio-processor.js');
@@ -734,12 +783,11 @@ export function useAudioStreaming(
                 console.error('Failed to add audio worklet module.', e);
                 throw new Error('Failed to load audio processor.');
             }
-            if (!acceptsEvents()) {
-                void audioContext.close();
-                return;
-            }
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
 
             const workletNode = new AudioWorkletNode(audioContext, 'audio-stream-processor');
+            stagedProcessor = workletNode;
 
             workletNode.port.onmessage = (event) => {
                 if (!acceptsEvents() || !isStreamingRef.current || !geminiLiveSessionRef.current) return;
@@ -845,7 +893,62 @@ export function useAudioStreaming(
             try {
                 workletNode.connect(audioContext.destination);
             } catch { /* best-effort cleanup; failure is non-fatal */ }
+            const initialMessage = sessionResumptionHandleRef.current
+                ? 'Continue'
+                : isStudyCompanion
+                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
+                    : 'Hello';
+            geminiSession.sendRealtimeInput({ text: initialMessage });
+            if (!ownsRequest()) return;
+            if (setupError) throw setupError;
+            const previousCaptureContext = audioContextRef.current;
+            const previousProcessor = processorRef.current;
+            const previousMicAnalyser = micAnalyserRef.current;
+            connectionGeneration = ++connectionGenerationRef.current;
+            promoted = true;
+            if (stagedLiveResourcesRef.current === stagedResources) stagedLiveResourcesRef.current = null;
+            geminiLiveSessionRef.current = geminiSession;
+            audioContextRef.current = audioContext;
+            micAnalyserRef.current = micAnalyser;
             processorRef.current = workletNode;
+            try { previousProcessor?.disconnect(); } catch (error) { console.warn('Failed to disconnect previous audio processor', error); }
+            try { previousMicAnalyser?.disconnect(); } catch (error) { console.warn('Failed to disconnect previous microphone analyser', error); }
+            if (previousCaptureContext && previousCaptureContext.state !== 'closed') {
+                void previousCaptureContext.close().catch(error => console.warn('Failed to close previous audio context', error));
+            }
+            if (connectionOpened) connectConfig.callbacks.onopen();
+            const queuedMessages = responseQueue.splice(0);
+            for (const message of queuedMessages) connectConfig.callbacks.onmessage(message);
+            if (!acceptsEvents()) return;
+            emitLiveInputDiagnostic({ event: 'sent', connectionGeneration, kind: 'text', source: 'initial' });
+            tutorTurnsRef.current.sent();
+            if (tokenExpireTimeoutRef.current) clearTimeout(tokenExpireTimeoutRef.current);
+            tokenExpireTimeoutRef.current = Number.isFinite(expiresAt) ? setTimeout(expireConnection, Math.max(0, expiresAt - Date.now())) : null;
+            if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
+            const renewDelay = tokenRenewFailureRef.current ? null : liveTokenRenewDelay(expireTime);
+            tokenRenewTimeoutRef.current = renewDelay === null ? null : setTimeout(() => {
+                tokenRenewTimeoutRef.current = null;
+                if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                isResumingSessionRef.current = true;
+                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000, true)
+                    .then(() => {
+                        try { geminiSession.close(); } catch (error) { console.warn('Failed to close replaced live session', error); }
+                    })
+                    .catch((err: unknown) => {
+                        if (!ownsRequest() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                        tokenRenewFailureRef.current = err;
+                        isResumingSessionRef.current = false;
+                        if (acceptsEvents()) return;
+                        if (sessionResumptionHandleRef.current && Date.parse(liveTokenRef.current?.expireTime ?? '') > Date.now()) {
+                            isResumingSessionRef.current = true;
+                            void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((resumeError: unknown) => {
+                                handleStreamingFailure(resumeError, 'resume', generation);
+                            });
+                            return;
+                        }
+                        handleStreamingFailure(err, 'resume', generation);
+                    });
+            }, renewDelay);
 
             // Initialize MediaRecorder AFTER AudioWorklet is connected
             // This ensures VAD state is being updated before recording starts
@@ -889,19 +992,28 @@ export function useAudioStreaming(
                 }
             } catch { /* best-effort cleanup; failure is non-fatal */ }
 
-            const initialMessage = sessionResumptionHandleRef.current
-                ? 'Continue'
-                : isStudyCompanion
-                    ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
-                    : 'Hello';
-            sendLiveText(initialMessage, 'initial');
-
         } catch (error: any) {
-            if (!ownsConnection()) return;
+            if (!ownsRequest()) return;
             console.error('Failed to start Gemini Live session:', error);
             throw error;
+        } finally {
+            if (!promoted) stagedResources.close();
+            if (stagedLiveResourcesRef.current === stagedResources) stagedLiveResourcesRef.current = null;
         }
     }, [maybeUploadSegment, sendLiveText, handleStreamingFailure, stopStreaming]);
+
+    const startGeminiLiveSession = useCallback((stream: MediaStream, sampleRate: number, forceRenewal = false) => {
+        const generation = sessionGenerationRef.current;
+        if (pendingLiveConnectionRef.current?.generation === generation) return pendingLiveConnectionRef.current.promise;
+        const promise = connectGeminiLiveSession(stream, sampleRate, forceRenewal);
+        const pending = { generation, promise };
+        pendingLiveConnectionRef.current = pending;
+        const clearPending = () => {
+            if (pendingLiveConnectionRef.current === pending) pendingLiveConnectionRef.current = null;
+        };
+        void promise.then(clearPending, clearPending);
+        return promise;
+    }, [connectGeminiLiveSession]);
 
     // Process Gemini Live response queue with chunked processing to prevent UI blocking
     const processGeminiResponseQueue = useCallback((responseQueue: LiveServerMessage[], acceptsEvents: () => boolean) => {

@@ -20,11 +20,14 @@ const userId = '10000000-0000-4000-8000-000000000001';
 const apiKeyId = '20000000-0000-4000-8000-000000000001';
 const sessionId = '30000000-0000-4000-8000-000000000001';
 const grantId = '40000000-0000-4000-8000-000000000001';
+const issuanceId = '50000000-0000-4000-8000-000000000001';
 const expiresAt = '2026-10-18T12:05:00.000Z';
 
 let rpcs: Array<{ name: string; body: Record<string, unknown> }>;
 let grantRow: Record<string, unknown>;
 let rateLimitAllowed: boolean;
+let finalizeStatus: string | null;
+let finalizeFailuresRemaining: number;
 let sessionOwner: { user_id: string; api_key_id: string | null };
 
 beforeEach(() => {
@@ -35,8 +38,10 @@ beforeEach(() => {
     process.env.GEMINI_LIVE_MODEL = 'models/locked-live-model';
     rpcs = [];
     rateLimitAllowed = true;
+    finalizeStatus = null;
+    finalizeFailuresRemaining = 0;
     sessionOwner = { user_id: userId, api_key_id: null };
-    grantRow = { status: 'charged', grant_id: grantId, expires_at: expiresAt, minutes_charged: 5, remaining_credits: 55 };
+    grantRow = { status: 'charged', grant_id: grantId, issuance_id: issuanceId, expires_at: expiresAt, minutes_charged: 5, remaining_credits: 55 };
     genai.create.mockReset().mockResolvedValue({ name: 'auth_tokens/locked' });
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const request = new Request(input, init);
@@ -45,7 +50,11 @@ beforeEach(() => {
             const name = url.pathname.slice('/rest/v1/rpc/'.length);
             rpcs.push({ name, body: await request.json() });
             if (name === 'hit_rate_limit') return Response.json(rateLimitAllowed);
-            if (name === 'grant_voice_minutes') return Response.json([grantRow]);
+            if (name === 'grant_voice_minutes' || name === 'grant_voice_minutes_v2') return Response.json([grantRow]);
+            if (name === 'finalize_voice_token_issuance') {
+                if (finalizeFailuresRemaining-- > 0) return Response.json({ message: 'temporary transport failure' }, { status: 503 });
+                return Response.json([{ status: finalizeStatus ?? (rpcs.at(-1)?.body.p_succeeded ? 'completed' : 'refunded'), remaining_credits: 55 }]);
+            }
             if (name === 'add_user_credits') return Response.json(60);
         }
         if (url.pathname === '/rest/v1/learning_sessions') {
@@ -81,11 +90,13 @@ describe('POST /api/genai/ephemeral', () => {
         expect(response.status).toBe(200);
         const body = await response.json();
 
-        const grant = rpcs.find(({ name }) => name === 'grant_voice_minutes');
+        const grant = rpcs.find(({ name }) => name === 'grant_voice_minutes_v2');
         expect(grant?.body).toMatchObject({ p_user_id: userId, p_grant_id: null, p_api_key_id: null, p_session_id: sessionId, p_block_minutes: 5 });
 
         const config = lockedConstraints();
-        expect(config).not.toHaveProperty('lockAdditionalFields');
+        expect(config.lockAdditionalFields).toContain('generationConfig');
+        expect(config.lockAdditionalFields).not.toContain('sessionResumption');
+        expect(config.liveConnectConstraints.config).not.toHaveProperty('sessionResumption');
         expect(config.uses).toBe(1);
         expect(config.expireTime).toBe(expiresAt);
         expect(config.newSessionExpireTime).toBe('2026-10-18T12:01:00.000Z');
@@ -99,7 +110,10 @@ describe('POST /api/genai/ephemeral', () => {
             expireTime: expiresAt,
             billing: { grantId, minutesCharged: 5, remainingCredits: 55 },
         });
-        expect(body.config).toEqual(config.liveConnectConstraints.config);
+        expect(body.config).toEqual({ ...config.liveConnectConstraints.config, sessionResumption: {} });
+        expect(rpcs.find(({ name }) => name === 'finalize_voice_token_issuance')?.body).toMatchObject({
+            p_user_id: userId, p_grant_id: grantId, p_api_key_id: null, p_issuance_id: issuanceId, p_succeeded: true,
+        });
     });
 
     it('refuses a token when the user has no credits', async () => {
@@ -109,11 +123,11 @@ describe('POST /api/genai/ephemeral', () => {
         expect(genai.create).not.toHaveBeenCalled();
     });
 
-    it('rejects reconnects to a grant that is not this caller’s and caps reconnects per block', async () => {
+    it('rejects grants belonging to another caller and refuses independent reconnect tokens', async () => {
         grantRow = { status: 'not_found', grant_id: null, expires_at: null, minutes_charged: 0, remaining_credits: 3 };
         expect((await POST(tokenRequest({ grantId }))).status).toBe(403);
-        grantRow = { status: 'too_many_reconnects', grant_id: grantId, expires_at: expiresAt, minutes_charged: 0, remaining_credits: 3 };
-        expect((await POST(tokenRequest({ grantId }))).status).toBe(429);
+        grantRow = { status: 'active_grant', grant_id: grantId, expires_at: expiresAt, minutes_charged: 0, remaining_credits: 3 };
+        expect((await POST(tokenRequest({ grantId }))).status).toBe(409);
         expect(genai.create).not.toHaveBeenCalled();
     });
 
@@ -129,7 +143,7 @@ describe('POST /api/genai/ephemeral', () => {
         const response = await POST(tokenRequest({ sessionId }, { apiKey: true }));
         expect(response.status).toBe(200);
         expect(rpcs.find(({ name }) => name === 'hit_rate_limit')?.body).toMatchObject({ p_key: `voice-token:key:${apiKeyId}` });
-        expect(rpcs.find(({ name }) => name === 'grant_voice_minutes')?.body).toMatchObject({ p_user_id: userId, p_api_key_id: apiKeyId });
+        expect(rpcs.find(({ name }) => name === 'grant_voice_minutes_v2')?.body).toMatchObject({ p_user_id: userId, p_api_key_id: apiKeyId });
     });
 
     it('does not charge school students but still locks and expires their token', async () => {
@@ -154,7 +168,66 @@ describe('POST /api/genai/ephemeral', () => {
         const response = await POST(tokenRequest({}));
         expect(response.status).toBe(500);
         expect(JSON.stringify(await response.json())).not.toContain('secret detail');
-        expect(rpcs.find(({ name }) => name === 'add_user_credits')?.body).toMatchObject({ p_user_id: userId, p_amount: 5, p_type: 'refund' });
+        expect(rpcs.find(({ name }) => name === 'finalize_voice_token_issuance')?.body).toMatchObject({
+            p_user_id: userId, p_grant_id: grantId, p_api_key_id: null, p_issuance_id: issuanceId, p_succeeded: false,
+        });
+        expect(rpcs.some(({ name }) => name === 'add_user_credits')).toBe(false);
+    });
+
+    it('does not mint a second token while the paid grant is active, even with a supplied resumption handle', async () => {
+        grantRow = { ...grantRow, status: 'active_grant', minutes_charged: 0 };
+        for (const resumptionHandle of [undefined, 'unverified-client-handle']) {
+            expect((await POST(tokenRequest({ grantId, resumptionHandle }))).status).toBe(409);
+        }
+        expect(genai.create).not.toHaveBeenCalled();
+    });
+
+    it('does not mint while another request has a pending issuance', async () => {
+        grantRow = { ...grantRow, status: 'pending_issuance', minutes_charged: 0 };
+        expect((await POST(tokenRequest({ grantId }))).status).toBe(409);
+        expect(genai.create).not.toHaveBeenCalled();
+    });
+
+    it('withholds the token if the issuance cannot be committed', async () => {
+        finalizeStatus = 'not_found';
+        const response = await POST(tokenRequest({}));
+        expect(response.status).toBe(500);
+        expect(await response.json()).not.toHaveProperty('token');
+        expect(rpcs.filter(({ name }) => name === 'finalize_voice_token_issuance')).toHaveLength(1);
+        expect(rpcs.at(-1)?.body.p_succeeded).toBe(true);
+    });
+
+    it.each([true, false])('retries the same issuance outcome after an uncertain finalization failure (succeeded=%s)', async (succeeded) => {
+        finalizeFailuresRemaining = 1;
+        if (!succeeded) genai.create.mockRejectedValue(new Error('upstream unavailable'));
+        const response = await POST(tokenRequest({}));
+        expect(response.status).toBe(succeeded ? 200 : 500);
+        const attempts = rpcs.filter(({ name }) => name === 'finalize_voice_token_issuance');
+        expect(attempts).toHaveLength(2);
+        expect(attempts[0].body).toEqual(attempts[1].body);
+        expect(attempts[0].body.p_succeeded).toBe(succeeded);
+    });
+
+    it('locks every other wire setup field while allowing same-token resumption', async () => {
+        const { GoogleGenAI } = await vi.importActual<typeof import('@google/genai')>('@google/genai');
+        const supabaseFetch = globalThis.fetch;
+        let wire: Record<string, unknown> | undefined;
+        vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+            const request = new Request(input, init);
+            if (new URL(request.url).hostname === 'generativelanguage.googleapis.com') {
+                wire = await request.json();
+                return Response.json({ name: 'auth_tokens/offline' });
+            }
+            return supabaseFetch(input, init);
+        }));
+        genai.create.mockImplementation((parameters) => new GoogleGenAI({ apiKey: 'offline-test-key' }).authTokens.create(parameters));
+        expect((await POST(tokenRequest({ resumptionHandle: 'previous-state' }))).status).toBe(200);
+        expect(wire?.bidiGenerateContentSetup).not.toHaveProperty('sessionResumption');
+        const mask = wire?.fieldMask as string;
+        for (const field of ['model', 'generationConfig', 'systemInstruction', 'tools', 'realtimeInputConfig', 'contextWindowCompression', 'inputAudioTranscription', 'outputAudioTranscription', 'proactivity', 'avatarConfig', 'safetySettings']) {
+            expect(mask.split(',')).toContain(field);
+        }
+        expect(mask).not.toContain('sessionResumption');
     });
 
     it('requires authentication', async () => {

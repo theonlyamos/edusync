@@ -9,9 +9,12 @@ vi.mock('react', async (importOriginal) => ({
   })),
 }));
 
-const gemini = vi.hoisted(() => ({ connect: vi.fn(), configurations: [] as any[], sends: [] as ReturnType<typeof vi.fn>[], toolSends: [] as ReturnType<typeof vi.fn>[] }));
+const gemini = vi.hoisted(() => ({ connect: vi.fn(), apiKeys: [] as string[], configurations: [] as any[], sends: [] as ReturnType<typeof vi.fn>[], toolSends: [] as ReturnType<typeof vi.fn>[], closes: [] as ReturnType<typeof vi.fn>[] }));
 vi.mock('@google/genai', () => ({
-  GoogleGenAI: class { live = { connect: gemini.connect }; },
+  GoogleGenAI: class {
+    constructor(options: { apiKey: string }) { gemini.apiKeys.push(options.apiKey); }
+    live = { connect: gemini.connect };
+  },
   Modality: { AUDIO: 'AUDIO' },
   StartSensitivity: { START_SENSITIVITY_HIGH: 'high' },
   FunctionResponseScheduling: { SILENT: 'SILENT' },
@@ -79,7 +82,7 @@ class SyntheticAudioContext {
 
 let stopTrack: ReturnType<typeof vi.fn>;
 let getUserMedia: ReturnType<typeof vi.fn>;
-let processors: Array<{ port: { onmessage?: (event: { data: { type: string; data: Float32Array } }) => void } }>;
+let processors: Array<{ context: SyntheticAudioContext; port: { onmessage?: (event: { data: { type: string; data: Float32Array } }) => void } }>;
 const audioFrame = (index: number, amplitude: number) => processors[index].port.onmessage?.({
   data: { type: 'audioData', data: new Float32Array(16000).fill(amplitude) },
 });
@@ -108,11 +111,13 @@ beforeEach(() => {
   pendingAudioDecodes = [];
   processors = [];
   addWorkletModule.mockReset().mockResolvedValue(undefined);
-  vi.stubGlobal('AudioWorkletNode', class { port = {}; constructor() { processors.push(this); } disconnect() {} connect() {} });
+  vi.stubGlobal('AudioWorkletNode', class { port = {}; constructor(readonly context: SyntheticAudioContext) { processors.push(this); } disconnect() {} connect() {} });
   vi.stubGlobal('fetch', vi.fn());
   gemini.configurations = [];
+  gemini.apiKeys = [];
   gemini.sends = [];
   gemini.toolSends = [];
+  gemini.closes = [];
   gemini.connect.mockImplementation(async (configuration) => {
     gemini.configurations.push(configuration);
     configuration.callbacks.onopen();
@@ -120,14 +125,12 @@ beforeEach(() => {
     const sendToolResponse = vi.fn();
     gemini.sends.push(sendRealtimeInput);
     gemini.toolSends.push(sendToolResponse);
-    return {
-      sendRealtimeInput,
-      sendToolResponse,
-      close: () => {
-        configuration.callbacks.onerror({ message: 'socket closed during cleanup' });
-        configuration.callbacks.onclose({ code: 1006, reason: 'cleanup' });
-      },
-    };
+    const close = vi.fn(() => {
+      configuration.callbacks.onerror({ message: 'socket closed during cleanup' });
+      configuration.callbacks.onclose({ code: 1006, reason: 'cleanup' });
+    });
+    gemini.closes.push(close);
+    return { sendRealtimeInput, sendToolResponse, close };
   });
 });
 
@@ -818,20 +821,336 @@ describe('server-locked voice tokens', () => {
       { remainingCredits: 10, minutesCharged: 5 },
       { remainingCredits: 5, minutesCharged: 5 },
     ]);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(renderAudio().isStreaming).toBe(true);
     renderAudio().stopStreaming();
   });
 
-  it('ends the session when the server refuses to renew for lack of credits', async () => {
+  it.each([402, 502])('preserves paid input and callbacks until expiry when renewal returns HTTP %s', async (status) => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('first-token', 2, 0))
+      .mockResolvedValueOnce(denial(status));
+
+    await renderAudio().startStreaming();
+    const callbacks = gemini.configurations[0].callbacks;
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renderAudio().isStreaming).toBe(true);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    expect(renderAudio().error).toBe('');
+    expect(stopTrack).not.toHaveBeenCalled();
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    expect(gemini.sends[0].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    callbacks.onmessage({ toolCall: { functionCalls: [{ id: 'paid-turn', name: 'paid-tool', args: {} }] } });
+    expect(gemini.toolSends[0]).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(renderAudio().isStreaming).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(renderAudio().error).toContain(`HTTP ${status}`);
+    expect(stopTrack).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(stopTrack).toHaveBeenCalledOnce();
+  });
+
+  it('ends the paid block at expiry when renewal is still pending and ignores its late token', async () => {
+    let finishRenewal!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('first-token', 2, 0))
+      .mockImplementationOnce(() => new Promise(resolve => { finishRenewal = resolve; }));
+    await renderAudio().startStreaming();
+    await vi.advanceTimersByTimeAsync(60_000);
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    expect(gemini.sends[0].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(stopTrack).toHaveBeenCalledOnce();
+    finishRenewal(tokenResponse('late-token', 5, 0));
+    await settleHook();
+    expect(gemini.configurations).toHaveLength(1);
+    expect(renderAudio().isStreaming).toBe(false);
+  });
+
+  it('cancels the paid-expiry deadline when the user stops during renewal', async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(tokenResponse('first-token', 2, 0))
       .mockResolvedValueOnce(denial(402));
-
     await renderAudio().startStreaming();
-    await vi.advanceTimersByTimeAsync(60_000 + 1);
-
+    await vi.advanceTimersByTimeAsync(60_000);
+    renderAudio().stopStreaming();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(renderAudio().error).toBe('');
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('resumes the same paid token with its latest handle without minting another credential', async () => {
+    const credits: unknown[] = [];
+    renderAudio().setOnCreditsUpdate(update => credits.push(update));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('paid-token', 5, 0))
+      .mockResolvedValueOnce(tokenResponse('independent-token', 5, 0));
+    await renderAudio().startStreaming();
+    const previous = gemini.configurations[0];
+    previous.callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'paid-handle' } });
+    previous.callbacks.onclose({ code: 1006, reason: 'temporary drop' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(gemini.apiKeys).toEqual(['paid-token', 'paid-token']);
+    expect(gemini.configurations[1].config).toEqual({ ...previous.config, sessionResumption: { handle: 'paid-handle' } });
+    expect(credits).toEqual([{ remainingCredits: 0, minutesCharged: 5 }]);
+    expect(renderAudio().connectionStatus).toBe('connected');
+  });
+
+  it('refuses to mint a free replacement when a used paid token has no resumption handle', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('paid-token', 5, 0))
+      .mockResolvedValueOnce(tokenResponse('independent-token', 5, 0));
+    await renderAudio().startStreaming();
+    renderAudio().stopStreaming();
+    await expect(renderAudio().startStreaming()).rejects.toThrow('resum');
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(gemini.configurations).toHaveLength(1);
+    expect(renderAudio().isStreaming).toBe(false);
+  });
+
+  it('resumes remaining paid time with the same token and handle after a manual stop', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('paid-token', 5, 0))
+      .mockResolvedValueOnce(tokenResponse('independent-token', 5, 0));
+    await renderAudio().startStreaming();
+    gemini.configurations[0].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'paid-handle' } });
+    renderAudio().stopStreaming();
+    await renderAudio().startStreaming();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(gemini.apiKeys).toEqual(['paid-token', 'paid-token']);
+    expect(gemini.configurations[1].config.sessionResumption).toEqual({ handle: 'paid-handle' });
+    expect(renderAudio().connectionStatus).toBe('connected');
+  });
+
+  it('resumes the final paid minute after renewal denial without retrying the denied charge', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('paid-token', 2, 0))
+      .mockResolvedValueOnce(denial(402))
+      .mockResolvedValueOnce(tokenResponse('independent-token', 5, 0));
+    await renderAudio().startStreaming();
+    gemini.configurations[0].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'paid-handle' } });
+    await vi.advanceTimersByTimeAsync(90_000);
+    renderAudio().stopStreaming();
+    await renderAudio().startStreaming();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(gemini.apiKeys).toEqual(['paid-token', 'paid-token']);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(renderAudio().isStreaming).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
     expect(renderAudio().isStreaming).toBe(false);
     expect(renderAudio().error).toContain('Out of voice credits');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['connect', 'worklet', 'initial input'])('preserves the original paid connection when replacement %s fails', async (failure) => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 7, 0));
+    await renderAudio().startStreaming();
+    const previous = gemini.configurations[0];
+    if (failure === 'connect') gemini.connect.mockRejectedValueOnce(new Error('Replacement connect failed'));
+    else if (failure === 'worklet') addWorkletModule.mockRejectedValueOnce(new Error('Replacement worklet failed'));
+    else {
+      const connect = gemini.connect.getMockImplementation()!;
+      gemini.connect.mockImplementationOnce(async configuration => {
+        const session = await connect(configuration);
+        session.sendRealtimeInput.mockImplementationOnce(() => { throw new Error('Replacement input failed'); });
+        return session;
+      });
+    }
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(true);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    expect(processors[0].context.state).toBe('running');
+    expect(gemini.closes[0]).not.toHaveBeenCalled();
+    expect(stopTrack).not.toHaveBeenCalled();
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    expect(gemini.sends[0].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    previous.callbacks.onmessage({ toolCall: { functionCalls: [{ id: 'paid-turn', name: 'paid-tool', args: {} }] } });
+    expect(gemini.toolSends[0]).toHaveBeenCalledOnce();
+    if (failure !== 'connect') expect(gemini.closes[1]).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(renderAudio().isStreaming).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(stopTrack).toHaveBeenCalledOnce();
+  });
+
+  it('keeps original input active while replacement capture is loading and ignores it after a successful swap', async () => {
+    let finishWorklet!: () => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 7, 0));
+    await renderAudio().startStreaming();
+    addWorkletModule.mockImplementationOnce(() => new Promise(resolve => { finishWorklet = resolve; }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(processors[0].context.state).toBe('running');
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    expect(gemini.sends[0].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    expect(gemini.sends[1]).not.toHaveBeenCalled();
+    gemini.configurations[1].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'renewed-handle' } });
+    finishWorklet();
+    await settleHook();
+    expect(processors[0].context.state).toBe('closed');
+    expect(gemini.closes[0]).toHaveBeenCalledOnce();
+    const sent = gemini.sends[1].mock.calls.length;
+    audioFrame(0, 0.25);
+    audioFrame(0, 0.25);
+    expect(gemini.sends[1]).toHaveBeenCalledTimes(sent);
+    audioFrame(1, 0.25);
+    audioFrame(1, 0.25);
+    expect(gemini.sends[1].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(true);
+    renderAudio().stopStreaming();
+    await renderAudio().startStreaming();
+    expect(gemini.configurations[2].config.sessionResumption).toEqual({ handle: 'renewed-handle' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([1000, 1006])('serializes a socket close %s with a pending renewal so its charged credential is retained', async (code) => {
+    let finishRenewal!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockImplementationOnce(() => new Promise(resolve => { finishRenewal = resolve; }));
+    await renderAudio().startStreaming();
+    const previous = gemini.configurations[0];
+    previous.callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'original-handle' } });
+    await vi.advanceTimersByTimeAsync(60_000);
+    previous.callbacks.onclose({ code, reason: 'drop while renewal pending' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(gemini.apiKeys).toEqual(['original-token']);
+    finishRenewal(tokenResponse('renewed-token', 5, 0));
+    await settleHook();
+    expect(gemini.apiKeys).toEqual(['original-token', 'renewed-token']);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(true);
+  });
+
+  it('does not promote a replacement after the user stops while its worklet is loading', async () => {
+    let finishWorklet!: () => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 7, 0));
+    await renderAudio().startStreaming();
+    addWorkletModule.mockImplementationOnce(() => new Promise(resolve => { finishWorklet = resolve; }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    renderAudio().stopStreaming();
+    finishWorklet();
+    await settleHook();
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(processors).toHaveLength(1);
+    expect(gemini.sends[1]).not.toHaveBeenCalled();
+    expect(gemini.closes[1]).toHaveBeenCalled();
+  });
+
+  it('allows an unbilled student to retry without a resumption handle', async () => {
+    const unbilledToken = (token: string) => Response.json({
+      token, model: 'models/server-live-model', config: {}, billing: null,
+      expireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(unbilledToken('first-student-token'))
+      .mockResolvedValueOnce(unbilledToken('second-student-token'));
+    await renderAudio().startStreaming();
+    renderAudio().stopStreaming();
+    await renderAudio().startStreaming();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(gemini.apiKeys).toEqual(['first-student-token', 'second-student-token']);
+    expect(renderAudio().connectionStatus).toBe('connected');
+  });
+
+  it('retains the paid resumption handle through two rapid socket drops', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(tokenResponse('paid-token', 5, 0));
+    await renderAudio().startStreaming();
+    for (let index = 0; index < 2; index++) {
+      const previous = gemini.configurations[index];
+      previous.callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: `paid-handle-${index}` } });
+      previous.callbacks.onerror({ message: 'temporary transport error' });
+      previous.callbacks.onclose({ code: 1006, reason: 'rapid drop' });
+      await vi.advanceTimersByTimeAsync(1000 * 2 ** index);
+      expect(gemini.configurations).toHaveLength(index + 2);
+    }
+    expect(gemini.configurations).toHaveLength(3);
+    expect(gemini.configurations[2].config.sessionResumption).toEqual({ handle: 'paid-handle-1' });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(renderAudio().connectionStatus).toBe('connected');
+  });
+
+  it('expires an initial paid connection that never finishes opening and closes its late socket', async () => {
+    let finishConnect!: (session: { close: () => void }) => void;
+    const close = vi.fn();
+    vi.mocked(fetch).mockResolvedValueOnce(tokenResponse('paid-token', 2, 0));
+    gemini.connect.mockImplementationOnce(() => new Promise(resolve => { finishConnect = resolve; }));
+    const starting = renderAudio().startStreaming();
+    await settleHook();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(stopTrack).toHaveBeenCalledOnce();
+    finishConnect({ close });
+    await starting;
+    expect(close).toHaveBeenCalledOnce();
+    expect(renderAudio().connectionStatus).toBe('disconnected');
+  });
+
+  it.each([402, 502])('resumes remaining paid time when a pending HTTP %s renewal fails after the original socket drops', async status => {
+    let finishRenewal!: (response: Response) => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockImplementationOnce(() => new Promise(resolve => { finishRenewal = resolve; }));
+    await renderAudio().startStreaming();
+    const previous = gemini.configurations[0];
+    previous.callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'original-handle' } });
+    await vi.advanceTimersByTimeAsync(60_000);
+    previous.callbacks.onclose({ code: 1006, reason: 'drop while renewal pending' });
+    finishRenewal(denial(status));
+    await settleHook();
+    expect(renderAudio().connectionStatus).toBe('connected');
+    expect(gemini.apiKeys).toEqual(['original-token', 'original-token']);
+    expect(gemini.configurations[1].config.sessionResumption).toEqual({ handle: 'original-handle' });
+    audioFrame(1, 0.25);
+    audioFrame(1, 0.25);
+    expect(gemini.sends[1].mock.calls.at(-1)![0]).toHaveProperty('audio');
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(renderAudio().isStreaming).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(renderAudio().error).toContain(`HTTP ${status}`);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a promoted replacement that closes while its queued messages are being delivered', async () => {
+    let finishWorklet!: () => void;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 7, 0));
+    await renderAudio().startStreaming();
+    addWorkletModule.mockImplementationOnce(() => new Promise(resolve => { finishWorklet = resolve; }));
+    await vi.advanceTimersByTimeAsync(60_000);
+    const replacement = gemini.configurations[1];
+    replacement.callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'renewed-handle' } });
+    replacement.callbacks.onmessage({ toolCall: { functionCalls: [{ id: 'queued', name: 'queued-tool', args: {} }] } });
+    gemini.toolSends[1].mockImplementationOnce(() => replacement.callbacks.onclose({ code: 1006, reason: 'drop during queued tool delivery' }));
+    finishWorklet();
+    await settleHook();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(gemini.configurations).toHaveLength(3);
+    expect(gemini.apiKeys).toEqual(['original-token', 'renewed-token', 'renewed-token']);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renderAudio().connectionStatus).toBe('connected');
   });
 });
