@@ -11,14 +11,18 @@ import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
-import { LessonContext } from '@/hooks/useAudioStreaming';
+import type { LessonContext, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
 import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 
-const Editor = dynamic(() => import('@/components/lessons/CodeEditor').then(mod => mod.CodeEditor), { ssr: false });
+/** How long a new visual may take to render before the tutor is told it failed. */
+const VISUAL_RENDER_TIMEOUT_MS = 30_000;
+
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 
@@ -72,13 +76,14 @@ export const TutorExperience = ({
   const [credits, setCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(creditsEnabled);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
-  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const vizOnlyRef = useRef<HTMLDivElement | null>(null);
   const isCapturingRef = useRef(false);
   const showRef = useRef<'render' | 'code'>('render');
   const regenerationAttemptsRef = useRef(0);
+  // Resolves when the sandbox reports the current visual rendered or failed.
+  const renderWaiterRef = useRef(createRenderWaiter());
   const MAX_REGENERATION_ATTEMPTS = 2;
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [themeColors, setThemeColors] = useState<{
@@ -115,12 +120,6 @@ export const TutorExperience = ({
   };
 
   const handleVoiceStop = async () => {
-    // Clear credit deduction interval (embed only)
-    if (creditsEnabled && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-
     if (currentSessionId) {
       try {
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
@@ -154,15 +153,10 @@ export const TutorExperience = ({
     vizDispatch({ type: 'SET_GENERATING', payload: false });
     setSessionManuallyStopped(false);
 
-    // Clear any intervals (embed only)
     if (creditsEnabled) {
       setShowCreditWarning(false);
-      if (creditDeductionInterval) {
-        clearInterval(creditDeductionInterval);
-        setCreditDeductionInterval(null);
-      }
     }
-  }, [voiceActive, handleVoiceStop, creditDeductionInterval, lessonContext, getFeedback, creditsEnabled]);
+  }, [voiceActive, handleVoiceStop, lessonContext, getFeedback, creditsEnabled]);
 
   const handleFeedbackFormChange = useCallback((show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -241,6 +235,7 @@ export const TutorExperience = ({
       }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
+      renderWaiterRef.current.failed(e.message || 'Failed to regenerate visualization');
     } finally {
       vizDispatch({ type: 'SET_GENERATING', payload: false });
     }
@@ -254,6 +249,7 @@ export const TutorExperience = ({
     if (regenerationAttemptsRef.current > MAX_REGENERATION_ATTEMPTS) {
       setError(`Visualization failed to render after ${MAX_REGENERATION_ATTEMPTS} attempts. ${errMsg}`);
       console.error('Max regeneration attempts reached:', errMsg);
+      renderWaiterRef.current.failed(errMsg);
       return;
     }
 
@@ -265,46 +261,47 @@ export const TutorExperience = ({
     }
   }, [handleRegenerateVisualization]);
 
+  const handleRendererReady = useCallback(() => {
+    renderWaiterRef.current.ready();
+  }, []);
+
+  const handleSketchError = useCallback((errMsg: string) => {
+    renderWaiterRef.current.failed(errMsg);
+  }, []);
+
   const renderVisualization = useMemo(() => {
     if (!code || !library) return null;
 
     switch (library) {
       case 'react':
-        return <ReactRenderer code={code} onError={handleRendererError} />;
+        return <ReactRenderer code={code} onError={handleRendererError} onReady={handleRendererReady} />;
       case 'p5':
       case 'three':
-        return <LiveSketch code={code} library={library} />;
+        return <LiveSketch code={code} library={library} onReady={handleRendererReady} onError={handleSketchError} />;
       default:
         return null;
     }
-  }, [code, library, handleRendererError]);
+  }, [code, library, handleRendererError, handleRendererReady, handleSketchError]);
 
-  const editorData = useMemo(
-    () => ({
-      initialCode: code,
-      language: library === 'react' ? 'javascript' : 'javascript',
-      tests: [],
-    }),
-    [code, library]
-  );
-
-  const handleEditorSubmit = useCallback(() => { }, []);
-
-  const handleToolCall = async (name: string, args: any, callId?: string) => {
+  const handleToolCall = async (name: string, args: any, callId?: string): Promise<VisualStatusReport | void> => {
     if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
+      const taskDescription: string | undefined = typeof args?.taskDescription === 'string'
+        ? args.taskDescription
+        : typeof args?.task_description === 'string' ? args.task_description : undefined;
       try {
         const kind = normalizeRequestedArtifactKind(args?.kind);
         const requestId = callId
           ? `voice:${objectiveLearning.runId}:${callId}`
           : `voice:${objectiveLearning.runId}:${crypto.randomUUID()}`;
-        const taskDescription = typeof args?.taskDescription === 'string'
-          ? args.taskDescription
-          : typeof args?.task_description === 'string' ? args.task_description : undefined;
-        await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+        const attachment = await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+        const title = typeof attachment?.artifact?.payload?.title === 'string' ? attachment.artifact.payload.title : undefined;
+        const kindLabel = attachment?.artifact?.kind?.replace(/_/g, ' ') ?? kind;
+        return { status: 'ready', taskDescription, explanation: title ? `${kindLabel}: "${title}"` : kindLabel };
       } catch (artifactError) {
-        setError(artifactError instanceof Error ? artifactError.message : 'The learning activity could not be prepared');
+        const message = artifactError instanceof Error ? artifactError.message : 'The learning activity could not be prepared';
+        setError(message);
+        return { status: 'failed', taskDescription, reason: message };
       }
-      return;
     }
     if (name === 'generate_visualization_description') {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
@@ -333,6 +330,8 @@ export const TutorExperience = ({
         regenerationAttemptsRef.current = 0; // Reset retry counter for new visualization
         setError(''); // Clear any previous error
 
+        // Start waiting before the new code is set so the renderer's ready/error signal isn't missed.
+        const rendered = renderWaiterRef.current.wait(VISUAL_RENDER_TIMEOUT_MS);
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
@@ -353,8 +352,14 @@ export const TutorExperience = ({
             );
           } catch (err) { console.error('Failed to persist generated visualization', err) }
         }
+        vizDispatch({ type: 'SET_GENERATING', payload: false });
+        const outcome = await rendered;
+        return outcome.ok
+          ? { status: 'ready', taskDescription: args.task_description, explanation: vizData.explanation }
+          : { status: 'failed', taskDescription: args.task_description, reason: outcome.reason };
       } catch (e: any) {
         setError(e.message || 'Unknown error');
+        return { status: 'failed', taskDescription: args?.task_description, reason: e.message || 'The visual could not be generated' };
       } finally {
         vizDispatch({ type: 'SET_GENERATING', payload: false });
       }
@@ -440,7 +445,8 @@ export const TutorExperience = ({
             if (
               node.classList?.contains('monaco-editor') ||
               node.classList?.contains('monaco-aria-container') ||
-              node.closest?.('.monaco-editor')
+              node.closest?.('.monaco-editor') ||
+              node.closest?.('[data-lesson-coding-workspace]')
             ) {
               return false;
             }
@@ -614,73 +620,19 @@ export const TutorExperience = ({
     return () => observer.disconnect();
   }, []);
 
-  // Start credit deduction when voice becomes active and connected (embed only)
-  useEffect(() => {
+  // Voice time is charged on the server in prepaid blocks when each voice
+  // token is issued; this only keeps the balance on screen in sync.
+  const handleCreditsUpdate = useCallback(({ remainingCredits }: VoiceCreditsUpdate) => {
     if (!creditsEnabled) return;
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      if (credits === null || creditsLoading) {
-        return;
-      }
-      if (credits !== null && credits < 1) {
-        setShowCreditWarning(true);
-        handleVoiceStop();
-        return;
-      }
-
-      // Start deducting credits every minute
-      const interval = setInterval(async () => {
-        try {
-          const response = await axios.post('/api/credits/deduct-minute', {
-            sessionId: currentSessionId
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...authHeaders,
-            }
-          });
-
-          if (response.data.success) {
-            const newCredits = response.data.remainingCredits;
-            setCredits(newCredits);
-
-            // Dispatch credit update event for layout
-            window.dispatchEvent(new CustomEvent('creditUpdate', {
-              detail: { credits: newCredits }
-            }));
-
-            // Show warning if credits are low
-            if (newCredits <= 5 && newCredits > 0) {
-              setShowCreditWarning(true);
-              setTimeout(() => setShowCreditWarning(false), 5000);
-            }
-
-            // Stop session if no credits left
-            if (newCredits <= 0) {
-              setError('Session ended: No credits remaining');
-              handleVoiceStop();
-            }
-          } else {
-            setError('Session ended: ' + response.data.error);
-            handleVoiceStop();
-          }
-        } catch (error: any) {
-          console.error('Failed to deduct credits:', error);
-          if (error.response?.status === 402) {
-            setError('Session ended: Insufficient credits');
-            handleVoiceStop();
-          }
-        }
-      }, 60000); // Every minute
-
-      setCreditDeductionInterval(interval);
+    setCredits(remainingCredits);
+    window.dispatchEvent(new CustomEvent('creditUpdate', {
+      detail: { credits: remainingCredits }
+    }));
+    if (remainingCredits <= 5) {
+      setShowCreditWarning(true);
+      setTimeout(() => setShowCreditWarning(false), 5000);
     }
-
-    // Cleanup interval when voice stops or disconnects
-    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
+  }, [creditsEnabled]);
 
   const lessonIndicator = (
     <div className="absolute top-3 left-3 right-3 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-md border sm:top-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-4">
@@ -781,6 +733,7 @@ export const TutorExperience = ({
             </CardContent>
           </Card>
         ) : code && library ? (
+          <LearningActivityToolbar>
           <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
             <CardHeader>
               <div className="relative w-full z-10 flex flex-wrap items-center justify-end gap-2">
@@ -795,8 +748,8 @@ export const TutorExperience = ({
                       <ToggleGroupItem value="code">Code</ToggleGroupItem>
                     </ToggleGroup>
                   )}
-                  {visualizations.length > 0 && (
-                    <div className="flex items-center gap-2 bg-background/95">
+                  <div className="flex items-center gap-2 bg-background/95">
+                    {visualizations.length > 0 && (
                       <Button
                         size="icon"
                         variant="ghost"
@@ -807,14 +760,19 @@ export const TutorExperience = ({
                       >
                         <RefreshCw className="w-4 h-4" />
                       </Button>
+                    )}
+                    {show === 'render' && <LearningActivityExpandSlot />}
+                    {visualizations.length > 0 && (
+                      <>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goPrev} disabled={!canPrev} title="Previous visualization" aria-label="Previous visualization">
                         <ChevronLeft className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
                       <Button size="icon" variant="ghost" className="group h-11 w-11 hover:bg-transparent" onClick={goNext} disabled={!canNext} title="Next visualization" aria-label="Next visualization">
                         <ChevronRight className="w-4 h-4 transition-transform text-muted-foreground group-hover:text-primary" />
                       </Button>
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -830,17 +788,7 @@ export const TutorExperience = ({
                     {renderVisualization}
                   </div>
                 )}
-                {!preparingActivity && (
-                  <div
-                    className="h-full"
-                    style={{ display: show === 'code' ? 'block' : 'none' }}
-                  >
-                    <Editor
-                      data={editorData}
-                      onSubmit={handleEditorSubmit}
-                    />
-                  </div>
-                )}
+                {!preparingActivity && show === 'code' && <pre className="h-full overflow-auto whitespace-pre-wrap rounded border p-3 text-sm"><code>{code}</code></pre>}
                 {preparingActivity && (
                   <div className="h-full flex flex-col items-center justify-center">
                     <Loader2 className="w-10 h-10 animate-spin mr-2" />
@@ -852,6 +800,7 @@ export const TutorExperience = ({
               </div>
             </CardContent>
           </Card>
+          </LearningActivityToolbar>
         ) : (
           preparingActivity ? (
             <Card className="flex-1 flex flex-col bg-background/95 border-0 shadow-none rounded-none">
@@ -898,6 +847,7 @@ export const TutorExperience = ({
           onFeedbackFormChange={handleFeedbackFormChange}
           onFeedbackSubmit={handleFeedbackSubmit}
           onFeedbackClose={handleFeedbackClose}
+          onCreditsUpdate={handleCreditsUpdate}
         />
       </div>
 

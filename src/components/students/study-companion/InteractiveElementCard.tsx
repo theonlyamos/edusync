@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { VisualizationSkeleton } from '@/components/lessons/VisualizationSkeleton';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { reportElementRender } from '@/lib/visual-status';
+import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 import type { VisualizationDimensions } from '@/lib/visualization-layout';
 import type { InteractiveElement, InteractiveElementUpdate, InteractiveLibrary } from './types';
 
@@ -39,6 +41,15 @@ export function InteractiveElementCard({
   const [showExplanation, setShowExplanation] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
+  const handleReady = () => {
+    onReady?.();
+    reportElementRender(element.id, { ok: true });
+  };
+  const handleRenderError = (message: string) => {
+    setRenderError(message);
+    reportElementRender(element.id, { ok: false, reason: message });
+  };
+
   const retryRender = () => {
     setRenderError(null);
     setRenderKey((current) => current + 1);
@@ -68,11 +79,12 @@ export function InteractiveElementCard({
   };
 
   return (
+    <LearningActivityToolbar buttonClassName="h-11 w-11 text-muted-foreground xl:h-7 xl:w-7">
     <Card className="mt-4 overflow-hidden border-muted">
       <CardHeader className="p-3 pb-2 sm:p-6 sm:pb-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium">Interactive visualization</CardTitle>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {explanation ? (
               <Button
                 type="button"
@@ -102,6 +114,7 @@ export function InteractiveElementCard({
                 <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
               </Button>
             ) : null}
+            <LearningActivityExpandSlot />
           </div>
         </div>
         {explanation && showExplanation ? (
@@ -126,18 +139,19 @@ export function InteractiveElementCard({
               </Button>
             </div>
           ) : library === 'react' ? (
-            <ReactRenderer key={renderKey} code={code} onReady={onReady} onError={(msg) => setRenderError(msg)} />
+            <ReactRenderer key={renderKey} code={code} onReady={handleReady} onError={handleRenderError} />
           ) : (
             <SafeCodeRunner
               key={renderKey}
               code={code}
               library={library}
-              onReady={onReady}
-              onError={(msg) => setRenderError(msg)}
+              onReady={handleReady}
+              onError={handleRenderError}
             />
           )}
         </div>
       </CardContent>
     </Card>
+    </LearningActivityToolbar>
   );
 }

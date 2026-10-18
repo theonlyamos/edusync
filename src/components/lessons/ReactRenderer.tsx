@@ -7,7 +7,11 @@ import {
   type ReactSandboxSourceText,
 } from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
+import { LearningActivityView } from './LearningActivityView';
 import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES, SANDBOX_SVG_LABEL_SCRIPT } from '@/lib/lesson-artifacts/sandbox-responsive';
+import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from '@/lib/lesson-artifacts/react-component-source';
+import { codingEditorBridgeScript, createCodingEditorToken, readCodingEditorRequest, type CodingEditorRequest } from '@/lib/lesson-artifacts/coding-editor-bridge';
+import { CodingWorkspace } from './CodingWorkspace';
 
 let reactSandboxSourcesPromise: Promise<ReactSandboxSourceText> | undefined;
 const loadReactSandboxSources = () => {
@@ -45,32 +49,22 @@ interface ReactRendererProps {
 // Cached regex patterns - avoid recompilation on every render
 const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|Recharts)\b/;
 const LEAFLET_PATTERN = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/;
-const COMPONENT_EXPORT_PATTERN = /(?:^|\s)(?:const|function)\s+(Component|App|Quiz|InteractiveComponent|Calculator|Game)\b/;
-const BARE_ELEMENT_PATTERN = /^React\.createElement\s*\(/;
-/** Hook destructuring from React redeclares names already passed as new Function parameters → SyntaxError. */
-const SANDBOX_REACT_HOOK_DESTRUCTURE_LINE =
-  /^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*React\s*;?\s*$/;
-const SANDBOX_REACT_IMPORT_LINE =
-  /^\s*import\s+.+from\s+['"]react(?:-dom)?['"]\s*;?\s*$/;
-
-function sanitizeSandboxReactCode(input: string): string {
-  const lines = input.split(/\r?\n/);
-  let start = 0;
-  while (start < lines.length && SANDBOX_REACT_IMPORT_LINE.test(lines[start]!)) {
-    start++;
-  }
-  const body = lines
-    .slice(start)
-    .filter((line) => !SANDBOX_REACT_HOOK_DESTRUCTURE_LINE.test(line));
-  return body.join('\n');
-}
 
 export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError, onReady }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runtimeSources, setRuntimeSources] = useState<ReactSandboxSourceText>();
+  const [codingRequest, setCodingRequest] = useState<CodingEditorRequest | null>(null);
+  const restoreEditorFocusRef = useRef(false);
   const loadTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!codingRequest && restoreEditorFocusRef.current) {
+      restoreEditorFocusRef.current = false;
+      iframeRef.current?.focus();
+    }
+  }, [codingRequest]);
 
   // Stable reference for onError to prevent unnecessary effect re-runs
   const onErrorRef = useRef(onError);
@@ -97,6 +91,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   }, []);
 
   useEffect(() => {
+    setCodingRequest(null);
     if (!iframeRef.current || !code || !runtimeSources) return;
 
     setIsLoading(true);
@@ -104,25 +99,15 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
     try {
       const iframe = iframeRef.current;
-      const sanitizedCode = sanitizeSandboxReactCode(code);
-
-      // Normalize bare React.createElement(...) to a component so it can render
-      const normalizeUserCode = (input: string) => {
-        const trimmed = input.trim();
-        const hasComponentExport = COMPONENT_EXPORT_PATTERN.test(trimmed);
-        const isBareElement = BARE_ELEMENT_PATTERN.test(trimmed);
-        if (!hasComponentExport && isBareElement) {
-          return `const Component = () => (${trimmed});`;
-        }
-        return input;
-      };
+      const editorToken = createCodingEditorToken();
+      const sanitizedCode = prepareReactComponentCode(code);
 
       // Detect which libraries the code actually needs (using cached patterns; match injected source)
       const needsRecharts = RECHARTS_PATTERN.test(sanitizedCode);
       const needsLeaflet = LEAFLET_PATTERN.test(sanitizedCode);
 
       // Use raw code with string concatenation (no escapeScriptContent) so template literals in user code work
-      const codeJson = JSON.stringify(normalizeUserCode(sanitizedCode));
+      const codeJson = JSON.stringify(sanitizedCode);
       const returnStatement = '\n\n// Return the component\nreturn typeof Component !== \'undefined\' ? Component : typeof App !== \'undefined\' ? App : typeof Quiz !== \'undefined\' ? Quiz : typeof InteractiveComponent !== \'undefined\' ? InteractiveComponent : typeof Calculator !== \'undefined\' ? Calculator : typeof Game !== \'undefined\' ? Game : (() => React.createElement(\'div\', {}, \'No component found\'));';
       const returnStatementJson = JSON.stringify(returnStatement);
 
@@ -139,6 +124,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-${nonce}' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline' https://unpkg.com; style-src-elem 'self' 'unsafe-inline' https://unpkg.com; img-src * data: https://images.unsplash.com; font-src https://unpkg.com; connect-src https://cdn.jsdelivr.net https://esm.sh;">
   ${needsLeaflet ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />' : '<!-- Leaflet CSS skipped - not needed -->'}
   <script nonce="${nonce}">
+    ${codingEditorBridgeScript(editorToken, window.location.origin)}
     window.__lessonRenderFailed = false;
     function reportLessonRenderError(error) {
       window.__lessonRenderFailed = true;
@@ -594,16 +580,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         try {
           var __userCode = ${codeJson};
           const createComponent = new Function(
-            'React', 'useState', 'useEffect', 'useMemo', 'useCallback', 'useRef',
-            'Button', 'Input', 'Card', 'CardContent', 'CardHeader', 'CardTitle',
-            'Badge', 'Textarea', 'Label', 'RadioGroup', 'RadioGroupItem',
-            'Checkbox', 'Select', 'SelectContent', 'SelectItem', 'SelectTrigger', 'SelectValue',
-            'Slider', 'Quiz',
-            'LineChart', 'BarChart', 'PieChart', 'AreaChart', 'ScatterChart', 'RadarChart',
-            'XAxis', 'YAxis', 'CartesianGrid', 'Tooltip', 'Legend', 'ResponsiveContainer',
-            'Line', 'Bar', 'Area', 'Pie', 'Cell', 'Scatter', 'RadialBar', 'RadialBarChart',
-            'MapContainer', 'TileLayer', 'Marker', 'Popup', 'Polyline', 'Polygon',
-            'Circle', 'Rectangle', 'useMap', 'useMapEvent', 'L',
+            ...${JSON.stringify(REACT_COMPONENT_ARGUMENTS)},
             __userCode + ${returnStatementJson}
           );
           
@@ -617,7 +594,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
             XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
             Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart,
             MapContainer, TileLayer, Marker, Popup, Polyline, Polygon,
-            Circle, Rectangle, useMap, useMapEvent, L
+            Circle, Rectangle, useMap, useMapEvent, L, window.openCodeEditor
           );
           class LessonRenderBoundary extends React.Component {
             componentDidCatch(error) {
@@ -671,6 +648,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
       // Listen for error/success messages from iframe
       const handleMessage = (event: MessageEvent) => {
+        const coding = readCodingEditorRequest(event, iframe.contentWindow, editorToken, navigator.userActivation?.isActive === true);
+        if (coding) { setCodingRequest(coding); return; }
         if (event.source !== iframe.contentWindow) return;
         if (event.data?.type === 'react-render-ready') {
           clearLoadTimeout();
@@ -715,6 +694,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   }, [code, runtimeSources]); // onError/onReady are tracked via refs
 
   return (
+    <LearningActivityView>
     <div className="relative w-full h-full min-w-0">
       {isLoading && <VisualizationSkeleton />}
       {error && (
@@ -730,9 +710,12 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         title="React Component Preview"
         className="block w-full h-full min-w-0 border-0 rounded-lg bg-transparent"
         sandbox="allow-scripts"
+        inert={codingRequest !== null}
         style={{ visibility: isLoading || error ? 'hidden' : 'visible' }}
       />
+      <CodingWorkspace request={codingRequest} onClose={() => { restoreEditorFocusRef.current = true; setCodingRequest(null); }} />
     </div>
+    </LearningActivityView>
   );
 });
 

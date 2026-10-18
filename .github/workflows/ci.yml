@@ -30,8 +30,20 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Prepare offline lesson runtime CSS
+        run: pnpm lesson-runtime:css
+
+      - name: Locate Chrome for offline browser regression
+        run: |
+          chrome_path="$(command -v google-chrome)"
+          test -x "$chrome_path"
+          printf 'CHROMIUM_EXECUTABLE_PATH=%s\n' "$chrome_path" >> "$GITHUB_ENV"
+
       - name: Test
         run: pnpm test
+
+      - name: Voice billing SQL tests
+        run: pnpm test:sql
 
   build:
     name: Build (advisory)

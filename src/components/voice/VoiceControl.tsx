@@ -1,4 +1,4 @@
-import { useAudioStreaming, LessonContext } from '@/hooks/useAudioStreaming';
+import { useAudioStreaming, LessonContext, type ToolCallListener, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
@@ -13,7 +13,8 @@ interface VoiceControlProps {
   lessonContext?: LessonContext;
   onError?: (error: string) => void;
   onStartupFailed?: () => void;
-  onToolCall?: (name: string, args: any, callId?: string) => void;
+  /** Return a promise from visual tools to report whether the visual reached the screen. */
+  onToolCall?: ToolCallListener;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
   mobileMode?: boolean;
@@ -22,9 +23,11 @@ interface VoiceControlProps {
   onFeedbackSubmit?: (feedback: any) => Promise<void>;
   onFeedbackClose?: () => void;
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
+  /** Called after the server charges (or reuses) a prepaid block of voice minutes. */
+  onCreditsUpdate?: (update: VoiceCreditsUpdate) => void;
 }
 
-export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady }: VoiceControlProps) {
+export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady, onCreditsUpdate }: VoiceControlProps) {
   const {
     isStreaming,
     isSpeaking,
@@ -38,6 +41,7 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     setOnAudioDataListener,
     setOnAiAudioDataListener,
     setOnRecordingsReady,
+    setOnCreditsUpdate,
     setSessionId,
     sendText,
     sendMedia,
@@ -126,6 +130,11 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
       (onRecordingsReady as any)?.(payload);
     });
   }, [setOnRecordingsReady, onRecordingsReady]);
+
+  useEffect(() => {
+    setOnCreditsUpdate(onCreditsUpdate ?? null);
+    return () => setOnCreditsUpdate(null);
+  }, [onCreditsUpdate, setOnCreditsUpdate]);
 
   useEffect(() => {
     if (!setSessionId) return;

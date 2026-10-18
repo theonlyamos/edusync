@@ -7,10 +7,18 @@ import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/a
 import {isGeneralHomeworkAiTool} from '@/lib/homework/ai-policy';
 import {editableHomeworkForUser} from '@/lib/homework/ai-policy-server';
 
+// Set by this proxy after authentication. Route handlers trust them, so a
+// client must never be able to send its own values (a header the proxy leaves
+// unset, such as the role for an API key, would otherwise pass straight through).
+const TRUSTED_AUTH_HEADERS = ['x-auth-user-id', 'x-auth-type', 'x-auth-api-key-id', 'x-auth-user-role'];
+
 export async function proxy(request: NextRequest) {
+  const forwardedHeaders = new Headers(request.headers);
+  for (const header of TRUSTED_AUTH_HEADERS) forwardedHeaders.delete(header);
+
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: forwardedHeaders,
     },
   });
 

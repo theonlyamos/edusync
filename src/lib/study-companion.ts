@@ -418,7 +418,8 @@ Current learner intent: ${intent}`;
 Interactive visuals and quizzes (required tool usage):
 - You have a tool \`generate_visualization_description\`. Call it when a manipulable visual, diagram, simulation, or interactive/on-screen quiz would materially help — especially in **quiz** intent, when the learner asks to be quizzed, or when checking understanding is clearer with buttons or a canvas than voice alone.
 - In \`task_description\`, specify layout, interactions, and for quizzes the prompts, choices, and feedback when the learner answers.
-- Do **not** call it on greeting-only turns or bare planning unless a visual or quiz is clearly useful. Avoid firing it repeatedly for the same concept unless the learner asks for another. Never put executable code in speech; the tool generates the UI.`;
+- Do **not** call it on greeting-only turns or bare planning unless a visual or quiz is clearly useful. Avoid firing it repeatedly for the same concept unless the learner asks for another. Never put executable code in speech; the tool generates the UI.
+- The tool's first reply only means the visual is being prepared. Don't describe it or ask the learner to use it until a \`VISUAL_STATUS\` message arrives. Those messages are system updates: never read them aloud. On \`"status":"ready"\`, \`onScreen\` says what is shown. On \`"status":"failed"\`, nothing new is shown, so say briefly that it didn't come through and keep going by voice.`;
 
     prompt += `\n\nIntent guidance:
 - plan: create a realistic study plan and ask for missing goal or time information if needed.
