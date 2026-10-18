@@ -610,6 +610,82 @@ async function hiddenEdgeTransitions(frame, item) {
   }
 }
 
+// Rect, ellipse and polygon nodes are obstacles like circles; hidden nodes are not.
+async function nodeShapeTransitions(frame, item) {
+  const visibleStage = await frame.evaluate(readEdgeGeometry);
+  const read = () => frame.evaluate(() => {
+    const label = document.getElementById('edge-nonadjacent-line-label');
+    const node = document.getElementById('injected-node');
+    const matrix = label.getScreenCTM();
+    return { rect: label.getBoundingClientRect().toJSON(), node: node.getBoundingClientRect().toJSON(), transform: label.getAttribute('transform'),
+      fontSize: parseFloat(getComputedStyle(label).fontSize) * Math.hypot(matrix.a, matrix.b) };
+  });
+  const overlap = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > .5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > .5;
+  await frame.evaluate(() => document.getElementById('nonadjacent-line').setAttribute('visibility', 'hidden'));
+  await settle(frame);
+  item.nodeShapes = [];
+  for (const [tag, attributes, hiddenBy] of [
+    ['rect', { x: 97, y: 36, width: 12, height: 12 }, ['opacity', '0']],
+    ['ellipse', { cx: 103, cy: 42, rx: 6, ry: 6 }, ['visibility', 'hidden']],
+    ['polygon', { points: '97,36 109,36 109,48 97,48' }, ['display', 'none']],
+    ['circle', { cx: 103, cy: 42, r: 6 }, ['opacity', '0']],
+  ]) {
+    await frame.evaluate(([name, values]) => {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+      node.id = 'injected-node';
+      for (const [key, value] of Object.entries(values)) node.setAttribute(key, String(value));
+      document.getElementById('nonadjacent-line').after(node);
+    }, [tag, attributes]);
+    await settle(frame);
+    const shown = await read();
+    assert(overlap(shown.node, shown.rect) === false, `Label moved or grew onto a ${tag} node`);
+    assert(shown.fontSize >= 13.99, `${tag} node left its neighbour unreadable: ${shown.fontSize}px`);
+    assert.notEqual(shown.transform, null, `${tag} node fixture did not challenge the enlarged label`);
+    await frame.evaluate(([name, value]) => document.getElementById('injected-node').setAttribute(name, value), hiddenBy);
+    await settle(frame);
+    const hidden = await read();
+    assert.equal(hidden.transform, null, `Hidden ${tag} node (${hiddenBy[0]}) still displaced its label`);
+    assert(hidden.fontSize >= 13.99, `Hidden ${tag} node (${hiddenBy[0]}) blocked enlargement`);
+    item.nodeShapes.push({ tag, movedFor: shown.transform, hiddenBy: hiddenBy[0] });
+    await frame.evaluate(() => document.getElementById('injected-node').remove());
+    await settle(frame);
+  }
+  // A frame of nodes leaves room for a 13px label but not a 14px one: the label should shrink only as far as it must.
+  const framed = await frame.evaluate(() => {
+    const label = document.getElementById('edge-nonadjacent-line-label');
+    const svg = label.closest('svg');
+    const ctm = svg.getScreenCTM();
+    const rect = label.getBoundingClientRect();
+    const width = rect.width * 13 / 14 + 6.5, height = rect.height + 7;
+    const centerX = (rect.left + rect.right) / 2, centerY = (rect.top + rect.bottom) / 2;
+    const hole = { left: centerX - width / 2, right: centerX + width / 2, top: centerY - height / 2, bottom: centerY + height / 2 };
+    const toUser = (x, y) => ({ x: (x - ctm.e) / ctm.a, y: (y - ctm.f) / ctm.d });
+    const a = toUser(hole.left, hole.top), b = toUser(hole.right, hole.bottom);
+    [[a.x - 200, a.y - 200, 400 + b.x - a.x, 200], [a.x - 200, b.y, 400 + b.x - a.x, 200], [a.x - 200, a.y, 200, b.y - a.y], [b.x, a.y, 200, b.y - a.y]].forEach(([x, y, w, h], index) => {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      node.setAttribute('class', 'injected-frame');
+      node.id = 'injected-frame-' + index;
+      Object.entries({ x, y, width: w, height: h, fill: '#e2e8f0' }).forEach(([key, value]) => node.setAttribute(key, String(value)));
+      svg.insertBefore(node, svg.querySelector('text'));
+    });
+    return hole;
+  });
+  await settle(frame);
+  const squeezed = await frame.evaluate(() => {
+    const label = document.getElementById('edge-nonadjacent-line-label');
+    const matrix = label.getScreenCTM();
+    return { rect: label.getBoundingClientRect().toJSON(), fontSize: parseFloat(getComputedStyle(label).fontSize) * Math.hypot(matrix.a, matrix.b),
+      nodes: Array.from(document.querySelectorAll('.injected-frame')).map(node => node.getBoundingClientRect().toJSON()) };
+  });
+  assert(squeezed.fontSize >= 12.99 && squeezed.fontSize < 13.99, `Crowded label should step down to 13px, got ${squeezed.fontSize}px`);
+  assert(squeezed.nodes.every(node => !overlap(node, squeezed.rect)), 'Stepped-down label overlaps its frame');
+  item.steppedFont = { hole: framed, fontSize: squeezed.fontSize };
+  await frame.evaluate(() => document.querySelectorAll('.injected-frame').forEach(node => node.remove()));
+  await frame.evaluate(() => document.getElementById('nonadjacent-line').removeAttribute('visibility'));
+  await settle(frame);
+  assert.deepEqual(await frame.evaluate(readEdgeGeometry), visibleStage, 'Label placement not restored after node shape checks');
+}
+
 async function endpointCase(context, html, report, outputDir) {
   for (const viewport of viewports) {
     const item = { name: `svg-edge-endpoints-${viewport.width}`, viewport, assertionsPassed: false };
@@ -648,6 +724,7 @@ async function endpointCase(context, html, report, outputDir) {
     await page.screenshot({ path: path.join(outputDir, `${item.name}-scaled.png`), fullPage: true });
     await cssMarkerTransitions(frame, item);
     await hiddenEdgeTransitions(frame, item);
+    await nodeShapeTransitions(frame, item);
     item.markedEndpoints = item.before.reduce((sum, svg) => sum + svg.endpoints.length, 0);
     item.repeatedResizeDrift = false;
     item.assertionsPassed = true;

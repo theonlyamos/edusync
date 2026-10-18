@@ -261,7 +261,9 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       if (!tips) { remember(); return; }
       if (!observed.has(svg)) { observed.add(svg); resizeObserver.observe(svg); }
       var bounds = svg.getBoundingClientRect();
-      var circles = Array.from(svg.querySelectorAll('circle')).map(function (circle) { return circle.getBoundingClientRect(); });
+      var nodes = Array.from(svg.querySelectorAll('circle, ellipse, rect, polygon')).filter(function (shape) {
+        return !shape.closest('defs, marker, clipPath, mask, pattern, symbol') && !effectivelyHidden(shape, svg);
+      }).map(function (shape) { return shape.getBoundingClientRect(); }).filter(function (rect) { return rect.width > 0 || rect.height > 0; });
       var visible = [];
       var eligible = new WeakSet();
       var baseline = new WeakMap();
@@ -292,55 +294,71 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
       function clipped(rect) {
         return rect.left < bounds.left - 0.5 || rect.top < bounds.top - 0.5 || rect.right > bounds.right + 0.5 || rect.bottom > bounds.bottom + 0.5;
       }
+      function findPlacement(rect, obstacles) {
+        if (rect.width > bounds.width - 8 || rect.height > bounds.height - 8) return null;
+        var left = Math.max(bounds.left + 4, Math.min(rect.left, bounds.right - rect.width - 4));
+        var top = Math.max(bounds.top + 4, Math.min(rect.top, bounds.bottom - rect.height - 4));
+        var candidates = [{ left: left, top: top }];
+        obstacles.forEach(function (other) {
+          var aligned = Math.max(bounds.left + 4, Math.min(other.right - rect.width, bounds.right - rect.width - 4));
+          candidates.push({ left: other.right + 3, top: top }, { left: other.left - rect.width - 3, top: top },
+            { left: left, top: other.bottom + 3 }, { left: left, top: other.top - rect.height - 3 },
+            { left: aligned, top: other.bottom + 3 }, { left: aligned, top: other.top - rect.height - 3 });
+        });
+        for (var dy = -48; dy <= 48; dy += 2) {
+          for (var dx = -48; dx <= 48; dx += 2) candidates.push({ left: rect.left + dx, top: rect.top + dy });
+        }
+        var best = null;
+        candidates.forEach(function (candidate) {
+          candidate.right = candidate.left + rect.width;
+          candidate.bottom = candidate.top + rect.height;
+          candidate.distance = Math.hypot(candidate.left - rect.left, candidate.top - rect.top);
+          if (candidate.distance > 48 || (best && candidate.distance >= best.distance) || candidate.left < bounds.left + 4 || candidate.top < bounds.top + 4 || candidate.right > bounds.right - 4 || candidate.bottom > bounds.bottom - 4 || obstacles.some(function (other) { return intersects(candidate, other, 3); })) return;
+          best = candidate;
+        });
+        return best;
+      }
       // Greedy placement depends on order, so labels that could not be placed get the first pick on a retry.
       function attempt(order) {
         visible.forEach(function (label) { if (eligible.has(label)) reset(label); });
         var placed = new Map();
         var failed = [];
         var movement = 0;
+        var shortfall = 0;
         visible.forEach(function (label) { if (!eligible.has(label)) placed.set(label, baseline.get(label)); });
         order.forEach(function (label) {
           if (!eligible.has(label)) return;
           var original = originals.get(label);
-          var size = parseFloat(getComputedStyle(label).fontSize);
-          if (size * matrix.a < 14) label.style.fontSize = (14 / matrix.a) + 'px';
-          var rect = label.getBoundingClientRect();
-          var best;
-          var distance = Infinity;
+          var rendered = parseFloat(getComputedStyle(label).fontSize) * matrix.a;
           var obstacles = Array.from(placed.values());
           var authored = baseline.get(label);
-          circles.forEach(function (circle) { if (!intersects(authored, circle, 0)) obstacles.push(circle); });
+          nodes.forEach(function (node) { if (!intersects(authored, node, 0)) obstacles.push(node); });
           tips.forEach(function (tip) {
             if (!(tip.x > authored.left && tip.x < authored.right && tip.y > authored.top && tip.y < authored.bottom)) obstacles.push(tip);
           });
-          if (rect.width <= bounds.width - 8 && rect.height <= bounds.height - 8) {
-            var left = Math.max(bounds.left + 4, Math.min(rect.left, bounds.right - rect.width - 4));
-            var top = Math.max(bounds.top + 4, Math.min(rect.top, bounds.bottom - rect.height - 4));
-            var candidates = [{ left: left, top: top }];
-            obstacles.forEach(function (other) {
-              var aligned = Math.max(bounds.left + 4, Math.min(other.right - rect.width, bounds.right - rect.width - 4));
-              candidates.push({ left: other.right + 3, top: top }, { left: other.left - rect.width - 3, top: top },
-                { left: left, top: other.bottom + 3 }, { left: left, top: other.top - rect.height - 3 },
-                { left: aligned, top: other.bottom + 3 }, { left: aligned, top: other.top - rect.height - 3 });
-            });
-            for (var dy = -48; dy <= 48; dy += 2) {
-              for (var dx = -48; dx <= 48; dx += 2) candidates.push({ left: rect.left + dx, top: rect.top + dy });
-            }
-            candidates.forEach(function (candidate) {
-              candidate.right = candidate.left + rect.width;
-              candidate.bottom = candidate.top + rect.height;
-              var shift = Math.hypot(candidate.left - rect.left, candidate.top - rect.top);
-              if (shift > 48 || shift >= distance || candidate.left < bounds.left + 4 || candidate.top < bounds.top + 4 || candidate.right > bounds.right - 4 || candidate.bottom > bounds.bottom - 4 || obstacles.some(function (other) { return intersects(candidate, other, 3); })) return;
-              best = candidate;
-              distance = shift;
-            });
+          // Try 14px first, then step down toward the authored size when a crowded diagram has no room.
+          var sizes = [null];
+          if (rendered < 14) {
+            sizes = [];
+            for (var target = 14; target > rendered + 0.01; target--) sizes.push(target);
+          }
+          var best, rect, achieved = rendered;
+          for (var step = 0; step < sizes.length && !best; step++) {
+            if (sizes[step] !== null) label.style.fontSize = (sizes[step] / matrix.a) + 'px';
+            rect = label.getBoundingClientRect();
+            best = findPlacement(rect, obstacles);
+            if (best) achieved = sizes[step] === null ? rendered : sizes[step];
           }
           if (!best) {
             label.style.fontSize = original.font;
+            shortfall += Math.max(0, 14 - rendered);
             failed.push(label);
-          } else if (distance > 0.01) {
-            label.setAttribute('transform', 'translate(' + ((best.left - rect.left) / matrix.a) + ' ' + ((best.top - rect.top) / matrix.d) + ')');
-            movement += distance;
+          } else {
+            if (achieved < 14) { shortfall += 14 - achieved; failed.push(label); }
+            if (best.distance > 0.01) {
+              label.setAttribute('transform', 'translate(' + ((best.left - rect.left) / matrix.a) + ' ' + ((best.top - rect.top) / matrix.d) + ')');
+              movement += best.distance;
+            }
           }
           placed.set(label, label.getBoundingClientRect());
         });
@@ -352,13 +370,13 @@ export const SANDBOX_SVG_LABEL_SCRIPT = `
           });
         });
         return {
-          order: order, failed: failed, movement: movement, invalid: invalid,
+          order: order, failed: failed, shortfall: shortfall, movement: movement, invalid: invalid,
           state: visible.map(function (label) { return { transform: label.getAttribute('transform'), font: label.style.fontSize }; }),
         };
       }
       function better(a, b) {
         if (a.invalid !== b.invalid) return !a.invalid;
-        if (a.failed.length !== b.failed.length) return a.failed.length < b.failed.length;
+        if (Math.abs(a.shortfall - b.shortfall) > 0.01) return a.shortfall < b.shortfall;
         return a.movement < b.movement - 0.01;
       }
       var chosen = attempt(visible);
