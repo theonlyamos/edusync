@@ -11,7 +11,7 @@ import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
 import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
-import { LessonContext } from '@/hooks/useAudioStreaming';
+import type { LessonContext, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
 import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
@@ -72,7 +72,6 @@ export const TutorExperience = ({
   const [credits, setCredits] = useState<number | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(creditsEnabled);
   const [showCreditWarning, setShowCreditWarning] = useState(false);
-  const [creditDeductionInterval, setCreditDeductionInterval] = useState<NodeJS.Timeout | null>(null);
   const [, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const vizOnlyRef = useRef<HTMLDivElement | null>(null);
@@ -115,12 +114,6 @@ export const TutorExperience = ({
   };
 
   const handleVoiceStop = async () => {
-    // Clear credit deduction interval (embed only)
-    if (creditsEnabled && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-
     if (currentSessionId) {
       try {
         await axios.patch(`/api/learning/sessions/${currentSessionId}`,
@@ -154,15 +147,10 @@ export const TutorExperience = ({
     vizDispatch({ type: 'SET_GENERATING', payload: false });
     setSessionManuallyStopped(false);
 
-    // Clear any intervals (embed only)
     if (creditsEnabled) {
       setShowCreditWarning(false);
-      if (creditDeductionInterval) {
-        clearInterval(creditDeductionInterval);
-        setCreditDeductionInterval(null);
-      }
     }
-  }, [voiceActive, handleVoiceStop, creditDeductionInterval, lessonContext, getFeedback, creditsEnabled]);
+  }, [voiceActive, handleVoiceStop, lessonContext, getFeedback, creditsEnabled]);
 
   const handleFeedbackFormChange = useCallback((show: boolean, trigger: 'manual_stop' | 'connection_reset' | 'error' | null) => {
     setShowFeedbackForm(show);
@@ -604,73 +592,19 @@ export const TutorExperience = ({
     return () => observer.disconnect();
   }, []);
 
-  // Start credit deduction when voice becomes active and connected (embed only)
-  useEffect(() => {
+  // Voice time is charged on the server in prepaid blocks when each voice
+  // token is issued; this only keeps the balance on screen in sync.
+  const handleCreditsUpdate = useCallback(({ remainingCredits }: VoiceCreditsUpdate) => {
     if (!creditsEnabled) return;
-    if (connectionStatus === 'connected' && voiceActive && currentSessionId && !creditDeductionInterval) {
-      if (credits === null || creditsLoading) {
-        return;
-      }
-      if (credits !== null && credits < 1) {
-        setShowCreditWarning(true);
-        handleVoiceStop();
-        return;
-      }
-
-      // Start deducting credits every minute
-      const interval = setInterval(async () => {
-        try {
-          const response = await axios.post('/api/credits/deduct-minute', {
-            sessionId: currentSessionId
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              ...authHeaders,
-            }
-          });
-
-          if (response.data.success) {
-            const newCredits = response.data.remainingCredits;
-            setCredits(newCredits);
-
-            // Dispatch credit update event for layout
-            window.dispatchEvent(new CustomEvent('creditUpdate', {
-              detail: { credits: newCredits }
-            }));
-
-            // Show warning if credits are low
-            if (newCredits <= 5 && newCredits > 0) {
-              setShowCreditWarning(true);
-              setTimeout(() => setShowCreditWarning(false), 5000);
-            }
-
-            // Stop session if no credits left
-            if (newCredits <= 0) {
-              setError('Session ended: No credits remaining');
-              handleVoiceStop();
-            }
-          } else {
-            setError('Session ended: ' + response.data.error);
-            handleVoiceStop();
-          }
-        } catch (error: any) {
-          console.error('Failed to deduct credits:', error);
-          if (error.response?.status === 402) {
-            setError('Session ended: Insufficient credits');
-            handleVoiceStop();
-          }
-        }
-      }, 60000); // Every minute
-
-      setCreditDeductionInterval(interval);
+    setCredits(remainingCredits);
+    window.dispatchEvent(new CustomEvent('creditUpdate', {
+      detail: { credits: remainingCredits }
+    }));
+    if (remainingCredits <= 5) {
+      setShowCreditWarning(true);
+      setTimeout(() => setShowCreditWarning(false), 5000);
     }
-
-    // Cleanup interval when voice stops or disconnects
-    if ((!voiceActive || connectionStatus !== 'connected') && creditDeductionInterval) {
-      clearInterval(creditDeductionInterval);
-      setCreditDeductionInterval(null);
-    }
-  }, [connectionStatus, voiceActive, currentSessionId, credits, creditsLoading, creditDeductionInterval]);
+  }, [creditsEnabled]);
 
   const lessonIndicator = (
     <div className="absolute top-3 left-3 right-3 z-20 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-2 shadow-md border sm:top-4 sm:left-4 sm:right-auto sm:max-w-sm sm:px-4">
@@ -885,6 +819,7 @@ export const TutorExperience = ({
           onFeedbackFormChange={handleFeedbackFormChange}
           onFeedbackSubmit={handleFeedbackSubmit}
           onFeedbackClose={handleFeedbackClose}
+          onCreditsUpdate={handleCreditsUpdate}
         />
       </div>
 

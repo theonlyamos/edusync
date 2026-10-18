@@ -778,3 +778,60 @@ describe('socket resumption', () => {
     expect(await recordings[1].user!.text()).toBe('new recording');
   });
 });
+
+describe('server-locked voice tokens', () => {
+  const grantId = '00000000-0000-4000-8000-0000000000aa';
+  const tokenResponse = (token: string, minutesFromNow: number, remainingCredits: number) => Response.json({
+    token,
+    model: 'models/server-live-model',
+    config: { systemInstruction: 'SERVER PROMPT', tools: [{ functionDeclarations: [] }] },
+    expireTime: new Date(Date.now() + minutesFromNow * 60_000).toISOString(),
+    newSessionExpireTime: new Date(Date.now() + 60_000).toISOString(),
+    billing: { grantId, minutesCharged: 5, remainingCredits },
+  });
+  const requestBody = (call: number) => JSON.parse(String(vi.mocked(fetch).mock.calls[call][1]!.body));
+
+  it('connects with the config the server locked into the token and renews the paid block before it expires', async () => {
+    const credits: unknown[] = [];
+    renderAudio().setOnCreditsUpdate((update) => credits.push(update));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('first-token', 5, 10))
+      .mockResolvedValueOnce(tokenResponse('second-token', 9, 5));
+
+    await renderAudio().startStreaming();
+
+    expect(gemini.configurations).toHaveLength(1);
+    expect(gemini.configurations[0].model).toBe('models/server-live-model');
+    expect(gemini.configurations[0].config).toEqual({ systemInstruction: 'SERVER PROMPT', tools: [{ functionDeclarations: [] }] });
+    expect(requestBody(0)).toMatchObject({ grantId: null, variant: 'tutor', resumptionHandle: null });
+    expect(credits).toEqual([{ remainingCredits: 10, minutesCharged: 5 }]);
+
+    gemini.configurations[0].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'handle-1' } });
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60_000 + 1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(requestBody(1)).toMatchObject({ grantId, resumptionHandle: 'handle-1' });
+    expect(gemini.configurations).toHaveLength(2);
+    expect(credits).toEqual([
+      { remainingCredits: 10, minutesCharged: 5 },
+      { remainingCredits: 5, minutesCharged: 5 },
+    ]);
+    expect(renderAudio().isStreaming).toBe(true);
+    renderAudio().stopStreaming();
+  });
+
+  it('ends the session when the server refuses to renew for lack of credits', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('first-token', 2, 0))
+      .mockResolvedValueOnce(denial(402));
+
+    await renderAudio().startStreaming();
+    await vi.advanceTimersByTimeAsync(60_000 + 1);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(renderAudio().error).toContain('Out of voice credits');
+  });
+});

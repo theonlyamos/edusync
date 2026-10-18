@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage, FunctionResponseScheduling, StartSensitivity } from '@google/genai';
-import { buildStudyCompanionLiveVoiceSystemPrompt, type StudyIntent, type StudyMode } from '@/lib/study-companion';
-import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
+import { GoogleGenAI, LiveServerMessage, FunctionResponseScheduling } from '@google/genai';
+import type { StudyIntent, StudyMode } from '@/lib/study-companion';
 import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/audio/transcription';
 import { PcmPlaybackQueue } from '@/lib/audio/pcm-playback-queue';
 import { emitLiveInputDiagnostic } from '@/lib/audio/live-input-diagnostics';
 import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
-import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
+import { buildLiveTokenRequest, liveTokenRenewDelay, type LiveTokenResponse } from '@/lib/live-tutor/live-token-request';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 
 export type UseAudioStreamingLiveOptions = {
@@ -14,6 +13,13 @@ export type UseAudioStreamingLiveOptions = {
     gradeLevel?: string | null;
     studyMode?: StudyMode;
     studyIntent?: StudyIntent;
+};
+
+export type VoiceCreditsUpdate = {
+    /** Balance after the server charged (or reused) the current voice block. */
+    remainingCredits: number;
+    /** Minutes charged by this token request; 0 when an already paid block was reused. */
+    minutesCharged: number;
 };
 
 export type LiveTranscriptionPayload = {
@@ -51,6 +57,7 @@ interface AudioStreamingActions {
     setSaveOnlySpeech?: (enabled: boolean) => void;
     setOnVadStateListener?: (cb: (active: boolean, rms: number) => void) => void;
     setOnTranscription?: (cb: ((payload: LiveTranscriptionPayload) => void) | null) => void;
+    setOnCreditsUpdate: (cb: ((update: VoiceCreditsUpdate) => void) | null) => void;
 }
 
 export interface LessonContext {
@@ -63,8 +70,6 @@ export interface LessonContext {
     learningRunId?: string;
     activeObjective?: { id: string; text: string; position: number; revision: number };
 }
-
-const systemPrompt = EUREKA_TUTOR_SYSTEM_PROMPT;
 
 export function useAudioStreaming(
     topic?: string | null,
@@ -122,6 +127,11 @@ export function useAudioStreaming(
     const isResumingSessionRef = useRef<boolean>(false);
     const isManualDisconnectRef = useRef<boolean>(false);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Server-side voice billing: the prepaid grant behind the current token, and
+    // the timer that asks for the next token shortly before this one expires.
+    const voiceGrantIdRef = useRef<string | null>(null);
+    const tokenRenewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const onCreditsUpdateRef = useRef<((update: VoiceCreditsUpdate) => void) | null>(null);
     // Auto-resume loop guards: cap rapid reconnects so a socket that keeps
     // closing right after connecting (e.g. after a tool turn) can't thrash forever.
     const sessionOpenedAtRef = useRef<number | null>(null);
@@ -372,6 +382,10 @@ export function useAudioStreaming(
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
+        if (tokenRenewTimeoutRef.current) {
+            clearTimeout(tokenRenewTimeoutRef.current);
+            tokenRenewTimeoutRef.current = null;
+        }
 
         liveUserTranscriptRef.current = '';
         liveAssistantTranscriptRef.current = '';
@@ -516,179 +530,60 @@ export function useAudioStreaming(
         const ownsConnection = () => generation === sessionGenerationRef.current && connectionGeneration === connectionGenerationRef.current;
         const acceptsEvents = () => ownsConnection() && !connectionClosed;
         try {
-            // Get ephemeral token
+            // Get an ephemeral token. The server builds the Live config (model,
+            // system prompt, tools) and locks it into the token, and charges
+            // voice time up front for billed users.
             const urlParams = new URLSearchParams(window.location.search);
             const apiKey = urlParams.get('apiKey');
-            const headers: Record<string, string> = {};
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (apiKey) {
                 headers['Authorization'] = `Bearer ${apiKey}`;
             }
+            const variant = liveOptionsRef.current?.variant ?? 'tutor';
+            const isStudyCompanion = variant === 'studyCompanion';
+            const lessonCtx = lessonContextRef.current;
             const tokenResponse = await fetch('/api/genai/ephemeral', {
                 method: 'POST',
-                headers
+                headers,
+                body: JSON.stringify(buildLiveTokenRequest({
+                    grantId: voiceGrantIdRef.current,
+                    sessionId: currentSessionIdRef.current,
+                    resumptionHandle: sessionResumptionHandleRef.current,
+                    variant,
+                    topic: topicRef.current,
+                    gradeLevel: liveOptionsRef.current?.gradeLevel,
+                    studyMode: liveOptionsRef.current?.studyMode,
+                    studyIntent: liveOptionsRef.current?.studyIntent,
+                    lesson: lessonCtx,
+                })),
             });
             if (!ownsConnection()) return;
             if (!tokenResponse.ok) {
+                // A grant the server no longer recognizes can't be reused; start a fresh one next time.
+                if (tokenResponse.status === 403) voiceGrantIdRef.current = null;
                 throw new VoiceTokenRequestError(tokenResponse.status);
             }
-            const { token } = await tokenResponse.json();
+            const { token, model, config: lockedConfig, expireTime, billing } = await tokenResponse.json() as LiveTokenResponse;
             if (!ownsConnection()) return;
+            if (billing) {
+                voiceGrantIdRef.current = billing.grantId;
+                onCreditsUpdateRef.current?.({
+                    remainingCredits: billing.remainingCredits,
+                    minutesCharged: billing.minutesCharged,
+                });
+            }
 
             const ai = new GoogleGenAI({
                 apiKey: token,
                 httpOptions: { apiVersion: 'v1alpha' }
             });
 
-            // Configuration is locked server-side via liveConnectConstraints
-            // No need to pass config since it's pre-configured in the ephemeral token
-
             const responseQueue: LiveServerMessage[] = [];
 
-            // Build context addition based on lesson context or topic (read refs — startGeminiLiveSession is []-memoized)
-            let contextAddition = '';
-            const lessonCtx = lessonContextRef.current;
-            const topicNow = topicRef.current;
-
-            if (lessonCtx?.title && lessonCtx.learningRunId && lessonCtx.activeObjective) {
-                contextAddition = `\n\n${buildObjectiveTutorPromptContext({
-                    lessonTitle: lessonCtx.title,
-                    subject: lessonCtx.subject,
-                    gradeLevel: lessonCtx.gradeLevel,
-                    objectiveText: lessonCtx.activeObjective.text,
-                    lessonContent: lessonCtx.content,
-                })}`;
-            } else if (lessonCtx?.title) {
-                const objectiveText = Array.isArray(lessonCtx.objectives)
-                    ? lessonCtx.objectives.map((objective) => `- ${objective}`).join('\n')
-                    : lessonCtx.objectives;
-                contextAddition = `
-
-### **Lesson Context**
-
-You are helping a student learn material from a specific lesson:
-- **Lesson:** ${lessonCtx.title}
-- **Subject:** ${lessonCtx.subject || 'Not specified'}
-- **Grade Level:** ${lessonCtx.gradeLevel || 'Not specified'}
-
-**Learning Objectives:**
-${objectiveText || 'No specific objectives provided.'}
-
-**Lesson Content:**
-${lessonCtx.content ? lessonCtx.content.substring(0, 2000) + (lessonCtx.content.length > 2000 ? '...' : '') : 'No content provided.'}
-
-Focus your teaching on these objectives. Use the lesson material as the foundation for explanations, visualizations, and quizzes. When the student asks questions, relate answers back to the lesson objectives.
-`;
-            } else if (topicNow) {
-                contextAddition = `\n\n### **Session Topic**\n\nThe learner has specifically requested to learn about: "${topicNow}"\n\nFocus your teaching on this topic. Tailor your explanations, visualizations, and questions to this subject matter.`;
-            }
-
-            const variant = liveOptionsRef.current?.variant ?? 'tutor';
-            const isStudyCompanion = variant === 'studyCompanion';
-
-            let finalSystemPrompt: string;
-            if (isStudyCompanion) {
-                const gl = liveOptionsRef.current?.gradeLevel?.trim() || 'the learner';
-                const sm = liveOptionsRef.current?.studyMode ?? 'companion';
-                const si = liveOptionsRef.current?.studyIntent ?? 'general';
-                const lessonHint =
-                    lessonCtx?.title && lessonCtx.title.trim().length > 0
-                        ? {
-                            title: lessonCtx.title,
-                            subject: lessonCtx.subject || 'general',
-                            objectives: Array.isArray(lessonCtx.objectives)
-                                ? lessonCtx.objectives.join('\n')
-                                : lessonCtx.objectives ?? null,
-                            content: lessonCtx.content ?? null,
-                        }
-                        : undefined;
-                finalSystemPrompt = buildStudyCompanionLiveVoiceSystemPrompt(gl, sm, si, lessonHint);
-            } else {
-                finalSystemPrompt = systemPrompt + contextAddition;
-            }
-
-            const visualizationToolDeclaration = {
-                name: 'generate_visualization_description',
-                description:
-                    'Generates an interactive visual or on-screen quiz for the learner. Call when a diagram, simulation, manipulable demo, or interactive/visual quiz would help more than voice alone.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        task_description: {
-                            type: 'string',
-                            description:
-                                'Detailed description: type (illustration, simulation, visual quiz), layout, interactions, feedback, labels. For quizzes, specify prompts, choices, and correct-answer feedback.',
-                        },
-                    },
-                    required: ['task_description'],
-                },
-            };
-
-            const objectiveArtifactToolDeclaration = {
-                name: 'request_learning_artifact',
-                description: 'Shows the next teacher-reviewed visualization or quiz for the active objective, generating a fallback only after reviewed activities are exhausted.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        kind: { type: 'string', enum: ['visualization', 'quiz'] },
-                        taskDescription: { type: 'string', description: 'A short description of the concept or check the learner needs.' },
-                    },
-                    required: ['kind', 'taskDescription'],
-                },
-            };
-
-            const tutorTools = [
-                { googleSearch: {} },
-                {
-                    functionDeclarations: [
-                        lessonCtx?.learningRunId ? objectiveArtifactToolDeclaration : visualizationToolDeclaration,
-                        {
-                            name: 'set_topic',
-                            description:
-                                'Sets or updates the current discussion topic. Call on new main topic or topic change. Do not call this function on subtopics.',
-                            parameters: {
-                                type: 'object',
-                                properties: {
-                                    topic: {
-                                        type: 'string',
-                                        description: 'A concise 3–8 word title describing the current main topic.',
-                                    },
-                                },
-                                required: ['topic'],
-                            },
-                        },
-                    ],
-                },
-            ];
-
-            /** Study Companion Live: function calls only (no Google Search); single viz/quiz tool per product constraint. */
-            const studyCompanionLiveTools = [{ functionDeclarations: [visualizationToolDeclaration] }];
-
+            // The token only accepts this exact config, so use the server's copy as-is.
             const connectConfig: any = {
-                model: process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL,
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    proactivity: { proactiveAudio: true },
-                    realtimeInputConfig: {
-                        automaticActivityDetection: {
-                            disabled: false,
-                            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-                        }
-                    },
-                    systemInstruction: finalSystemPrompt,
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
-                    },
-                    contextWindowCompression: {
-                        slidingWindow: {}
-                    },
-                    sessionResumption: {
-                        handle: sessionResumptionHandleRef.current || undefined
-                    },
-                    tools: isStudyCompanion ? studyCompanionLiveTools : tutorTools,
-                    ...(isStudyCompanion
-                        ? { inputAudioTranscription: {}, outputAudioTranscription: {} }
-                        : {}),
-                },
+                model,
+                config: lockedConfig,
                 callbacks: {
                     onopen: () => {
                         if (!acceptsEvents()) return;
@@ -791,7 +686,31 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
 
             geminiLiveSessionRef.current = geminiSession;
 
-            // Set up audio capture and send to Gemini
+            // The token stops working when its paid block ends. Reconnect with the
+            // resumption handle shortly before that; the new token request renews
+            // the block on the server (or ends the session when credits run out).
+            if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
+            const renewDelay = liveTokenRenewDelay(expireTime);
+            tokenRenewTimeoutRef.current = renewDelay === null ? null : setTimeout(() => {
+                tokenRenewTimeoutRef.current = null;
+                if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                const previousSession = geminiSession;
+                isResumingSessionRef.current = true;
+                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000)
+                    .then(() => {
+                        try { previousSession.close(); } catch { /* already closed */ }
+                    })
+                    .catch((err: unknown) => {
+                        handleStreamingFailure(err, 'resume', generation);
+                    });
+            }, renewDelay);
+
+            // Set up audio capture and send to Gemini. A reconnect replaces the
+            // previous capture context, so close it instead of leaking it.
+            const previousCaptureContext = audioContextRef.current;
+            if (previousCaptureContext && previousCaptureContext.state !== 'closed') {
+                void previousCaptureContext.close().catch(() => { /* best-effort cleanup */ });
+            }
             const audioContext = new AudioContext({ sampleRate });
             audioContextRef.current = audioContext;
             const source = audioContext.createMediaStreamSource(stream);
@@ -1351,6 +1270,10 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         onVadStateListenerRef.current = cb;
     }, []);
 
+    const setOnCreditsUpdate = useCallback((cb: ((update: VoiceCreditsUpdate) => void) | null) => {
+        onCreditsUpdateRef.current = cb;
+    }, []);
+
     // Effect to ensure cleanup on component unmount
     useEffect(() => {
         return () => {
@@ -1386,5 +1309,6 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
         setSaveOnlySpeech,
         setOnVadStateListener,
         setOnTranscription,
+        setOnCreditsUpdate,
     };
 }
