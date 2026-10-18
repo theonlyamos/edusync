@@ -6,7 +6,10 @@ import { z } from 'zod'
 import {
   EUREKA_TUTOR_SYSTEM_PROMPT,
   LIVE_CLASS_AGENT_SECRET_HEADER,
+  VISUAL_PENDING_TOOL_RESPONSE,
+  formatVisualStatusMessage,
   type LiveClassRoomLessonMetadata as RoomMetaLesson,
+  type VisualStatusReport,
 } from '@edusync/shared'
 
 const appBase = (process.env.LIVE_CLASS_APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
@@ -79,18 +82,23 @@ const agentHeaders = {
   [LIVE_CLASS_AGENT_SECRET_HEADER]: agentSecret,
 } as const
 
-function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): void {
+/** Resolves true once the payload was published to the room, false if it could not be. */
+async function broadcastToRoom(room: AgentRoom, payload: Record<string, unknown>): Promise<boolean> {
   const lp = room.localParticipant
   if (!lp) {
     console.warn('[live-class-agent] broadcastToRoom: no localParticipant')
-    return
+    return false
   }
-  void lp
-    .publishData(new TextEncoder().encode(JSON.stringify(payload)), {
+  try {
+    await lp.publishData(new TextEncoder().encode(JSON.stringify(payload)), {
       reliable: true,
       topic: 'agent',
     })
-    .catch((e) => console.error('[live-class-agent] publishData failed:', e))
+    return true
+  } catch (e) {
+    console.error('[live-class-agent] publishData failed:', e)
+    return false
+  }
 }
 
 /**
@@ -102,6 +110,7 @@ function postInBackground(
   path: string,
   body: Record<string, unknown>,
   onSuccess?: (data: unknown) => void,
+  onFailure?: (reason: string) => void,
 ): void {
   void (async () => {
     try {
@@ -113,19 +122,47 @@ function postInBackground(
       if (!res.ok) {
         const t = await res.text()
         console.error(`[live-class-agent] ${path} failed:`, t)
+        onFailure?.(`The request failed (${res.status})`)
         return
       }
       if (onSuccess) {
+        let data: unknown
         try {
-          onSuccess(await res.json())
+          data = await res.json()
         } catch {
           console.error(`[live-class-agent] ${path}: invalid JSON response`)
+          onFailure?.('The server sent an unreadable response')
+          return
         }
+        onSuccess(data)
       }
     } catch (e) {
       console.error(`[live-class-agent] ${path} error:`, e)
+      onFailure?.(e instanceof Error ? e.message : 'The request failed')
     }
   })()
+}
+
+/** The running session for this job, so background work can talk back to the model. */
+let activeSession: voice.AgentSession | null = null
+
+/**
+ * Tell the model whether a visual actually reached the class. The tool call was
+ * answered immediately with a "being prepared" message, so without this the
+ * model would talk about visuals that never appeared.
+ */
+function reportVisualStatus(report: VisualStatusReport): void {
+  const session = activeSession
+  if (!session) return
+  const guidance =
+    report.status === 'ready'
+      ? 'The visual is now on the students\' screens. Briefly point them to it and invite them to try it. Do not read this message aloud.'
+      : 'The visual did not reach the students. Do not refer to it as if it were on screen. Say briefly that the picture did not come through and keep teaching out loud. Do not read this message aloud.'
+  try {
+    session.generateReply({ instructions: `${formatVisualStatusMessage(report)}\n\n${guidance}` })
+  } catch (e) {
+    console.error('[live-class-agent] reportVisualStatus failed:', e)
+  }
 }
 
 const generateVisualizationDescription = llm.tool({
@@ -148,11 +185,23 @@ const generateVisualizationDescription = llm.tool({
       },
       (data) => {
         if (data && typeof data === 'object' && 'id' in data) {
-          broadcastToRoom(room, { type: 'visualization', ...(data as Record<string, unknown>) })
+          const viz = data as Record<string, unknown>
+          void broadcastToRoom(room, { type: 'visualization', ...viz }).then((delivered) => {
+            reportVisualStatus(delivered
+              ? {
+                  status: 'ready',
+                  taskDescription: task_description,
+                  explanation: typeof viz.explanation === 'string' ? viz.explanation : undefined,
+                }
+              : { status: 'failed', taskDescription: task_description, reason: 'The visual could not be sent to the class' })
+          })
+        } else {
+          reportVisualStatus({ status: 'failed', taskDescription: task_description, reason: 'No visual was saved' })
         }
       },
+      (reason) => reportVisualStatus({ status: 'failed', taskDescription: task_description, reason }),
     )
-    return 'Visualization is being generated. Students will see it shortly. Continue teaching.'
+    return VISUAL_PENDING_TOOL_RESPONSE
   },
 })
 
@@ -166,7 +215,7 @@ const setTopic = llm.tool({
     const t = typeof topic === 'string' ? topic.trim() : ''
     if (!t) return 'No topic text was provided.'
     const { room, sessionId } = requireSessionContext()
-    broadcastToRoom(room, { type: 'set_topic', topic: t })
+    void broadcastToRoom(room, { type: 'set_topic', topic: t })
     postInBackground('/api/live-classes/agent/persist-session-topic', {
       session_id: sessionId,
       topic: t,
@@ -204,6 +253,11 @@ export default defineAgent({
         instructions:
           'You are Eureka, a live class tutor. Multiple students may speak. Teach visually and call tools as specified in your instructions.',
       }),
+    })
+
+    activeSession = session
+    ctx.addShutdownCallback(async () => {
+      if (activeSession === session) activeSession = null
     })
 
     await session.start({

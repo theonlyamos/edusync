@@ -15,7 +15,11 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
+
+/** How long a new visual may take to render before the tutor is told it failed. */
+const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
@@ -59,6 +63,8 @@ function HomeComponent() {
   const [sessionManuallyStopped, setSessionManuallyStopped] = useState(false);
   const vizRef = useRef<HTMLDivElement | null>(null);
   const vizOnlyRef = useRef<HTMLDivElement | null>(null);
+  // Resolves when the sandbox reports the current visual rendered or failed.
+  const renderWaiterRef = useRef(createRenderWaiter());
   const isCapturingRef = useRef(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [replay, setReplay] = useState<{ conversationUrl?: string | null; userUrl: string | null; aiUrl: string | null; userParts?: string[]; aiParts?: string[]; durationMs: number } | null>(null);
@@ -225,11 +231,17 @@ function HomeComponent() {
   const handleRendererError = useCallback(async (errMsg: string) => {
     try {
       setError(errMsg);
-      if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) return;
+      if (currentVizIndex < 0 || currentVizIndex >= visualizations.length) {
+        renderWaiterRef.current.failed(errMsg);
+        return;
+      }
       setGeneratingVisualization(true);
       const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
       const taskDescription = visualizations[currentVizIndex]?.taskDescription;
-      if (!taskDescription) return;
+      if (!taskDescription) {
+        renderWaiterRef.current.failed(errMsg);
+        return;
+      }
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -249,26 +261,35 @@ function HomeComponent() {
       }
     } catch (e: any) {
       setError(e.message || 'Failed to regenerate visualization');
+      renderWaiterRef.current.failed(e.message || 'Failed to regenerate visualization');
     } finally {
       setGeneratingVisualization(false);
     }
   }, [currentVizIndex, visualizations]);
+
+  const handleRendererReady = useCallback(() => {
+    renderWaiterRef.current.ready();
+  }, []);
+
+  const handleSketchError = useCallback((errMsg: string) => {
+    renderWaiterRef.current.failed(errMsg);
+  }, []);
 
   const renderVisualization = useMemo(() => {
     if (!code || !library) return null;
 
     switch (library) {
       case 'react':
-        return <ReactRenderer code={code} onError={handleRendererError} />;
+        return <ReactRenderer code={code} onError={handleRendererError} onReady={handleRendererReady} />;
       case 'p5':
       case 'three':
-        return <LiveSketch code={code} library={library} />;
+        return <LiveSketch code={code} library={library} onReady={handleRendererReady} onError={handleSketchError} />;
       default:
         return null;
     }
-  }, [code, library, handleRendererError]);
+  }, [code, library, handleRendererError, handleRendererReady, handleSketchError]);
 
-  const handleToolCall = async (name: string, args: any) => {
+  const handleToolCall = async (name: string, args: any): Promise<VisualStatusReport | void> => {
 
     if (name === 'generate_visualization_description') {
       setGeneratingVisualization(true);
@@ -297,6 +318,8 @@ function HomeComponent() {
           const newAssistantMessage: Message = { role: 'assistant', content: vizData.explanation };
           setMessages(prev => [...prev, newAssistantMessage]);
         }
+        // Start waiting before the new code is set so the renderer's ready/error signal isn't missed.
+        const rendered = renderWaiterRef.current.wait(VISUAL_RENDER_TIMEOUT_MS);
         setCode(vizData.code);
         setLibrary(vizData.library);
         setVisualizations(prev => {
@@ -317,8 +340,14 @@ function HomeComponent() {
             });
           } catch (err) { console.error('Failed to persist visualization', err) }
         }
+        setGeneratingVisualization(false);
+        const outcome = await rendered;
+        return outcome.ok
+          ? { status: 'ready', taskDescription: args.task_description, explanation: vizData.explanation }
+          : { status: 'failed', taskDescription: args.task_description, reason: outcome.reason };
       } catch (e: any) {
         setError(e.message || 'Unknown error');
+        return { status: 'failed', taskDescription: args?.task_description, reason: e.message || 'The visual could not be generated' };
       } finally {
         setGeneratingVisualization(false);
       }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { VisualizationSkeleton } from '@/components/lessons/VisualizationSkeleton';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { reportElementRender } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
 import type { VisualizationDimensions } from '@/lib/visualization-layout';
 import type { InteractiveElement, InteractiveElementUpdate, InteractiveLibrary } from './types';
@@ -39,6 +40,15 @@ export function InteractiveElementCard({
   const [renderKey, setRenderKey] = useState(0);
   const [showExplanation, setShowExplanation] = useState(true);
   const [isRegenerating, setIsRegenerating] = useState(false);
+
+  const handleReady = () => {
+    onReady?.();
+    reportElementRender(element.id, { ok: true });
+  };
+  const handleRenderError = (message: string) => {
+    setRenderError(message);
+    reportElementRender(element.id, { ok: false, reason: message });
+  };
 
   const retryRender = () => {
     setRenderError(null);
@@ -129,14 +139,14 @@ export function InteractiveElementCard({
               </Button>
             </div>
           ) : library === 'react' ? (
-            <ReactRenderer key={renderKey} code={code} onReady={onReady} onError={(msg) => setRenderError(msg)} />
+            <ReactRenderer key={renderKey} code={code} onReady={handleReady} onError={handleRenderError} />
           ) : (
             <SafeCodeRunner
               key={renderKey}
               code={code}
               library={library}
-              onReady={onReady}
-              onError={(msg) => setRenderError(msg)}
+              onReady={handleReady}
+              onError={handleRenderError}
             />
           )}
         </div>

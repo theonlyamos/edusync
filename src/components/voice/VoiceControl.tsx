@@ -1,4 +1,4 @@
-import { useAudioStreaming, LessonContext, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
+import { useAudioStreaming, LessonContext, type ToolCallListener, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
@@ -13,7 +13,8 @@ interface VoiceControlProps {
   lessonContext?: LessonContext;
   onError?: (error: string) => void;
   onStartupFailed?: () => void;
-  onToolCall?: (name: string, args: any, callId?: string) => void;
+  /** Return a promise from visual tools to report whether the visual reached the screen. */
+  onToolCall?: ToolCallListener;
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
   onCountdownEnd?: () => void;
   mobileMode?: boolean;

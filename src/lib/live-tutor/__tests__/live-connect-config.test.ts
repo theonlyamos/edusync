@@ -8,6 +8,13 @@ const toolNames = (config: ReturnType<typeof buildLiveConnectConfig>) =>
     config.tools.flatMap((tool) => ('functionDeclarations' in tool ? (tool.functionDeclarations ?? []).map((d) => d.name) : ['googleSearch']));
 
 describe('server-built Gemini Live config', () => {
+    it.each(['tutor', 'studyCompanion'] as const)('keeps visual readiness guidance in the server-locked %s prompt', (variant) => {
+        const config = buildLiveConnectConfig(parse({ variant }));
+        expect(config.systemInstruction).toContain('VISUAL_STATUS');
+        expect(config.systemInstruction).toContain('"status":"ready"');
+        expect(config.systemInstruction).toContain('"status":"failed"');
+    });
+
     it('builds the Eureka tutor with search, visuals and topic tools by default', () => {
         const config = buildLiveConnectConfig(parse({}));
         expect(config.systemInstruction).toBe(EUREKA_TUTOR_SYSTEM_PROMPT);

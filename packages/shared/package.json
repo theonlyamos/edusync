@@ -15,6 +15,10 @@
     "./live-class": {
       "types": "./src/live-class.ts",
       "default": "./src/live-class.ts"
+    },
+    "./visual-status": {
+      "types": "./src/visual-status.ts",
+      "default": "./src/visual-status.ts"
     }
   }
 }
