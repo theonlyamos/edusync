@@ -8,7 +8,8 @@ describe('getAuthModeForPath', () => {
     expect(getAuthModeForPath('/api/livekit/webhook')).toBe('none')
     expect(getAuthModeForPath('/api/embed/keys')).toBe('session')
     expect(getAuthModeForPath('/api/embed/sessions')).toBe('apiKey')
-    expect(getAuthModeForPath('/api/credits/deduct-minute')).toBe('both')
+    expect(getAuthModeForPath('/api/credits/status')).toBe('both')
+    expect(getAuthModeForPath('/api/genai/ephemeral')).toBe('both')
     expect(getAuthModeForPath('/api/feedback')).toBe('both')
   })
 

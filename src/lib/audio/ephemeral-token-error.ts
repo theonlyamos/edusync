@@ -1,13 +1,17 @@
 export class VoiceTokenRequestError extends Error {
   constructor(readonly status: number) {
-    const message = status === 401
+    const message = status === 402
+      ? 'Out of voice credits'
+      : status === 401
       ? 'Voice authorization failed'
       : status === 403
         ? 'Voice access was denied'
         : status === 429
           ? 'Voice request limit reached'
           : 'Voice token request failed';
-    const nextStep = status === 401
+    const nextStep = status === 402
+      ? 'Buy more credits to keep talking.'
+      : status === 401
       ? 'Please sign in again or check the API key.'
       : status === 403
         ? 'Check the session or API key access permissions.'
