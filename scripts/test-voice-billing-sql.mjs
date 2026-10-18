@@ -89,6 +89,28 @@ await test('completed grant cannot mint a second no-charge token', async () => {
     assert.deepEqual(await state(), { credits: 15, total_credits_used: 5 });
 });
 
+await test('stale pending issuance counts as issued so the grant can renew again', async () => {
+    await reset();
+    const first = await reserve();
+    await db.query("UPDATE public.voice_token_issuances SET created_at=NOW()-INTERVAL '3 minutes' WHERE id=$1", [first.issuance_id]);
+    assert.equal((await reserve(first.grant_id)).status, 'active_grant');
+    assert.equal((await row('SELECT status FROM public.voice_token_issuances WHERE id=$1', [first.issuance_id])).status, 'completed');
+    assert.equal((await grant(first.grant_id)).pending_issuance_id, null);
+    assert.equal((await finalize(first, false)).status, 'completed');
+    assert.deepEqual(await state(), { credits: 15, total_credits_used: 5 });
+    await db.query("UPDATE public.voice_session_grants SET expires_at=NOW()+INTERVAL '60 seconds' WHERE id=$1", [first.grant_id]);
+    assert.equal((await reserve(first.grant_id)).status, 'charged');
+    assert.deepEqual(await state(), { credits: 10, total_credits_used: 10 });
+});
+
+await test('a one-minute charge is described in the singular', async () => {
+    await reset();
+    await db.query('UPDATE public.users SET credits=1 WHERE id=$1', [user]);
+    await reserve();
+    const { description } = await row("SELECT description FROM public.credit_transactions WHERE user_id=$1 AND transaction_type<>'refund' ORDER BY description LIMIT 1", [user]);
+    assert.equal(description, 'Used 1 credit for 1 minute of AI voice session');
+});
+
 await test('failed first token refunds once, expires grant, and retry charges again', async () => {
     await reset();
     const first = await reserve();

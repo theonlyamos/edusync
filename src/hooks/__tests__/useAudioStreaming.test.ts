@@ -892,7 +892,7 @@ describe('server-locked voice tokens', () => {
     renderAudio().stopStreaming();
   });
 
-  it.each([402, 502])('preserves paid input and callbacks until expiry when renewal returns HTTP %s', async (status) => {
+  it.each([402, 403])('preserves paid input and callbacks until expiry when renewal returns HTTP %s', async (status) => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(tokenResponse('first-token', 2, 0))
       .mockResolvedValueOnce(denial(status));
@@ -1173,7 +1173,7 @@ describe('server-locked voice tokens', () => {
     expect(renderAudio().connectionStatus).toBe('disconnected');
   });
 
-  it.each([402, 502])('resumes remaining paid time when a pending HTTP %s renewal fails after the original socket drops', async status => {
+  it.each([402, 403])('resumes remaining paid time when a pending HTTP %s renewal fails after the original socket drops', async status => {
     let finishRenewal!: (response: Response) => void;
     vi.mocked(fetch)
       .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
@@ -1197,6 +1197,61 @@ describe('server-locked voice tokens', () => {
     expect(renderAudio().isStreaming).toBe(false);
     expect(renderAudio().error).toContain(`HTTP ${status}`);
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([502, 409])('retries a renewal that failed with HTTP %s and keeps talking into the next block', async (status) => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(denial(status))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 6, 0));
+    await renderAudio().startStreaming();
+    gemini.configurations[0].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'original-handle' } });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(requestBody(2)).toMatchObject({ grantId, resumptionHandle: 'original-handle' });
+    expect(gemini.apiKeys).toEqual(['original-token', 'renewed-token']);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(true);
+    expect(renderAudio().error).toBe('');
+    renderAudio().stopStreaming();
+  });
+
+  it('stops retrying a failing renewal shortly before the paid block ends', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValue(denial(502));
+    await renderAudio().startStreaming();
+    await vi.advanceTimersByTimeAsync(119_999);
+    expect(renderAudio().isStreaming).toBe(true);
+    // One renewal at 60s, then retries every 10s while more than 15s remain.
+    expect(fetch).toHaveBeenCalledTimes(7);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renderAudio().isStreaming).toBe(false);
+    expect(renderAudio().error).toContain('HTTP 502');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetch).toHaveBeenCalledTimes(7);
+  });
+
+  it('reuses the next block it already paid for when the replacement connection fails', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(tokenResponse('original-token', 2, 5))
+      .mockResolvedValueOnce(tokenResponse('renewed-token', 7, 0));
+    await renderAudio().startStreaming();
+    gemini.configurations[0].callbacks.onmessage({ sessionResumptionUpdate: { resumable: true, newHandle: 'original-handle' } });
+    gemini.connect.mockRejectedValueOnce(new Error('Replacement connect failed'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().connectionStatus).toBe('connected');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(gemini.apiKeys.slice(-1)).toEqual(['renewed-token']);
+    expect(gemini.configurations.at(-1)!.config.sessionResumption).toEqual({ handle: 'original-handle' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(renderAudio().isStreaming).toBe(true);
+    expect(renderAudio().error).toBe('');
+    renderAudio().stopStreaming();
   });
 
   it('recovers a promoted replacement that closes while its queued messages are being delivered', async () => {

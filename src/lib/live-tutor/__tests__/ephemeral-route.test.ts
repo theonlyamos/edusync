@@ -188,11 +188,11 @@ describe('POST /api/genai/ephemeral', () => {
         expect(genai.create).not.toHaveBeenCalled();
     });
 
-    it('withholds the token if the issuance cannot be committed', async () => {
+    it('still hands over a minted, paid token if the issuance cannot be marked complete', async () => {
         finalizeStatus = 'not_found';
         const response = await POST(tokenRequest({}));
-        expect(response.status).toBe(500);
-        expect(await response.json()).not.toHaveProperty('token');
+        expect(response.status).toBe(200);
+        expect(await response.json()).toHaveProperty('token');
         expect(rpcs.filter(({ name }) => name === 'finalize_voice_token_issuance')).toHaveLength(1);
         expect(rpcs.at(-1)?.body.p_succeeded).toBe(true);
     });

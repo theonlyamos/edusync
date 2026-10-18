@@ -1,3 +1,5 @@
+import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
+
 /**
  * Browser-side body for POST /api/genai/ephemeral. The server builds and locks
  * the Gemini Live config from these fields (see live-connect-config.ts), so the
@@ -73,4 +75,18 @@ export function liveTokenRenewDelay(expireTime: string, now = Date.now()): numbe
     const expiresAt = Date.parse(expireTime);
     if (!Number.isFinite(expiresAt)) return null;
     return Math.max(5_000, expiresAt - now - LIVE_TOKEN_RENEW_LEAD_MS);
+}
+
+/** Wait between renewal attempts that failed for a passing reason. */
+export const LIVE_TOKEN_RENEW_RETRY_MS = 10 * 1000;
+
+/**
+ * Whether a failed renewal is worth retrying before the paid block ends.
+ * Running out of credits, losing access or hitting the rate limit is final;
+ * a network error, a server error or a 409 (the server still sees the
+ * current block as active, for example after clock drift) is not.
+ */
+export function isRetryableRenewalError(error: unknown): boolean {
+    if (!(error instanceof VoiceTokenRequestError)) return true;
+    return ![401, 402, 403, 429].includes(error.status);
 }

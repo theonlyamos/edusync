@@ -5,7 +5,7 @@ import { extractServerTranscriptions, mergeStreamingTranscript } from '@/lib/aud
 import { PcmPlaybackQueue } from '@/lib/audio/pcm-playback-queue';
 import { emitLiveInputDiagnostic } from '@/lib/audio/live-input-diagnostics';
 import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
-import { buildLiveTokenRequest, liveTokenRenewDelay, type LiveTokenResponse } from '@/lib/live-tutor/live-token-request';
+import { buildLiveTokenRequest, isRetryableRenewalError, LIVE_TOKEN_RENEW_RETRY_MS, liveTokenRenewDelay, type LiveTokenResponse } from '@/lib/live-tutor/live-token-request';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 import { createVisualStatusDelivery, isVisualToolName, VISUAL_PENDING_TOOL_RESPONSE, type VisualStatusReport } from '@/lib/visual-status';
 
@@ -957,31 +957,53 @@ export function useAudioStreaming(
             tutorTurnsRef.current.sent();
             if (tokenExpireTimeoutRef.current) clearTimeout(tokenExpireTimeoutRef.current);
             tokenExpireTimeoutRef.current = Number.isFinite(expiresAt) ? setTimeout(expireConnection, Math.max(0, expiresAt - Date.now())) : null;
+            // Renew shortly before the paid block ends. A renewal that fails for a
+            // passing reason is retried while this block still has time left; one
+            // the server refuses (no credits, access denied) lets the session run
+            // until the block ends.
+            const scheduleRenewal = (delay: number) => {
+                if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
+                tokenRenewTimeoutRef.current = setTimeout(() => {
+                    tokenRenewTimeoutRef.current = null;
+                    if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                    isResumingSessionRef.current = true;
+                    // If the next block was already bought but its connection failed, reuse that token.
+                    const nextBlockBought = () => Date.parse(liveTokenRef.current?.expireTime ?? '') > expiresAt;
+                    void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000, !nextBlockBought())
+                        .then(() => {
+                            try { geminiSession.close(); } catch (error) { console.warn('Failed to close replaced live session', error); }
+                        })
+                        .catch((err: unknown) => {
+                            if (!ownsRequest() || !isStreamingRef.current || isManualDisconnectRef.current) return;
+                            isResumingSessionRef.current = false;
+                            const retryable = nextBlockBought() || isRetryableRenewalError(err);
+                            if (acceptsEvents()) {
+                                // The current block is still running: retry while it has time left.
+                                if (retryable && expiresAt - Date.now() > LIVE_TOKEN_RENEW_RETRY_MS + 5_000) {
+                                    scheduleRenewal(LIVE_TOKEN_RENEW_RETRY_MS);
+                                } else {
+                                    tokenRenewFailureRef.current = err;
+                                }
+                                return;
+                            }
+                            // The socket dropped meanwhile. A retryable failure leaves renewal
+                            // on, so the resumed connection schedules it again.
+                            if (!retryable) tokenRenewFailureRef.current = err;
+                            if (sessionResumptionHandleRef.current && Date.parse(liveTokenRef.current?.expireTime ?? '') > Date.now()) {
+                                isResumingSessionRef.current = true;
+                                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((resumeError: unknown) => {
+                                    handleStreamingFailure(resumeError, 'resume', generation);
+                                });
+                                return;
+                            }
+                            handleStreamingFailure(err, 'resume', generation);
+                        });
+                }, delay);
+            };
             if (tokenRenewTimeoutRef.current) clearTimeout(tokenRenewTimeoutRef.current);
+            tokenRenewTimeoutRef.current = null;
             const renewDelay = tokenRenewFailureRef.current ? null : liveTokenRenewDelay(expireTime);
-            tokenRenewTimeoutRef.current = renewDelay === null ? null : setTimeout(() => {
-                tokenRenewTimeoutRef.current = null;
-                if (!acceptsEvents() || !isStreamingRef.current || isManualDisconnectRef.current) return;
-                isResumingSessionRef.current = true;
-                void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000, true)
-                    .then(() => {
-                        try { geminiSession.close(); } catch (error) { console.warn('Failed to close replaced live session', error); }
-                    })
-                    .catch((err: unknown) => {
-                        if (!ownsRequest() || !isStreamingRef.current || isManualDisconnectRef.current) return;
-                        tokenRenewFailureRef.current = err;
-                        isResumingSessionRef.current = false;
-                        if (acceptsEvents()) return;
-                        if (sessionResumptionHandleRef.current && Date.parse(liveTokenRef.current?.expireTime ?? '') > Date.now()) {
-                            isResumingSessionRef.current = true;
-                            void startGeminiLiveSessionRef.current?.(streamRef.current!, 16000).catch((resumeError: unknown) => {
-                                handleStreamingFailure(resumeError, 'resume', generation);
-                            });
-                            return;
-                        }
-                        handleStreamingFailure(err, 'resume', generation);
-                    });
-            }, renewDelay);
+            if (renewDelay !== null) scheduleRenewal(renewDelay);
 
             // Initialize MediaRecorder AFTER AudioWorklet is connected
             // This ensures VAD state is being updated before recording starts

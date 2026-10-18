@@ -141,7 +141,8 @@ export async function POST(request: NextRequest) {
                     newSessionExpireTime: newSessionExpireTime.toISOString(),
                     liveConnectConstraints: { model, config: constrainedConfig as never },
                     lockAdditionalFields: LOCKED_SETUP_FIELDS,
-                    httpOptions: { apiVersion: 'v1alpha' },
+                    // Bounded so a hung request can't outlive the stale-issuance window in the database.
+                    httpOptions: { apiVersion: 'v1alpha', timeout: 30_000 },
                 },
             });
             tokenName = token.name;
@@ -158,7 +159,14 @@ export async function POST(request: NextRequest) {
         }
 
         if (issuance) {
-            await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: true });
+            // The token exists and the block is paid for, so hand it over even if
+            // marking the issuance complete fails. The database clears a stale
+            // pending issuance on the next request for this grant.
+            try {
+                await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: true });
+            } catch (finalizeError) {
+                console.error('Failed to mark voice token issuance complete:', finalizeError);
+            }
         }
 
         return NextResponse.json({

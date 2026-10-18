@@ -88,8 +88,26 @@ BEGIN
     END IF;
 
     IF v_grant.pending_issuance_id IS NOT NULL THEN
-      RETURN QUERY SELECT 'pending_issuance'::TEXT, v_grant.id, v_grant.expires_at, 0, v_credits, NULL::UUID;
-      RETURN;
+      -- A request that minted its token but could not record the outcome
+      -- leaves the issuance pending. Token creation times out well within two
+      -- minutes, so an older pending issuance is treated as issued (the charge
+      -- stands) and the grant can be renewed again.
+      UPDATE public.voice_token_issuances i
+      SET status = 'completed', finalized_at = NOW()
+      WHERE i.id = v_grant.pending_issuance_id
+        AND i.status = 'pending'
+        AND i.created_at < NOW() - INTERVAL '2 minutes';
+      IF NOT FOUND AND EXISTS (
+        SELECT 1 FROM public.voice_token_issuances i
+        WHERE i.id = v_grant.pending_issuance_id AND i.status = 'pending'
+      ) THEN
+        RETURN QUERY SELECT 'pending_issuance'::TEXT, v_grant.id, v_grant.expires_at, 0, v_credits, NULL::UUID;
+        RETURN;
+      END IF;
+      UPDATE public.voice_session_grants g
+      SET pending_issuance_id = NULL, updated_at = NOW()
+      WHERE g.id = v_grant.id;
+      v_grant.pending_issuance_id := NULL;
     END IF;
 
     IF v_grant.expires_at > NOW() + MAKE_INTERVAL(secs => p_renew_window_seconds) THEN
@@ -116,7 +134,7 @@ BEGIN
   v_credits := public.deduct_user_credits(
     p_user_id,
     v_charge,
-    'Used ' || v_charge || ' credits for ' || v_charge || ' minutes of AI voice session',
+    'Used ' || v_charge || CASE WHEN v_charge = 1 THEN ' credit for 1 minute' ELSE ' credits for ' || v_charge || ' minutes' END || ' of AI voice session',
     COALESCE(v_previous_session, p_session_id)
   );
   IF v_credits IS NULL THEN

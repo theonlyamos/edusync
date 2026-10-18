@@ -42,6 +42,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Voice billing SQL tests
+        run: pnpm test:sql
+
   build:
     name: Build (advisory)
     runs-on: ubuntu-latest
