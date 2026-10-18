@@ -7,7 +7,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from '../react-component-source';
 import { renderReactSandboxScripts } from '../react-sandbox-runtime';
-import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '../sandbox-responsive';
+import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES, SANDBOX_SVG_LABEL_SCRIPT } from '../sandbox-responsive';
 import { codingEditorBridgeScript } from '../coding-editor-bridge';
 
 const chromiumExecutable = process.env.CHROMIUM_EXECUTABLE_PATH;
@@ -117,7 +117,7 @@ function rendererTemplate(rendererSource: string) {
   expect(sandbox).toBe('allow-scripts');
   const build = new Function(
     'needsLeaflet', 'needsRecharts', 'nonce', 'reactRuntimeScripts',
-    'SANDBOX_RESPONSIVE_STYLES', 'SANDBOX_RESPONSIVE_SCRIPT', 'codeJson',
+    'SANDBOX_RESPONSIVE_STYLES', 'SANDBOX_RESPONSIVE_SCRIPT', 'SANDBOX_SVG_LABEL_SCRIPT', 'codeJson',
     'returnStatementJson', 'REACT_COMPONENT_ARGUMENTS', 'codingEditorBridgeScript', 'editorToken', 'window',
     `return (${html.getText(sourceFile)});`,
   ) as (...values: unknown[]) => string;
@@ -125,7 +125,7 @@ function rendererTemplate(rendererSource: string) {
 }
 
 function buildRendererHtml(template: ReturnType<typeof rendererTemplate>, source: string, runtime: string): string {
-  return template.build(false, false, nonce, runtime, SANDBOX_RESPONSIVE_STYLES, SANDBOX_RESPONSIVE_SCRIPT, JSON.stringify(prepareReactComponentCode(source)), JSON.stringify(template.returnStatement), REACT_COMPONENT_ARGUMENTS, codingEditorBridgeScript, editorToken, { location: { origin: 'null' } });
+  return template.build(false, false, nonce, runtime, SANDBOX_RESPONSIVE_STYLES, SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_SVG_LABEL_SCRIPT, JSON.stringify(prepareReactComponentCode(source)), JSON.stringify(template.returnStatement), REACT_COMPONENT_ARGUMENTS, codingEditorBridgeScript, editorToken, { location: { origin: 'null' } });
 }
 
 function childProbe(kind: string): string {

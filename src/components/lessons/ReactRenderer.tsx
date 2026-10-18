@@ -8,7 +8,7 @@ import {
 } from '@/lib/lesson-artifacts/react-sandbox-runtime';
 import { VisualizationSkeleton } from './VisualizationSkeleton';
 import { LearningActivityView } from './LearningActivityView';
-import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES } from '@/lib/lesson-artifacts/sandbox-responsive';
+import { SANDBOX_RESPONSIVE_SCRIPT, SANDBOX_RESPONSIVE_STYLES, SANDBOX_SVG_LABEL_SCRIPT } from '@/lib/lesson-artifacts/sandbox-responsive';
 import { prepareReactComponentCode, REACT_COMPONENT_ARGUMENTS } from '@/lib/lesson-artifacts/react-component-source';
 import { codingEditorBridgeScript, createCodingEditorToken, readCodingEditorRequest, type CodingEditorRequest } from '@/lib/lesson-artifacts/coding-editor-bridge';
 import { CodingWorkspace } from './CodingWorkspace';
@@ -187,7 +187,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
     }
     ${SANDBOX_RESPONSIVE_STYLES}
   </style>
-  <script nonce="${nonce}">${SANDBOX_RESPONSIVE_SCRIPT}</script>
+  <script nonce="${nonce}">${SANDBOX_RESPONSIVE_SCRIPT}${SANDBOX_SVG_LABEL_SCRIPT}</script>
 </head>
 <body>
   <div id="root"></div>
