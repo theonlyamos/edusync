@@ -3,6 +3,7 @@ import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server'
 import { buildVisualizationLayoutPrompt, type VisualizationDimensions } from '@/lib/visualization-layout'
 import { assertReactComponentSyntax } from '@/lib/lesson-artifacts/react-component-source'
 import { assertReactComponentBindings } from '@/lib/lesson-artifacts/react-component-bindings'
+import { compileReactComponentJsx } from '@/lib/lesson-artifacts/react-component-jsx'
 
 interface OpenAIConfig {
   baseURL: string
@@ -83,7 +84,7 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 
 ### React Rules (Sandboxed Environment)
 - **NO** \`import\` or \`export\` statements. All dependencies are injected globally.
-- **NO** JSX. Use \`React.createElement()\` exclusively.
+- Write the component with JSX. It is compiled to \`React.createElement()\` calls before it runs.
 - **FORBIDDEN:** Do not pull hook names off the React object via destructuring (for example a const line that assigns useState from React). Hooks are already injected as bare names; destructuring redeclares them and breaks execution.
 - **Pattern:** Wrong — any leading line that assigns useState or other hooks from React using object destructuring. Right — define function App or another allowed component name, then call useState and other hooks directly by name with the usual tuple pattern.
 - Main component must be named: Component, App, Quiz, InteractiveComponent, Calculator, or Game.
@@ -93,7 +94,7 @@ When generating a quiz, default to a **visual puzzle** — not a text question w
 - Available charts (Recharts): LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart, and all standard sub-components.
 - Available maps (React-Leaflet): MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap.
 - Styling: Use common Tailwind layout, spacing, typography, palette, border, and shadow utilities only. Use inline \`style\` props for gradients, transforms, arbitrary values, and dynamic values. No arbitrary bracket classes, \`@import\`, or CSS variables.
-- Images: Use \`React.createElement('img', { src, alt, style })\`. Extract URLs from markdown syntax in the task description.
+- Images: Use an \`<img>\` element with \`src\`, \`alt\` and \`style\`. Extract URLs from markdown syntax in the task description.
 
 ### Optional coding workspace
 - Only for a programming lesson or an exercise that requires editing code, offer an explicit button that calls \`openCodeEditor({code: 'starter code', language: 'javascript'})\` in its click handler. Do not open it automatically or use it for ordinary science, maths, diagrams, quizzes, or other noncoding lessons.
@@ -129,7 +130,7 @@ const displayVisualAidFunctionDeclaration = {
         code: {
           type: 'string',
           description:
-            'The complete, runnable, and self-contained code snippet. It must not contain any comments. For React, the code MUST use `React.createElement()` syntax and never JSX.',
+            'The complete, runnable, and self-contained code snippet. It must not contain any comments. For React, write the component with JSX.',
         },
         library: {
           type: 'string',
@@ -190,12 +191,18 @@ function stripLeakedToolCalls(code: string): string {
 async function generateVisualizationOnce(
   systemPrompt: string,
   taskDescription: string,
+  previousFailure?: string,
 ): Promise<VisualizeGenerationResult> {
   const completion = await getOpenAI().chat.completions.create({
     model: PROVIDER_MODEL as string,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: taskDescription },
+      {
+        role: 'user',
+        content: previousFailure
+          ? `${taskDescription}\n\nYour previous attempt was rejected: ${previousFailure}. Write it again without that problem.`
+          : taskDescription,
+      },
     ],
     tools: [displayVisualAidFunctionDeclaration],
     ...(AI_PROVIDER === 'CEREBRAS' ? {
@@ -244,6 +251,16 @@ async function generateVisualizationOnce(
   return normalizeVizResult(result.explanation, result.code, result.library)
 }
 
+/** What went wrong, phrased for the model so the next attempt can avoid it. */
+function describeFailure(err: unknown): string {
+  if (!(err instanceof Error)) return 'the code could not be used'
+  const detail = err.cause instanceof Error ? ` (${err.cause.message})` : ''
+  const hint = err.message.includes('unresolved bindings')
+    ? ' (declare every value inside the main component, e.g. with useState, and wrap the whole visual in function App)'
+    : ''
+  return err.message + detail + hint
+}
+
 export async function runVisualizeGeneration(input: VisualizeGenerationInput): Promise<VisualizeGenerationResult> {
   const { task_description, panel_dimensions, theme, theme_colors } = input
 
@@ -282,26 +299,30 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
   const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo
 
   let lastError: unknown
+  let previousFailure: string | undefined
 
   for (let attempt = 1; attempt <= MAX_VIZ_GENERATION_ATTEMPTS; attempt++) {
     try {
-      const result = await generateVisualizationOnce(systemPromptWithDimensions, task_description)
+      const result = await generateVisualizationOnce(systemPromptWithDimensions, task_description, previousFailure)
       // Strip stray `display_visual_aid(...)` calls the model sometimes appends. If a reference
       // still survives (e.g. the whole component was wrapped in the call) or nothing is left, the
       // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.
-      const code = stripLeakedToolCalls(result.code)
+      let code = stripLeakedToolCalls(result.code)
       if (code.trim() && !codeLeaksToolName(code)) {
         if (result.library === 'react') {
+          code = compileReactComponentJsx(code)
           assertReactComponentSyntax(code)
           assertReactComponentBindings(code)
         }
         return { ...result, code }
       }
+      previousFailure = `the code called ${VISUAL_AID_TOOL_NAME}, which does not exist inside the visual`
       console.warn(
         `Visualization code leaked "${VISUAL_AID_TOOL_NAME}" (attempt ${attempt}/${MAX_VIZ_GENERATION_ATTEMPTS}); regenerating.`,
       )
     } catch (err) {
       lastError = err
+      previousFailure = describeFailure(err)
       console.warn(`Visualization generation attempt ${attempt}/${MAX_VIZ_GENERATION_ATTEMPTS} failed:`, err)
     }
   }

@@ -47,7 +47,7 @@ interface ReactRendererProps {
 }
 
 // Cached regex patterns - avoid recompilation on every render
-const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|Recharts)\b/;
+const RECHARTS_PATTERN = /\b(BarChart|LineChart|PieChart|AreaChart|RadarChart|RadialBarChart|Treemap|Funnel|Sankey|ScatterChart|ComposedChart|ReferenceLine|ReferenceDot|ReferenceArea|Recharts)\b/;
 const LEAFLET_PATTERN = /\b(MapContainer|TileLayer|Marker|Popup|Polyline|Polygon|Circle|CircleMarker|Rectangle|GeoJSON|ReactLeaflet|useMap|useMapEvents)\b/;
 
 export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, onError, onReady }) => {
@@ -78,16 +78,26 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
 
   useEffect(() => {
     let active = true;
+    const fail = (message: string) => {
+      active = false;
+      window.clearTimeout(runtimeTimeout);
+      setError(message);
+      setIsLoading(false);
+      onErrorRef.current?.(message);
+    };
+    // The component load timeout below only starts once these assets arrive; without this a
+    // stalled asset request would leave the skeleton up forever.
+    const runtimeTimeout = window.setTimeout(() => { if (active) fail('React runtime assets took too long to load'); }, 15000);
     loadReactSandboxSources()
-      .then((sources) => { if (active) setRuntimeSources(sources); })
-      .catch((runtimeError) => {
+      .then((sources) => {
         if (!active) return;
-        const message = runtimeError instanceof Error ? runtimeError.message : 'Failed to load React runtime assets';
-        setError(message);
-        setIsLoading(false);
-        onErrorRef.current?.(message);
+        window.clearTimeout(runtimeTimeout);
+        setRuntimeSources(sources);
+      })
+      .catch((runtimeError) => {
+        if (active) fail(runtimeError instanceof Error ? runtimeError.message : 'Failed to load React runtime assets');
       });
-    return () => { active = false; };
+    return () => { active = false; window.clearTimeout(runtimeTimeout); };
   }, []);
 
   useEffect(() => {
@@ -195,11 +205,12 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
   <!-- React and ReactDOM -->
   ${reactRuntimeScripts}
   
-  <!-- Recharts - Load conditionally as ES module -->
-  ${needsRecharts ? `<script nonce="${nonce}" type="module">
-    import * as Recharts from 'https://esm.sh/recharts@3.1.2?deps=react@18.3.1,react-dom@18.3.1';
-    window.Recharts = Recharts;
-    window.rechartsLoaded = true;
+  <!-- Recharts - Load conditionally. The UMD build uses the page's React; the esm.sh build bundled
+       its own copy, so every chart crashed with "Cannot read properties of null (reading 'useContext')". -->
+  ${needsRecharts ? `<script nonce="${nonce}" src="https://unpkg.com/react-is@18.3.1/umd/react-is.production.min.js" integrity="sha384-XYVQ7LtYqgha4ByzNRLR6NHo9p0yVDvmTNuQkiIweU0U8WqLWBkH1L771VlP6fYx" crossorigin="anonymous"></script>
+  <script nonce="${nonce}" src="https://unpkg.com/recharts@3.1.2/umd/Recharts.js" integrity="sha384-YL+XC+w8oeWaqPADTipU9vbFl+xp+heHYeMZRByOFkl/pw/hYzVSlJ8rHod1SMO6" crossorigin="anonymous"></script>
+  <script nonce="${nonce}">
+    window.rechartsLoaded = !!window.Recharts;
   </script>` : `<script nonce="${nonce}">
     // Recharts not needed - skip loading
     window.rechartsLoaded = true;
@@ -564,7 +575,8 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
         const {
           LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart,
           XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-          Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart
+          Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart,
+          ComposedChart, ReferenceLine, ReferenceDot, ReferenceArea, LabelList
         } = Recharts;
         
         // Extract React-Leaflet components
@@ -593,6 +605,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
             LineChart, BarChart, PieChart, AreaChart, ScatterChart, RadarChart,
             XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
             Line, Bar, Area, Pie, Cell, Scatter, RadialBar, RadialBarChart,
+            ComposedChart, ReferenceLine, ReferenceDot, ReferenceArea, LabelList,
             MapContainer, TileLayer, Marker, Popup, Polyline, Polygon,
             Circle, Rectangle, useMap, useMapEvent, L, window.openCodeEditor
           );
@@ -700,7 +713,7 @@ export const ReactRenderer: React.FC<ReactRendererProps> = React.memo(({ code, o
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-red-50 rounded-lg border border-red-200">
           <div className="text-center">
-            <div className="text-red-600 font-medium mb-2">Component Error</div>
+            <div className="text-red-600 font-medium mb-2">This visual didn&apos;t load. Use the refresh button to try again.</div>
             <div className="text-red-500 text-sm">{error}</div>
           </div>
         </div>

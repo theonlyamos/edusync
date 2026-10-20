@@ -59,6 +59,20 @@ describe('responsive visualization generation', () => {
     expect(complete).toHaveBeenCalledTimes(2)
   })
 
+  it('tells the next attempt why the previous one was rejected', async () => {
+    complete
+      .mockResolvedValueOnce(reactResponse("function App() {\n  return <p>{'Plant's oxygen'}</p>;\n}"))
+      .mockResolvedValueOnce(reactResponse(brokenQuiz))
+      .mockResolvedValueOnce(reactResponse('function App() { return <p>Oxygen comes from water.</p>; }'))
+
+    const result = await runVisualizeGeneration({ task_description: 'Show how water releases oxygen.' })
+    expect(result.code).toContain('React.createElement("p", null, "Oxygen comes from water.")')
+    const userMessage = (call: number) => complete.mock.calls[call][0].messages[1].content as string
+    expect(userMessage(0)).toBe('Show how water releases oxygen.')
+    expect(userMessage(1)).toMatch(/rejected: Generated React code has invalid JavaScript syntax \(line 2: .*Plant's oxygen/)
+    expect(userMessage(2)).toContain('rejected: Generated React code has unresolved bindings: selected, setSelected')
+  })
+
   it('never returns invalid React syntax after all three existing attempts fail', async () => {
     complete.mockResolvedValue({ choices: [{ message: { tool_calls: [{
       type: 'function',

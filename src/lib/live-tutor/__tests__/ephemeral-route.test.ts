@@ -228,6 +228,9 @@ describe('POST /api/genai/ephemeral', () => {
             expect(mask.split(',')).toContain(field);
         }
         expect(mask).not.toContain('sessionResumption');
+        // Gemini rejects array-index paths such as `tools.0`.
+        expect(mask).not.toMatch(/\.\d/);
+        expect(Object.keys(wire?.bidiGenerateContentSetup as object).every(field => mask.split(',').includes(field))).toBe(true);
     });
 
     it('requires authentication', async () => {

@@ -141,8 +141,15 @@ export async function POST(request: NextRequest) {
                     newSessionExpireTime: newSessionExpireTime.toISOString(),
                     liveConnectConstraints: { model, config: constrainedConfig as never },
                     lockAdditionalFields: LOCKED_SETUP_FIELDS,
-                    // Bounded so a hung request can't outlive the stale-issuance window in the database.
-                    httpOptions: { apiVersion: 'v1alpha', timeout: 30_000 },
+                    httpOptions: {
+                        apiVersion: 'v1alpha',
+                        // Bounded so a hung request can't outlive the stale-issuance window in the database.
+                        timeout: 30_000,
+                        // The SDK derives the mask from the setup and writes the tools array as
+                        // `tools.0,tools.1`, which Gemini rejects. Every setup field we send is in
+                        // this list, so locking the whole top-level fields is the same lock, spelled validly.
+                        extraBody: { fieldMask: LOCKED_SETUP_FIELDS.join(',') },
+                    },
                 },
             });
             tokenName = token.name;
