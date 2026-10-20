@@ -73,6 +73,18 @@ describe('responsive visualization generation', () => {
     expect(userMessage(2)).toContain('rejected: Generated React code has unresolved bindings: selected, setSelected')
   })
 
+  it('keeps the visual on the lesson topic and asks for one house style and an on-screen description', async () => {
+    await runVisualizeGeneration({ task_description: 'Show a leaf.', topic: '  How Photosynthesis Works ' })
+    const { messages, tools } = complete.mock.calls[0][0]
+    expect(messages[1].content).toBe('Lesson topic: "How Photosynthesis Works". Keep the visual about this lesson.\n\nShow a leaf.')
+    expect(messages[0].content).toMatch(/House Style[\s\S]*20px[\s\S]*16px[\s\S]*14px[\s\S]*Fill the drawable area/)
+    expect(tools[0].function.parameters.properties.explanation.description).toMatch(/what is on screen and how to use it/)
+
+    complete.mockClear()
+    await runVisualizeGeneration({ task_description: 'Show a leaf.', topic: 42 })
+    expect(complete.mock.calls[0][0].messages[1].content).toBe('Show a leaf.')
+  })
+
   it('never returns invalid React syntax after all three existing attempts fail', async () => {
     complete.mockResolvedValue({ choices: [{ message: { tool_calls: [{
       type: 'function',

@@ -211,12 +211,12 @@ export const TutorExperience = ({
       const response = await fetch('/api/genai/visualize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions, theme, theme_colors: themeColors })
+        body: JSON.stringify({ task_description: current.taskDescription || 'Regenerate visualization', panel_dimensions: panelDimensions, theme, theme_colors: themeColors, topic: lessonContext?.title || current.topic })
       });
       if (!response.ok) throw new Error('Failed to regenerate visualization');
       const vizData = await response.json();
 
-      const updated: Visualization = { id: current.id, code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: current.taskDescription, panelDimensions };
+      const updated: Visualization = { id: current.id, code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: current.taskDescription, topic: current.topic, panelDimensions };
       // Use dispatch to batch update visualization and set current code/library
       vizDispatch({ type: 'UPDATE_VISUALIZATION', index: currentVizIndex, payload: updated });
       vizDispatch({ type: 'SET_CURRENT_VIZ', payload: { code: vizData.code, library: vizData.library, index: currentVizIndex } });
@@ -239,7 +239,7 @@ export const TutorExperience = ({
     } finally {
       vizDispatch({ type: 'SET_GENERATING', payload: false });
     }
-  }, [currentVizIndex, visualizations, apiKey, theme, themeColors, objectiveLearning])
+  }, [currentVizIndex, visualizations, apiKey, theme, themeColors, objectiveLearning, lessonContext])
 
   const handleRendererError = useCallback(async (errMsg: string) => {
     // Increment retry counter
@@ -307,6 +307,7 @@ export const TutorExperience = ({
       vizDispatch({ type: 'SET_GENERATING', payload: true });
       try {
         const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
+        const vizTopic = lessonContext?.title || topic || undefined;
 
         const response = await fetch('/api/genai/visualize', {
           method: 'POST',
@@ -318,7 +319,8 @@ export const TutorExperience = ({
             task_description: args.task_description,
             panel_dimensions: panelDimensions,
             theme,
-            theme_colors: themeColors
+            theme_colors: themeColors,
+            topic: vizTopic,
           }),
         });
 
@@ -335,7 +337,7 @@ export const TutorExperience = ({
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
-          payload: { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: args.task_description, panelDimensions }
+          payload: { code: vizData.code, library: vizData.library, explanation: vizData.explanation, taskDescription: args.task_description, topic: vizTopic, panelDimensions }
         });
         if (currentSessionId) {
           try {

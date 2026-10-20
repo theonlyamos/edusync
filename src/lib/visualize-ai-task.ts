@@ -55,6 +55,13 @@ Every visualization or quiz should feel like a guided discovery, not a diagram o
 - **Clean & focused:** One dominant color with 1–2 accents. No rainbow palettes. Generous whitespace. Rounded corners, soft shadows. Nothing decorative that doesn't teach.
 - **Avoid:** Symmetric card grids, flat white backgrounds, plain text question lists, generic correct/incorrect banners with no explanation.
 
+### House Style (every visual)
+Every visual must look like part of the same app.
+- **Type scale (rendered screen pixels):** one title at 20px semibold; body, instruction and control text at 16px; diagram and axis labels at 14px. Never smaller than 14px or larger than 24px.
+- **Text and font:** the system UI font, near-black (#1f2937) or gray-600 text on light backgrounds.
+- **Fill the drawable area:** the main visual spans the full container width (centered with a max width around 960px on very wide screens) and uses most of its height. Never leave a small drawing floating in empty space. Set fixed sizes such as that max width or a chart's height with inline style props: bracket classes like h-[360px] do not exist in this sandbox and collapse to nothing.
+- **Shapes and spacing:** 12px rounded corners, soft shadows, and spacing in steps of 8, 16 and 24px.
+
 ### Quiz Design
 When generating a quiz, default to a **visual puzzle** — not a text question with answer choices. The learner should interact with the visual itself to answer.
 
@@ -125,7 +132,7 @@ const displayVisualAidFunctionDeclaration = {
         explanation: {
           type: 'string',
           description:
-            "The complete text explanation that will accompany the visual. This explanation must be easy to understand and contain NO technical jargon (e.g., 'React', 'useState', 'JavaScript').",
+            "Two or three sentences for the learner. First say exactly what is on screen and how to use it, in the visual's own words (name each control, and say whether to tap, drag or type to answer). Describe the interaction your code actually implements, even where it differs from the request. Then explain the concept. The tutor reads this to know what actually rendered. Easy to understand, with NO technical jargon (e.g., 'React', 'useState', 'JavaScript').",
         },
         code: {
           type: 'string',
@@ -145,6 +152,8 @@ const displayVisualAidFunctionDeclaration = {
 
 export type VisualizeGenerationInput = {
   task_description: string
+  /** The lesson or session topic, so a visual stays on the lesson. */
+  topic?: unknown
   panel_dimensions?: VisualizationDimensions
   theme?: string
   theme_colors?: Record<string, string>
@@ -263,6 +272,8 @@ function describeFailure(err: unknown): string {
 
 export async function runVisualizeGeneration(input: VisualizeGenerationInput): Promise<VisualizeGenerationResult> {
   const { task_description, panel_dimensions, theme, theme_colors } = input
+  const topic = typeof input.topic === 'string' ? input.topic.trim().slice(0, 200) : ''
+  const request = topic ? `Lesson topic: "${topic}". Keep the visual about this lesson.\n\n${task_description}` : task_description
 
   if (!task_description) {
     throw new Error('task_description is required')
@@ -303,7 +314,7 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
 
   for (let attempt = 1; attempt <= MAX_VIZ_GENERATION_ATTEMPTS; attempt++) {
     try {
-      const result = await generateVisualizationOnce(systemPromptWithDimensions, task_description, previousFailure)
+      const result = await generateVisualizationOnce(systemPromptWithDimensions, request, previousFailure)
       // Strip stray `display_visual_aid(...)` calls the model sometimes appends. If a reference
       // still survives (e.g. the whole component was wrapped in the call) or nothing is left, the
       // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.

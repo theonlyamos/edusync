@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse
 
     const body = await request.json()
-    const { task_description, panel_dimensions, theme, theme_colors } = body
+    const { task_description, panel_dimensions, theme, theme_colors, topic } = body
 
     if (!task_description) {
       return NextResponse.json({ error: 'task_description is required' }, { status: 400 })
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       panel_dimensions,
       theme,
       theme_colors,
+      topic,
     })
 
     return NextResponse.json(result)
