@@ -8,6 +8,7 @@ export const REACT_COMPONENT_ARGUMENTS = [
   'LineChart', 'BarChart', 'PieChart', 'AreaChart', 'ScatterChart', 'RadarChart',
   'XAxis', 'YAxis', 'CartesianGrid', 'Tooltip', 'Legend', 'ResponsiveContainer',
   'Line', 'Bar', 'Area', 'Pie', 'Cell', 'Scatter', 'RadialBar', 'RadialBarChart',
+  'ComposedChart', 'ReferenceLine', 'ReferenceDot', 'ReferenceArea', 'LabelList',
   'MapContainer', 'TileLayer', 'Marker', 'Popup', 'Polyline', 'Polygon',
   'Circle', 'Rectangle', 'useMap', 'useMapEvent', 'L', 'openCodeEditor',
 ] as const;
@@ -25,7 +26,8 @@ export function prepareReactComponentCode(input: string): string {
   const body = lines.slice(start).filter(line => !REACT_HOOK_DESTRUCTURE_LINE.test(line)).join('\n');
   const trimmed = body.trim();
   if (!COMPONENT_EXPORT_PATTERN.test(trimmed) && BARE_ELEMENT_PATTERN.test(trimmed)) {
-    return `const Component = () => (${trimmed});`;
+    // A trailing semicolon inside the parentheses would be a syntax error.
+    return `const Component = () => (${trimmed.replace(/;\s*$/, '')});`;
   }
   return body;
 }
@@ -34,7 +36,8 @@ export function prepareReactComponentCode(input: string): string {
 export function assertReactComponentSyntax(code: string): void {
   try {
     new Function(...REACT_COMPONENT_ARGUMENTS, prepareReactComponentCode(code));
-  } catch {
-    throw new Error('Generated React code has invalid JavaScript syntax');
+  } catch (error) {
+    // The cause (e.g. "Identifier 'Slider' has already been declared") is for the model's retry.
+    throw new Error('Generated React code has invalid JavaScript syntax', { cause: error });
   }
 }
