@@ -11,6 +11,8 @@ export type Visualization = {
     library: 'p5' | 'three' | 'react';
     explanation?: string;
     taskDescription?: string;
+    /** Topic the visual was generated for, so regenerating it stays on that subject. */
+    topic?: string;
     panelDimensions?: { width: number; height: number };
 };
 
