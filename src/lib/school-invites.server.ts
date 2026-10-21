@@ -170,6 +170,7 @@ export async function createSchoolInvites(context: SendContext, invites: Invite[
       role: row.role,
       gradeLevel: row.grade_level,
       url: inviteLink(origin, tokens.get(row.email) as string),
+      tokenHash: row.token,
       expiresAt,
     })),
   )
@@ -200,6 +201,7 @@ type OutgoingInvite = {
   role: string
   gradeLevel: string | null
   url: string
+  tokenHash: string
   expiresAt: Date
 }
 
@@ -231,13 +233,19 @@ async function emailInvites({ supabase, school, inviter }: SendContext, outgoing
   })
 
   if (delivered.size > 0) {
+    // Match on the exact link that was emailed (its token hash), not just the
+    // address: if another resend replaced the token meanwhile, that newer link
+    // was not emailed and must stay unmarked.
     const sentAt = new Date().toISOString()
-    for (const part of chunk([...delivered], 100)) {
-      const { error } = await supabase.rpc('mark_school_invites_sent', {
-        p_organization_id: school.id,
-        p_emails: part,
-        p_sent_at: sentAt,
-      })
+    const sentHashes = outgoing.filter((invite) => delivered.has(invite.email)).map((invite) => invite.tokenHash)
+    for (const part of chunk(sentHashes, 100)) {
+      const { error } = await supabase
+        .from('organization_invitations')
+        .update({ last_sent_at: sentAt })
+        .eq('organization_id', school.id)
+        .in('token', part)
+        .is('accepted_at', null)
+        .is('revoked_at', null)
       if (error) console.error('Failed to record invite sends:', error)
     }
   }
@@ -266,7 +274,7 @@ export async function resendSchoolInvite(context: SendContext, inviteId: string)
 
   const url = inviteLink(origin, token)
   const delivered = await emailInvites(context, [
-    { email: invite.email, name: invite.name, role: invite.role, gradeLevel: invite.grade_level, url, expiresAt },
+    { email: invite.email, name: invite.name, role: invite.role, gradeLevel: invite.grade_level, url, tokenHash: hashInviteToken(token), expiresAt },
   ])
   const emailed = delivered.has(invite.email)
   return { email: invite.email, outcome: 'invited', emailed, inviteUrl: emailed ? undefined : url }

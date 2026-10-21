@@ -99,9 +99,7 @@ describe('createSchoolInvites', () => {
     const sent = JSON.parse(String(fetchMock.mock.calls[0][1].body))
     expect(sent[0]).toMatchObject({ from: 'InsyteAI <invites@example.com>', to: ['a@example.com'], subject: 'Join Hilltop on InsyteAI' })
     expect(sent[0].text).toContain('https://app.test/join/')
-    expect(fake.rpcCalls).toEqual([
-      { name: 'mark_school_invites_sent', args: expect.objectContaining({ p_organization_id: 'school-1', p_emails: ['a@example.com', 'b@example.com'] }) },
-    ])
+    expect(fake.tables.organization_invitations.every((row) => typeof row.last_sent_at === 'string')).toBe(true)
   })
 })
 
@@ -120,5 +118,22 @@ describe('resendSchoolInvite', () => {
     expect(fake.tables.organization_invitations[0].last_sent_at).toBeNull()
     expect(await resendSchoolInvite(context(fake.client), 'done')).toBeNull()
     expect(await resendSchoolInvite(context(fake.client), 'other')).toBeNull()
+  })
+  it('does not mark a newer link as emailed when the token changed during the send', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_test')
+    vi.stubEnv('EMAIL_FROM', 'InsyteAI <invites@example.com>')
+    const fake = fakeSupabase({
+      organization_invitations: [
+        { id: 'open', organization_id: 'school-1', email: 'a@example.com', role: 'teacher', token: 'h1', accepted_at: null, revoked_at: null, last_sent_at: null },
+      ],
+    })
+    // While this email is in flight, another resend swaps in a link that is never emailed.
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      fake.tables.organization_invitations[0].token = 'hash-of-a-hand-shared-link'
+      return new Response(JSON.stringify({ id: 'e1' }), { status: 200 })
+    }))
+    const result = await resendSchoolInvite(context(fake.client), 'open')
+    expect(result?.emailed).toBe(true)
+    expect(fake.tables.organization_invitations[0].last_sent_at).toBeNull()
   })
 })

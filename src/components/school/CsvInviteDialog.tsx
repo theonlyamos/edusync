@@ -28,6 +28,18 @@ type Props = {
 const TEMPLATE = 'name,email,role,grade\nAma Mensah,ama@example.com,student,Primary 4\nKofi Boateng,kofi@example.com,teacher,\n';
 const TEMPLATE_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`;
 
+// Quotes cells that need it, and stops spreadsheets reading a cell as a formula.
+const csvCell = (raw: string) => {
+  const value = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+};
+
+/** A CSV of email and invite link for invites that were not emailed. */
+export function linksCsvHref(results: InviteResult[]) {
+  const rows = ['email,invite_link', ...results.filter((r) => r.inviteUrl).map((r) => `${csvCell(r.email)},${csvCell(r.inviteUrl!)}`)];
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(rows.join('\n') + '\n')}`;
+}
+
 /** Upload or paste a CSV of people, check every row, then send all the invites at once. */
 export function CsvInviteDialog({ open, onOpenChange, grades, onSent }: Props) {
   const [csv, setCsv] = useState('');
@@ -98,9 +110,19 @@ export function CsvInviteDialog({ open, onOpenChange, grades, onSent }: Props) {
               {invited.length} invited{skipped.length ? `, ${skipped.length} already in your school` : ''}{failed.length ? `, ${failed.length} failed` : ''}.
             </p>
             {notEmailed.length > 0 && (
-              <p className="text-muted-foreground">
-                {notEmailed.length} invites were saved but not emailed. Use Resend in the invite list to email them, or to get a link you can share yourself.
-              </p>
+              <div className="space-y-2">
+                <p className="text-muted-foreground">
+                  {notEmailed.length} {notEmailed.length === 1 ? 'invite was' : 'invites were'} saved but not emailed. Download the links now and send each person their own. You can&apos;t see these links again after closing this window, but Resend in the invite list makes a new one.
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <a href={linksCsvHref(notEmailed)} download="invite-links.csv"><Download className="mr-1 h-4 w-4" />Download {notEmailed.length} invite {notEmailed.length === 1 ? 'link' : 'links'}</a>
+                </Button>
+                <ul className="max-h-40 overflow-auto rounded-md border p-2 text-xs">
+                  {notEmailed.map((r) => (
+                    <li key={r.email} className="flex gap-2 py-0.5"><span className="shrink-0 font-medium">{r.email}</span><span className="truncate text-muted-foreground">{r.inviteUrl}</span></li>
+                  ))}
+                </ul>
+              </div>
             )}
             {failed.length > 0 && (
               <ul className="max-h-48 list-disc overflow-auto pl-5 text-destructive">
