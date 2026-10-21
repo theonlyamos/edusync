@@ -90,9 +90,10 @@ export default function LessonPage() {
     const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content' | 'resource'; id: string } | null>(null);
     const [deleting, setDeleting] = useState(false);
 
+    const requestedTab = searchParams.get('tab');
     useEffect(() => {
-        if (searchParams.get('tab') === 'studio') setActiveTab('studio');
-    }, [searchParams]);
+        if (requestedTab && ['overview', 'studio', 'content', 'resources'].includes(requestedTab)) setActiveTab(requestedTab);
+    }, [requestedTab]);
 
     useEffect(() => {
         if (params.lessonId) {
@@ -109,6 +110,8 @@ export default function LessonPage() {
             if (!response.ok) throw new Error(response.status === 404 ? 'This lesson no longer exists.' : 'The lesson could not be loaded.');
             const data = await response.json();
             setLesson(data);
+            // Lessons still being built open where the work happens.
+            if (!requestedTab && !data.current_publication_id && !data.archived_at) setActiveTab('studio');
         } catch (error) {
             console.error('Error:', error);
             setLessonLoadError(error instanceof Error ? error.message : 'The lesson could not be loaded.');
@@ -404,11 +407,15 @@ export default function LessonPage() {
                     <TabsContent value="content" className="mt-6">
                         <LessonContentEditor lessonId={lesson._id} content={lesson.content ?? null} live={!!lesson.current_publication_id} onSaved={(content) => setLesson((current) => current ? { ...current, content: content ?? '' } : current)} />
 
-                        {/* Generated Content Section */}
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold">Generated Content</h2>
-                            <Button onClick={() => setIsGenerating(true)}>
-                                Generate Content
+                        {/* Practice materials from the older generator. New lessons use the Objective Studio instead. */}
+                        {contents.length > 0 && <>
+                        <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
+                            <div>
+                                <h2 className="text-xl font-semibold">Earlier practice materials</h2>
+                                <p className="text-sm text-muted-foreground">Made with the older content generator. Students see these in a separate Content tab. Visuals and quizzes for each objective now live in the Objective Studio.</p>
+                            </div>
+                            <Button variant="outline" onClick={() => setIsGenerating(true)}>
+                                Generate more
                             </Button>
                         </div>
 
@@ -451,6 +458,7 @@ export default function LessonPage() {
                                 </Card>
                             ))}
                         </div>
+                        </>}
 
                         {isGenerating && (
                             <ContentGenerationForm
