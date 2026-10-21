@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
 import React, { ReactElement, useState, useEffect, useContext } from 'react';
 import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAuthProvider';
@@ -272,9 +273,9 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
     <div className={cn("h-full min-h-0 shrink-0 bg-card border-r flex flex-col transition-all duration-200 ease-in-out", mobile ? "w-full" : isCollapsed ? "w-16" : "w-64")}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className={cn('p-6', isCollapsed && 'px-2')}>
-          <h1 title="EduSync" className={cn("text-2xl font-bold gradient-text", { 'text-center': isCollapsed })}>
-            {isCollapsed ? 'E' : 'EduSync'}
-          </h1>
+          <Link href="/" aria-label="InsyteAI home" className={cn("flex", isCollapsed && "justify-center")}>
+            <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
+          </Link>
           {!isCollapsed && (
             <p className="text-sm text-muted-foreground mt-1">
               {role.charAt(0).toUpperCase() + role.slice(1)} Portal
