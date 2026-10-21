@@ -122,6 +122,7 @@ export async function studentDashboard(
         .from("lessons")
         .select("id,title,subject,organization_id,current_publication_id")
         .in("id", lessonIds)
+        .is("archived_at", null)
     : { data: [], error: null };
   if (lessonsRes.error) throw lessonsRes.error;
   // Progress and resume use the lesson's current publication: an older
@@ -417,6 +418,7 @@ export async function teacherDashboard(
         .from("lessons")
         .select("id,title,current_publication_id,organization_id")
         .eq("teacher_id", teacher.id)
+        .is("archived_at", null)
     : { data: [], error: null };
   if (lessonError) throw lessonError;
   const lessons = (lessonRows ?? []).filter((l) =>

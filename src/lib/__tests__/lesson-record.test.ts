@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatLessonDate, mapLessonRecord } from '../lesson-record';
+import { formatGradeLevel, formatLessonDate, lessonObjectiveList, lessonStatus, mapLessonRecord } from '../lesson-record';
 
 describe('lesson record mapping', () => {
   it('maps database field names to the lesson UI contract', () => {
@@ -21,5 +21,25 @@ describe('lesson record mapping', () => {
     expect(formatLessonDate(undefined)).toBe('Not available');
     expect(formatLessonDate('not-a-date')).toBe('Not available');
     expect(formatLessonDate('2026-07-11T10:00:00.000Z')).not.toBe('Invalid Date');
+  });
+});
+
+describe('lesson list helpers', () => {
+  it('derives draft, live and archived status', () => {
+    expect(lessonStatus({})).toBe('draft');
+    expect(lessonStatus({ current_publication_id: 'pub-1' })).toBe('live');
+    expect(lessonStatus({ current_publication_id: 'pub-1', archived_at: '2026-10-21T19:00:00Z' })).toBe('archived');
+  });
+
+  it('reads objectives from arrays and older newline strings', () => {
+    expect(lessonObjectiveList(['Define force.', ' ', 'Calculate net force.'])).toEqual(['Define force.', 'Calculate net force.']);
+    expect(lessonObjectiveList('Define force.\nCalculate net force.\n')).toEqual(['Define force.', 'Calculate net force.']);
+    expect(lessonObjectiveList(null)).toEqual([]);
+  });
+
+  it('formats grade levels for display', () => {
+    expect(formatGradeLevel('jhs 1')).toBe('JHS 1');
+    expect(formatGradeLevel('primary 3')).toBe('Primary 3');
+    expect(formatGradeLevel('')).toBe('No grade');
   });
 });

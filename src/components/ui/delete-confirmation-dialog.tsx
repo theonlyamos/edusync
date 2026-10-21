@@ -19,6 +19,7 @@ interface DeleteConfirmationDialogProps {
     title?: string;
     description?: string;
     isDeleting?: boolean;
+    confirmLabel?: string;
 }
 
 export function DeleteConfirmationDialog({
@@ -28,6 +29,7 @@ export function DeleteConfirmationDialog({
     title = "Are you sure?",
     description = "This action cannot be undone. This will permanently delete the item.",
     isDeleting = false,
+    confirmLabel = "Delete",
 }: DeleteConfirmationDialogProps) {
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -49,7 +51,7 @@ export function DeleteConfirmationDialog({
                         disabled={isDeleting}
                     >
                         {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Delete
+                        {confirmLabel}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

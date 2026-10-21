@@ -30,6 +30,14 @@ export async function GET(request: Request) {
 
         if (grade) query = query.eq('gradelevel', grade);
         if (subject) query = query.eq('subject', subject);
+        const role = session.user.role;
+        const canManage = role === 'teacher' || role === 'admin';
+        // Archived lessons are hidden unless a teacher or admin asks for them.
+        query = canManage && searchParams.get('archived') === 'only'
+            ? query.not('archived_at', 'is', null)
+            : query.is('archived_at', null);
+        // Everyone else only sees lessons that have been published to students.
+        if (!canManage) query = query.not('current_publication_id', 'is', null);
 
         // For teachers, filter by their teacher record
         if (session.user.role === 'teacher') {

@@ -63,7 +63,9 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
         : [''],
   );
   const [teacherBrief, setTeacherBrief] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const loading = saving || generating;
   const [generatedContent, setGeneratedContent] = useState(lesson?.content || '');
   const [teacherData, setTeacherData] = useState<Teacher | null>(null);
   const [loadingTeacher, setLoadingTeacher] = useState(false);
@@ -139,7 +141,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setFormError('');
 
     try {
@@ -166,7 +168,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       console.error(isEditing ? 'Error updating lesson:' : 'Error creating lesson:', error);
       setFormError(error instanceof Error ? error.message : 'Could not save the lesson');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -174,7 +176,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
     const hasExistingGeneratedFields = generatedContent.trim() || objectives.some((objective) => objective.trim());
     const replaceExisting = Boolean(hasExistingGeneratedFields) && window.confirm('Replace your current objectives and lesson content with a new AI draft? Choose Cancel to preserve them and fill only fields that are still empty. Your title will always be preserved.');
     if (hasExistingGeneratedFields && !replaceExisting && generatedContent.trim() && objectives.some((objective) => objective.trim())) return;
-    setLoading(true);
+    setGenerating(true);
     setFormError('');
     try {
       const response = await fetch('/api/teachers/lessons/generate-draft', {
@@ -204,7 +206,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       console.error('Error generating lesson content:', error);
       setFormError(error instanceof Error ? error.message : 'Could not generate the lesson draft');
     } finally {
-      setLoading(false);
+      setGenerating(false);
     }
   };
 
@@ -215,7 +217,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
           <div>
             <CardTitle>{isEditing ? 'Edit Lesson' : 'Create New Lesson'}</CardTitle>
             <CardDescription>
-              {isEditing ? 'Update lesson details or regenerate content' : 'Fill in the lesson details or use AI to generate content'}
+              {isEditing ? 'Update lesson details or redraft them with AI' : 'Write your objectives, or let AI draft them and the lesson notes from your title and brief.'}
             </CardDescription>
           </div>
           <Button
@@ -371,19 +373,16 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
               onClick={generateLessonContent}
               disabled={loading || !title || !subject || !gradeLevel || (!isEditing && organizationStatus !== 'ready')}
             >
-              {loading ? (
+              {generating ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Wand2 className="mr-2 h-4 w-4" />
               )}
-              {isEditing ? 'Regenerate Draft' : 'Generate Draft'}
+              {isEditing ? 'Redraft with AI' : 'Draft with AI'}
             </Button>
-            <Button type="submit" disabled={loading || !generatedContent || objectives.some((objective) => !objective.trim()) || (!isEditing && organizationStatus !== 'ready') || (organizations.length > 1 && !organizationId)}>
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                isEditing ? 'Update Lesson' : 'Create Lesson'
-              )}
+            <Button type="submit" disabled={loading || !title.trim() || !subject || !gradeLevel || objectives.some((objective) => !objective.trim()) || (!isEditing && organizationStatus !== 'ready') || (organizations.length > 1 && !organizationId)}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditing ? 'Update Lesson' : 'Create Lesson'}
             </Button>
           </div>
         </CardFooter>

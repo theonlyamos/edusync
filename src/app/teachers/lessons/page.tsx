@@ -1,60 +1,83 @@
 'use client';
 
-import { useState, useEffect, useContext } from 'react';
-import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-
-export const dynamic = 'force-dynamic';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Archive, BookOpen, Loader2, Plus, RotateCcw } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/components/ui/use-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
-import { formatLessonDate } from '@/lib/lesson-record';
+import { LessonStatusBadge } from '@/components/lessons/LessonStatusBadge';
+import { formatGradeLevel, formatLessonDate, lessonObjectiveList, lessonStatus } from '@/lib/lesson-record';
+import { cn } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
 
 interface Lesson {
   _id: string;
   title: string;
   subject: string;
   gradeLevel: string;
-  objectives: string;
+  objectives: string | string[];
   createdAt: string | null;
+  current_publication_id?: string | null;
+  archived_at?: string | null;
 }
 
+type View = 'active' | 'archived';
+const PREVIEW_OBJECTIVES = 3;
+
 export default function LessonsPage() {
-  const session = useContext(SupabaseSessionContext);
+  const { toast } = useToast();
+  const [view, setView] = useState<View>('active');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [restoringId, setRestoringId] = useState('');
 
-  useEffect(() => {
-    fetchLessons();
-  }, []);
-
-  const fetchLessons = async () => {
+  const fetchLessons = useCallback(async (nextView: View) => {
+    setLoading(true);
+    setLoadError('');
     try {
-      const response = await fetch('/api/lessons');
-      if (!response.ok) throw new Error('Failed to fetch lessons');
-      const data = await response.json();
-      setLessons(data);
+      const response = await fetch(nextView === 'archived' ? '/api/lessons?archived=only' : '/api/lessons');
+      if (!response.ok) throw new Error('Your lessons could not be loaded.');
+      setLessons(await response.json());
     } catch (error) {
-      console.error('Error fetching lessons:', error);
+      setLoadError(error instanceof Error ? error.message : 'Your lessons could not be loaded.');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { queueMicrotask(() => void fetchLessons(view)); }, [fetchLessons, view]);
+
+  const restore = async (lesson: Lesson) => {
+    setRestoringId(lesson._id);
+    try {
+      const response = await fetch(`/api/teachers/lessons/${lesson._id}/archive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'The lesson could not be restored.');
+      toast({ title: 'Lesson restored', description: `"${lesson.title}" is back in your lessons.` });
+      await fetchLessons(view);
+    } catch (error) {
+      toast({ title: 'Could not restore lesson', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setRestoringId('');
     }
   };
 
   return (
     <DashboardLayout>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
+      <div className="p-3 sm:p-6">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-3xl font-bold text-foreground">Lessons</h2>
             <p className="text-muted-foreground">Create and manage your lessons</p>
@@ -65,47 +88,92 @@ export default function LessonsPage() {
           </Button>
         </div>
 
+        <div role="tablist" aria-label="Lesson list" className="mb-6 inline-flex rounded-lg border bg-muted/40 p-1 text-sm">
+          {(['active', 'archived'] as const).map((option) => (
+            <button
+              key={option}
+              role="tab"
+              aria-selected={view === option}
+              onClick={() => setView(option)}
+              className={cn(
+                'rounded-md px-3 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                view === option ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {option === 'active' ? 'Lessons' : 'Archived'}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-2">Loading...</h2>
-              <p className="text-muted-foreground">Please wait while we load your timetable</p>
-            </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading lessons">
+            {Array.from({ length: 3 }, (_, index) => (
+              <Card key={index}><CardHeader className="space-y-3"><Skeleton className="h-5 w-3/4" /><Skeleton className="h-4 w-1/3" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /></CardContent></Card>
+            ))}
+          </div>
+        ) : loadError ? (
+          <div role="alert" className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button variant="outline" onClick={() => void fetchLessons(view)}>Try again</Button>
+          </div>
+        ) : lessons.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
+            {view === 'active' ? <BookOpen className="h-8 w-8 text-muted-foreground" /> : <Archive className="h-8 w-8 text-muted-foreground" />}
+            <h3 className="text-lg font-semibold">{view === 'active' ? 'No lessons yet' : 'No archived lessons'}</h3>
+            <p className="max-w-md text-sm text-muted-foreground">
+              {view === 'active'
+                ? 'Create a lesson from a title and a few objectives. AI can draft the objectives for you, then help you build visuals and quizzes for each one.'
+                : 'Lessons you archive appear here. Students cannot open them until you restore them.'}
+            </p>
+            {view === 'active' && <Button onClick={() => setIsCreating(true)}><Plus className="mr-2 h-4 w-4" />Create your first lesson</Button>}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lessons.map((lesson) => (
-              <Link href={`/teachers/lessons/${lesson._id}`} key={lesson._id}>
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <CardTitle>{lesson.title}</CardTitle>
-                    <CardDescription>
-                      {lesson.subject} • Grade {lesson.gradeLevel}
-                    </CardDescription>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {lessons.map((lesson) => {
+              const objectives = lessonObjectiveList(lesson.objectives);
+              const status = lessonStatus(lesson);
+              const card = (
+                <Card className={cn('flex h-full flex-col', status !== 'archived' && 'cursor-pointer transition-shadow hover:shadow-lg')}>
+                  <CardHeader className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <CardTitle className="min-w-0 break-words">{lesson.title}</CardTitle>
+                      <LessonStatusBadge status={status} className="shrink-0" />
+                    </div>
+                    <CardDescription>{lesson.subject} • {formatGradeLevel(lesson.gradeLevel)}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {lesson.objectives}
-                    </p>
+                  <CardContent className="flex-1">
+                    {objectives.length ? (
+                      <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+                        {objectives.slice(0, PREVIEW_OBJECTIVES).map((objective, index) => <li key={index} className="line-clamp-2">{objective}</li>)}
+                        {objectives.length > PREVIEW_OBJECTIVES && <li className="list-none text-xs">+{objectives.length - PREVIEW_OBJECTIVES} more</li>}
+                      </ul>
+                    ) : <p className="text-sm text-muted-foreground">No objectives yet</p>}
                   </CardContent>
-                  <CardFooter>
-                    <p className="text-sm text-muted-foreground">
-                      Created: {formatLessonDate(lesson.createdAt)}
-                    </p>
+                  <CardFooter className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">Created {formatLessonDate(lesson.createdAt)}</p>
+                    {status === 'archived' && (
+                      <Button size="sm" variant="outline" disabled={restoringId === lesson._id} onClick={() => void restore(lesson)}>
+                        {restoringId === lesson._id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+                        Restore
+                      </Button>
+                    )}
                   </CardFooter>
                 </Card>
-              </Link>
-            ))}
+              );
+              return status === 'archived'
+                ? <div key={lesson._id}>{card}</div>
+                : <Link href={`/teachers/lessons/${lesson._id}`} key={lesson._id} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{card}</Link>;
+            })}
           </div>
         )}
 
         {isCreating && (
           <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
-            <div className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-50">
+            <div className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-50 w-[calc(100%-2rem)] max-w-2xl">
               <CreateLessonForm
                 onClose={() => {
                   setIsCreating(false);
-                  fetchLessons(); // Refresh lessons after creation
+                  void fetchLessons(view);
                 }}
               />
             </div>

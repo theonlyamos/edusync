@@ -32,6 +32,7 @@ export async function listSources() {
     .from("lessons")
     .select("id,title,subject,gradelevel,current_publication_id")
     .not("current_publication_id", "is", null)
+    .is("archived_at", null)
     .order("title")
     .order("id");
   if (user.role !== "admin")
