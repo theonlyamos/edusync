@@ -1,5 +1,6 @@
 'use client';
 
+import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { useState, useEffect, useContext, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
@@ -345,12 +346,11 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
 
           {generatedContent && (
             <div className="space-y-2">
-              <Label>Lesson Content</Label>
-              <div className="rounded-md border bg-muted p-4">
-                <pre className="text-sm whitespace-pre-wrap">
-                  {generatedContent}
-                </pre>
+              <Label>Lesson text</Label>
+              <div className="max-h-72 overflow-y-auto rounded-md border bg-muted/40 p-4">
+                <MarkdownContent>{generatedContent}</MarkdownContent>
               </div>
+              <p className="text-xs text-muted-foreground">You can edit this on the lesson&apos;s Content tab after creating it.</p>
             </div>
           )}
 

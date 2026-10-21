@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -347,9 +347,7 @@ export default function AdminLessonDetailsPage({ params }: PageProps) {
                                     <CardDescription>The main lesson material</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                        <ReactMarkdown>{lesson.content}</ReactMarkdown>
-                                    </div>
+                                    <MarkdownContent>{lesson.content}</MarkdownContent>
                                 </CardContent>
                             </Card>
                         )}

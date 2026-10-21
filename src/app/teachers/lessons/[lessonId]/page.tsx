@@ -26,7 +26,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
 import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
 import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
 import { LessonStatusBadge } from '@/components/lessons/LessonStatusBadge';
@@ -402,22 +402,7 @@ export default function LessonPage() {
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">
-                        {/* Lesson Content Section */}
-                        {lesson.content && (
-                            <Card className="mb-6">
-                                <CardHeader>
-                                    <CardTitle>Lesson Content</CardTitle>
-                                    <CardDescription>The main lesson material for students</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                        <ReactMarkdown>
-                                            {lesson.content}
-                                        </ReactMarkdown>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
+                        <LessonContentEditor lessonId={lesson._id} content={lesson.content ?? null} live={!!lesson.current_publication_id} onSaved={(content) => setLesson((current) => current ? { ...current, content: content ?? '' } : current)} />
 
                         {/* Generated Content Section */}
                         <div className="flex justify-between items-center mb-4">

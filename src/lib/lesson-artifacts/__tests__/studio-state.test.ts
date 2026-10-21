@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getStudioMaterials, type StudioArtifact } from '../studio-state';
+import { directionEditImpact, getStudioMaterials, type StudioArtifact } from '../studio-state';
 
 function artifact(overrides: Partial<StudioArtifact> = {}): StudioArtifact {
   return { id: 'intro', objective_id: 'objective', objective_revision: 2, series_id: 'intro', version: 1, position: 0,
@@ -41,5 +41,44 @@ describe('focused Studio materials', () => {
     const step = getStudioMaterials([old], 'objective', 2)[0];
     expect(step.artifacts).toHaveLength(1);
     expect(step.approved).toBe(false);
+  });
+});
+
+describe('direction edit impact', () => {
+  const objectives = [
+    { id: 'a', text: 'Name the reactants', position: 0, revision: 2, visualInstructions: '' },
+    { id: 'b', text: 'Explain soil minerals', position: 1, revision: 1, visualInstructions: 'Use a farm' },
+  ];
+  const lessonIntro = artifact({ id: 'lesson-intro', series_id: 'lesson-intro', objective_id: null, objective_revision: 4,
+    payload: { kind: 'generated_image', introductionFor: 'lesson', assetId: 'asset', altText: 'Overview', caption: 'Caption', aspectRatio: '4:3' } });
+  const quiz = (id: string, objective: string, revision: number) => artifact({ id, series_id: id, objective_id: objective, objective_revision: revision, kind: 'structured_quiz',
+    payload: { kind: 'structured_quiz', title: 'Check', questions: [] } as unknown as StudioArtifact['payload'] });
+  const saved = { lessonInstructions: 'Ghana farms', lessonRevision: 4, objectives, artifacts: [lessonIntro, artifact({ objective_id: 'a' }), quiz('qa', 'a', 2), quiz('qb', 'b', 1)] };
+  const same = { lessonInstructions: 'Ghana farms', objectives: objectives.map(({ id, text, visualInstructions }) => ({ id, text, visualInstructions })) };
+
+  it('reports nothing when only whitespace changes', () => {
+    expect(directionEditImpact(saved, { ...same, lessonInstructions: ' Ghana farms ' }).total).toBe(0);
+  });
+  it('outdates every objective and the lesson introduction when lesson directions change', () => {
+    const impact = directionEditImpact(saved, { ...same, lessonInstructions: 'Kumasi market' });
+    expect(impact.lessonIntroduction).toBe(true);
+    expect(impact.objectives.map(item => [item.id, item.approved])).toEqual([['a', 2], ['b', 1]]);
+    expect(impact.total).toBe(4);
+  });
+  it('limits an objective edit to that objective and the lesson introduction', () => {
+    const impact = directionEditImpact(saved, { ...same, objectives: same.objectives.map(item => item.id === 'b' ? { ...item, text: 'Explain minerals' } : item) });
+    expect(impact.objectives.map(item => item.id)).toEqual(['b']);
+    expect(impact.lessonIntroduction).toBe(true);
+    expect(impact.total).toBe(2);
+  });
+  it('changing objective directions keeps the lesson introduction', () => {
+    const impact = directionEditImpact(saved, { ...same, objectives: same.objectives.map(item => item.id === 'a' ? { ...item, visualInstructions: 'Show a leaf' } : item) });
+    expect(impact.lessonIntroduction).toBe(false);
+    expect(impact.total).toBe(2);
+  });
+  it('counts removed objectives and reorders', () => {
+    const impact = directionEditImpact(saved, { ...same, objectives: [same.objectives[1]] });
+    expect(impact.objectives).toEqual([expect.objectContaining({ id: 'a', removed: true, approved: 2 })]);
+    expect(directionEditImpact(saved, { ...same, objectives: [...same.objectives].reverse() })).toMatchObject({ lessonIntroduction: true, total: 1 });
   });
 });

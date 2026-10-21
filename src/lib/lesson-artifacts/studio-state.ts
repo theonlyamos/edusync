@@ -53,3 +53,46 @@ export function getStudioMaterials(artifacts: StudioArtifact[], objectiveId: str
     };
   });
 }
+
+type SavedObjective = { id: string; text: string; position: number; revision: number; visualInstructions: string };
+type DraftObjective = { id?: string; text: string; visualInstructions?: string };
+
+export type DirectionEditImpact = {
+  /** The approved lesson introduction would need a new image. */
+  lessonIntroduction: boolean;
+  /** Saved objectives whose approved materials would become outdated or be removed. */
+  objectives: Array<{ id: string; position: number; text: string; approved: number; removed: boolean }>;
+  /** Approved items that stop counting toward publishing after the save. */
+  total: number;
+};
+
+const clean = (value: string | undefined) => (value ?? '').trim();
+
+/**
+ * Mirrors the database revision rules (save_lesson_objectives and the
+ * lessons_visual_revision trigger) so the Studio can warn before a save
+ * turns approved work into "earlier directions".
+ */
+export function directionEditImpact(
+  saved: { lessonInstructions: string; lessonRevision: number; objectives: SavedObjective[]; artifacts: StudioArtifact[] },
+  draft: { lessonInstructions: string; objectives: DraftObjective[] },
+): DirectionEditImpact {
+  const ordered = [...saved.objectives].sort((a, b) => a.position - b.position);
+  const lessonChanged = clean(saved.lessonInstructions) !== clean(draft.lessonInstructions);
+  const objectiveListChanged = ordered.map(item => clean(item.text)).join('\n') !== draft.objectives.map(item => clean(item.text)).join('\n');
+  const introApproved = saved.artifacts.some(item => item.objective_id === null && item.status === 'approved'
+    && item.objective_revision === saved.lessonRevision && item.payload.kind === 'generated_image' && item.payload.introductionFor === 'lesson');
+  const lessonIntroduction = introApproved && (lessonChanged || objectiveListChanged);
+
+  const objectives = ordered.flatMap((objective) => {
+    const next = draft.objectives.find(item => item.id === objective.id);
+    const removed = !next;
+    const changed = removed || lessonChanged || clean(next.text) !== clean(objective.text)
+      || (next.visualInstructions !== undefined && clean(next.visualInstructions) !== clean(objective.visualInstructions));
+    if (!changed) return [];
+    const approved = getStudioMaterials(saved.artifacts, objective.id, objective.revision).filter(item => item.approved).length;
+    return approved ? [{ id: objective.id, position: objective.position, text: objective.text, approved, removed }] : [];
+  });
+
+  return { lessonIntroduction, objectives, total: Number(lessonIntroduction) + objectives.reduce((sum, item) => sum + item.approved, 0) };
+}

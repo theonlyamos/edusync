@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import { MarkdownContent } from "@/components/content/MarkdownContent";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -584,9 +584,7 @@ function StudentWork({
               Assigned lesson version {reference?.version}
             </DialogDescription>
           </DialogHeader>
-          <div className="prose dark:prose-invert max-w-none break-words [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
-            <ReactMarkdown skipHtml>{reference?.content ?? ""}</ReactMarkdown>
-          </div>
+          <MarkdownContent size="base">{reference?.content ?? ""}</MarkdownContent>
         </DialogContent>
       </Dialog>
     </>
