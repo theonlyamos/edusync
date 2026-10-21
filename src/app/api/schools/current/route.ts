@@ -2,26 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { parseSchoolDetails, schoolSetupSteps } from '@/lib/school-registration';
-
-const SCHOOL_FIELDS = 'id, name, owner_id, country, timezone, grade_levels, setup_dismissed_at, total_credits_purchased, created_at';
+import { getActiveSchoolMembership as findMembership, schoolHasPurchasedCredits } from '@/lib/school-access.server';
 
 type Supabase = ReturnType<typeof createServerSupabase>;
-
-/** The caller's school and their role in it, or null when they have none. */
-async function findMembership(supabase: Supabase, userId: string) {
-  const { data, error } = await supabase
-    .from('organization_members')
-    .select(`role, organizations!inner(${SCHOOL_FIELDS}, type)`)
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .eq('organizations.type', 'school')
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  const school = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
-  return school ? { role: data.role as string, school } : null;
-}
 
 async function countMembers(supabase: Supabase, schoolId: string, role: 'teacher' | 'student') {
   const { count, error } = await supabase
@@ -32,16 +15,6 @@ async function countMembers(supabase: Supabase, schoolId: string, role: 'teacher
     .eq('is_active', true);
   if (error) throw error;
   return count ?? 0;
-}
-
-async function ownerHasPurchased(supabase: Supabase, ownerId: string) {
-  const { count, error } = await supabase
-    .from('credit_transactions')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', ownerId)
-    .eq('transaction_type', 'purchase');
-  if (error) throw error;
-  return (count ?? 0) > 0;
 }
 
 export async function GET() {
@@ -66,14 +39,14 @@ export async function GET() {
     const [teacherCount, studentCount, purchased] = await Promise.all([
       countMembers(supabase, school.id, 'teacher'),
       countMembers(supabase, school.id, 'student'),
-      ownerHasPurchased(supabase, school.owner_id),
+      schoolHasPurchasedCredits(supabase, school),
     ]);
     const steps = schoolSetupSteps({
       hasDetails: Boolean(school.country && school.timezone),
       gradeCount: school.grade_levels?.length ?? 0,
       teacherCount,
       studentCount,
-      hasPurchasedCredits: purchased || (school.total_credits_purchased ?? 0) > 0,
+      hasPurchasedCredits: purchased,
     });
 
     return NextResponse.json({

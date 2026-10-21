@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  KeyRound,
   Users2,
   Sparkles,
   Video,
@@ -131,6 +132,11 @@ const teacherLinks: SidebarLink[] = [
     label: 'Time Table',
     icon: <Calendar className="h-5 w-5" />,
     href: '/teachers/timetable'
+  },
+  {
+    label: 'Class codes',
+    icon: <KeyRound className="h-5 w-5" />,
+    href: '/teachers/class-codes'
   },
   {
     label: 'Assessments',

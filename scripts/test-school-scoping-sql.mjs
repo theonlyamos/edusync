@@ -319,3 +319,150 @@ await test('grade lookups are closed to signed-in callers', async () => {
         /permission denied/,
     );
 });
+
+// ---------------------------------------------------------------------------
+// Invites and class join codes
+// ---------------------------------------------------------------------------
+const newTeacher = id(9);
+const newStudent = id(10);
+const otherPerson = id(11);
+const codeStudent = id(12);
+const declinedStudent = id(13);
+const emailOf = (userId) => `user-${userId.slice(-2)}@example.com`;
+
+await db.exec(`
+    ALTER TABLE auth.users ADD COLUMN email text;
+    ALTER TABLE public.organization_members ADD COLUMN invited_by uuid REFERENCES public.users(id);
+    INSERT INTO public.users (id, role) VALUES
+      ('${newTeacher}', 'student'), ('${newStudent}', 'learner'), ('${otherPerson}', 'student'),
+      ('${codeStudent}', 'student'), ('${declinedStudent}', 'student');
+    INSERT INTO auth.users (id, email_confirmed_at)
+      SELECT id, now() FROM public.users WHERE id NOT IN (SELECT id FROM auth.users);
+    UPDATE auth.users SET email = 'User-' || right(id::text, 2) || '@Example.com';
+    -- The invitations table as production has it before this change.
+    CREATE TABLE public.organization_invitations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+      email text NOT NULL,
+      role text NOT NULL CONSTRAINT organization_invitations_role_check CHECK (role IN ('admin', 'member')),
+      invited_by uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      token text NOT NULL UNIQUE,
+      expires_at timestamptz NOT NULL,
+      accepted_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now());
+    ALTER TABLE public.organization_invitations ENABLE ROW LEVEL SECURITY;
+    GRANT ALL ON public.organization_invitations TO authenticated, service_role;
+    CREATE POLICY organization_invitations_select_member ON public.organization_invitations FOR SELECT USING (
+      EXISTS (SELECT 1 FROM public.organizations o WHERE o.id = organization_invitations.organization_id AND o.owner_id = auth.uid()));
+`);
+await db.exec(await migrationNamed('_school_invites.sql'));
+
+const invite = async (email, role, { token = `token-${email}-${role}`, grade = null, expiresIn = '7 days' } = {}) => {
+    await db.query(
+        `INSERT INTO public.organization_invitations (organization_id, email, role, grade_level, invited_by, token, expires_at)
+         VALUES ($1, $2, $3, $4, $5, encode(sha256(convert_to($6, 'UTF8')), 'hex'), now() + $7::interval)`,
+        [schoolB, email, role, grade, ownerB, token, expiresIn],
+    );
+    return token;
+};
+const accept = (userId, token) => asUser(userId, () => one('SELECT public.accept_school_invite($1) AS r', [token]));
+
+await test('an invited person joins the school with the invited role', async () => {
+    const teacherToken = await invite(emailOf(newTeacher), 'teacher');
+    const { r } = await accept(newTeacher, teacherToken);
+    assert.deepEqual(r, { organization_id: schoolB, role: 'teacher' });
+    assert.equal((await one('SELECT role FROM public.users WHERE id = $1', [newTeacher])).role, 'teacher');
+    assert.equal((await one('SELECT organization_id FROM public.teachers WHERE user_id = $1', [newTeacher])).organization_id, schoolB);
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [newTeacher])).s, schoolB);
+    assert.ok((await one('SELECT accepted_at FROM public.organization_invitations WHERE email = $1', [emailOf(newTeacher)])).accepted_at);
+    // Opening the link again is harmless.
+    assert.deepEqual((await accept(newTeacher, teacherToken)).r, { organization_id: schoolB, role: 'teacher' });
+
+    const studentToken = await invite(emailOf(newStudent), 'student', { grade: 'primary 2' });
+    await accept(newStudent, studentToken);
+    assert.equal((await one('SELECT role FROM public.users WHERE id = $1', [newStudent])).role, 'student');
+    assert.deepEqual(
+        await one('SELECT grade, organization_id FROM public.students WHERE user_id = $1', [newStudent]),
+        { grade: 'primary 2', organization_id: schoolB },
+    );
+    assert.equal((await one('SELECT role FROM public.organization_members WHERE user_id = $1', [newStudent])).role, 'student');
+});
+
+await test('invites only work for the invited, confirmed address and only while open', async () => {
+    const token = await invite(emailOf(otherPerson), 'student', { grade: 'primary 1' });
+    await assert.rejects(accept(codeStudent, token), /different email/);
+    await assert.rejects(accept(otherPerson, 'not-a-token'), /not valid/);
+    await assert.rejects(accept(newTeacher, token), /different email/);
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [otherPerson])).s, null);
+
+    const expired = await invite(emailOf(codeStudent), 'student', { grade: 'primary 1', expiresIn: '-1 minute' });
+    await assert.rejects(accept(codeStudent, expired), /expired/);
+    await db.query('UPDATE public.organization_invitations SET revoked_at = now() WHERE email = $1', [emailOf(codeStudent)]);
+    await assert.rejects(accept(codeStudent, expired), /cancelled/);
+
+    await assert.rejects(accept(studentA, await invite(emailOf(studentA), 'student', { grade: 'primary 1' })), /another school/);
+    await assert.rejects(accept(admin, await invite(emailOf(admin), 'teacher')), /Platform admin/);
+    await assert.rejects(accept(unconfirmed, await invite(emailOf(unconfirmed), 'teacher')), /Confirm your email/);
+    // Someone already in the school cannot take a second role there by invite.
+    await assert.rejects(accept(teacherB, await invite(emailOf(teacherB), 'admin')), /already a member/);
+});
+
+await test('only one open invite per email and school, stored as a hash', async () => {
+    await assert.rejects(invite(emailOf(otherPerson), 'teacher'), /duplicate key/);
+    const stored = await one('SELECT token FROM public.organization_invitations WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL', [emailOf(otherPerson)]);
+    assert.match(stored.token, /^[0-9a-f]{64}$/);
+    await assert.rejects(invite('Not-Lower@Example.com', 'teacher'), /details_check/);
+    await assert.rejects(invite('pupil@example.com', 'student'), /details_check/);
+});
+
+await test('invites, join codes and requests are closed to direct browser access', async () => {
+    for (const table of ['organization_invitations', 'school_join_codes', 'school_join_requests']) {
+        await assert.rejects(asUser(ownerB, () => rows(`SELECT * FROM public.${table}`)), /permission denied/);
+    }
+    await assert.rejects(
+        asUser(ownerB, () => one(`SELECT public.join_school_as($1, $2, 'student', 'primary 1', $3)`, [otherPerson, schoolB, ownerB])),
+        /permission denied/,
+    );
+});
+
+await test('a class code puts a student in a pending request until a school admin approves', async () => {
+    await db.query(`INSERT INTO public.school_join_codes (organization_id, code, grade_level, created_by) VALUES ($1, 'HILL2345', 'primary 3', $2)`, [schoolB, teacherB]);
+    const request = (userId, code = 'hill2345 ') => asUser(userId, () => one('SELECT public.request_school_join($1) AS r', [code]));
+
+    const first = (await request(codeStudent)).r;
+    assert.equal(first.status, 'pending');
+    assert.equal(first.grade_level, 'primary 3');
+    // Asking again keeps a single waiting request.
+    const second = (await request(codeStudent)).r;
+    assert.deepEqual(
+        await rows(`SELECT id, status FROM public.school_join_requests WHERE user_id = $1 ORDER BY created_at, status`, [codeStudent]).then((r) => r.map((x) => x.status).sort()),
+        ['cancelled', 'pending'],
+    );
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [codeStudent])).s, null, 'no access before approval');
+
+    const decide = (userId, requestId, approve) =>
+        asUser(userId, () => one('SELECT public.decide_school_join_request($1, $2) AS r', [requestId, approve]));
+    await assert.rejects(decide(teacherB, second.request_id, true), /Only school owners and admins/);
+    await assert.rejects(decide(learner, second.request_id, true), /Only school owners and admins/);
+    assert.equal((await decide(ownerB, second.request_id, true)).r.status, 'approved');
+    assert.deepEqual(
+        await one('SELECT grade, organization_id FROM public.students WHERE user_id = $1', [codeStudent]),
+        { grade: 'primary 3', organization_id: schoolB },
+    );
+    assert.equal((await one('SELECT role FROM public.users WHERE id = $1', [codeStudent])).role, 'student');
+    await assert.rejects(decide(ownerB, second.request_id, true), /already handled/);
+
+    const declined = (await request(declinedStudent)).r;
+    assert.equal((await decide(ownerB, declined.request_id, false)).r.status, 'declined');
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [declinedStudent])).s, null);
+});
+
+await test('class codes refuse bad codes, staff and members of other schools', async () => {
+    const request = (userId, code) => asUser(userId, () => one('SELECT public.request_school_join($1) AS r', [code]));
+    await assert.rejects(request(otherPerson, 'NOPE0000'), /not valid/);
+    await assert.rejects(request(teacherA, 'HILL2345'), /another school/);
+    await assert.rejects(request(studentB, 'HILL2345'), /already a member/);
+    await assert.rejects(request(unconfirmed, 'HILL2345'), /Confirm your email/);
+    await db.exec(`UPDATE public.school_join_codes SET revoked_at = now() WHERE code = 'HILL2345'`);
+    await assert.rejects(request(otherPerson, 'HILL2345'), /not valid/);
+});
