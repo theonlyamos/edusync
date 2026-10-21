@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useContext, useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,7 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle, ListChecks } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { SchoolSetupChecklist } from '@/components/school/SchoolSetupChecklist';
 import OrgMembersTab from './components/OrgMembersTab';
 import OrgApiKeysTab from './components/OrgApiKeysTab';
 import OrgSettingsTab from './components/OrgSettingsTab';
@@ -20,6 +23,8 @@ type Organization = {
   name: string;
   description: string | null;
   owner_id: string;
+  type?: 'school' | 'developer';
+  setup_dismissed_at?: string | null;
   credits: number;
   total_credits_purchased: number;
   total_credits_used: number;
@@ -30,7 +35,7 @@ type Organization = {
 type OrganizationMember = {
   id: string;
   user_id: string;
-  role: 'owner' | 'admin' | 'member';
+  role: 'owner' | 'admin' | 'member' | 'teacher' | 'student';
   credits_allocated: number;
   credits_used: number;
   joined_at: string;
@@ -45,7 +50,10 @@ type OrganizationMember = {
 export default function OrganizationDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const session = useContext(SupabaseSessionContext);
   const orgId = params?.orgId as string;
+  const [tab, setTab] = useState<string | null>(searchParams?.get('tab') ?? null);
 
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -61,9 +69,9 @@ export default function OrganizationDetailPage() {
     }
   }, [orgId]);
 
-  const fetchOrganization = async () => {
+  const fetchOrganization = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await axios.get(`/api/organizations/${orgId}`);
       setOrganization(response.data.organization);
       setEditFormData({
@@ -113,9 +121,13 @@ export default function OrganizationDetailPage() {
   }
 
   const currentUserMember = organization.organization_members.find(
-    (m) => m.is_active
+    (m) => m.is_active && m.user_id === session?.user?.id
   );
   const isOwnerOrAdmin = !!currentUserMember && ['owner', 'admin'].includes(currentUserMember.role);
+  const isSchool = organization.type === 'school';
+  const showSetup = isSchool && isOwnerOrAdmin;
+  const activeTab = tab ?? (showSetup && !organization.setup_dismissed_at ? 'setup' : 'members');
+  const kind = isSchool ? 'school' : 'organization';
 
   return (
     <div className="container max-w-6xl mx-auto p-6">
@@ -127,13 +139,14 @@ export default function OrganizationDetailPage() {
           className="mb-4"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />
-          Back to Organizations
+          All schools and organizations
         </Button>
 
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold">{organization.name}</h1>
+              {isSchool && <Badge variant="secondary">School</Badge>}
               {isOwnerOrAdmin && (
                 <Button
                   size="icon"
@@ -181,8 +194,14 @@ export default function OrganizationDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="members" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
         <TabsList>
+          {showSetup && (
+            <TabsTrigger value="setup">
+              <ListChecks className="w-4 h-4 mr-2" />
+              Setup
+            </TabsTrigger>
+          )}
           <TabsTrigger value="members">
             <Users className="w-4 h-4 mr-2" />
             Members
@@ -197,10 +216,21 @@ export default function OrganizationDetailPage() {
           </TabsTrigger>
         </TabsList>
 
+        {showSetup && (
+          <TabsContent value="setup">
+            <SchoolSetupChecklist onChanged={() => { setTab(activeTab); fetchOrganization(true); }} />
+          </TabsContent>
+        )}
+
         <TabsContent value="members">
+          {isSchool && isOwnerOrAdmin && (
+            <p className="mb-3 text-sm text-muted-foreground">
+              Teachers and students will join your school by invite. Until invites are ready, members are view only here.
+            </p>
+          )}
           <OrgMembersTab 
             organization={organization}
-            isOwnerOrAdmin={isOwnerOrAdmin}
+            isOwnerOrAdmin={isOwnerOrAdmin && !isSchool}
             onRefresh={fetchOrganization}
           />
         </TabsContent>
@@ -225,19 +255,19 @@ export default function OrganizationDetailPage() {
       <Dialog open={editMode} onOpenChange={setEditMode}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogTitle>Edit {kind}</DialogTitle>
             <DialogDescription>
-              Update your organization name and description
+              Update your {kind} name and description
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="org-name">Organization Name</Label>
+              <Label htmlFor="org-name">{isSchool ? 'School name' : 'Organization name'}</Label>
               <Input
                 id="org-name"
                 value={editFormData.name}
                 onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                placeholder="Organization Name"
+                placeholder={isSchool ? 'School name' : 'Organization name'}
               />
             </div>
             <div>

@@ -29,12 +29,18 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileMenuAnimating, setMobileMenuAnimating] = useState(false)
   const [orgUrl, setOrgUrl] = useState<string>('/learn/org')
+  const [orgLabel, setOrgLabel] = useState<string>('Organization')
 
   const fetchOrganizations = async () => {
     try {
       const response = await axios.get('/api/organizations');
       const orgs = response.data.organizations || [];
-      if (orgs.length === 1) {
+      const school = orgs.find((org: { type?: string; user_role?: string }) =>
+        org.type === 'school' && ['owner', 'admin'].includes(org.user_role ?? ''));
+      if (school) {
+        setOrgUrl(`/learn/org/${school.id}`);
+        setOrgLabel('My school');
+      } else if (orgs.length === 1) {
         setOrgUrl(`/learn/org/${orgs[0].id}`);
       }
     } catch (error) {
@@ -203,7 +209,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
           </Link>
           <Link href={orgUrl} className="flex items-center justify-start py-2 px-7 rounded-md hover:bg-muted/50 transition-colors">
             <Building2 className="w-5 h-5 mr-2" />
-            {collapsed ? '' : 'Organization'}
+            {collapsed ? '' : orgLabel}
           </Link>
         </div>
 
@@ -403,7 +409,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
                 <Link href={orgUrl} onClick={closeMobileMenu}>
                   <Button variant="outline" size="sm" className="w-full justify-start">
                     <Building2 className="w-4 h-4 mr-2" />
-                    Organization
+                    {orgLabel}
                   </Button>
                 </Link>
               </div>
