@@ -33,7 +33,7 @@ export default function AdminsPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '' });
+  const [newAdminEmail, setNewAdminEmail] = useState('');
 
   // Delete State
   const [adminToDelete, setAdminToDelete] = useState<Admin | null>(null);
@@ -97,17 +97,17 @@ export default function AdminsPage() {
       const response = await fetch('/api/admin/users/admins', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAdmin)
+        body: JSON.stringify({ email: newAdminEmail })
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create admin');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to add admin');
       }
 
-      toast({ title: 'Success', description: 'Admin created successfully' });
+      toast({ title: 'Admin added', description: `${newAdminEmail} now has platform admin access.` });
       setIsModalOpen(false);
-      setNewAdmin({ name: '', email: '', password: '' });
+      setNewAdminEmail('');
       fetchAdmins();
     } catch (error: any) {
       toast({
@@ -130,13 +130,13 @@ export default function AdminsPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete admin');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to remove admin');
       }
 
       toast({
-        title: "Success",
-        description: "Admin deleted successfully",
+        title: "Admin removed",
+        description: "Their account stays, without admin access.",
       });
 
       fetchAdmins();
@@ -164,7 +164,7 @@ export default function AdminsPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Admin Users</h1>
             <p className="text-muted-foreground">
-              Manage admin users and their permissions
+              People with platform support access
             </p>
           </div>
 
@@ -177,48 +177,27 @@ export default function AdminsPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add New Admin</DialogTitle>
+                <DialogTitle>Add a platform admin</DialogTitle>
                 <DialogDescription>
-                  Create a new administrator account with full access.
+                  Give an existing account full support access. They sign in with their own password. If they have no account yet, ask them to sign up first.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleCreateAdmin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    value={newAdmin.name}
-                    onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
-                    required
-                    placeholder="John Doe"
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     type="email"
-                    value={newAdmin.email}
-                    onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
                     required
                     placeholder="john@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={newAdmin.password}
-                    onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
-                    required
-                    placeholder="••••••••"
                   />
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Create Admin
+                    Add admin
                   </Button>
                 </DialogFooter>
               </form>
@@ -254,8 +233,8 @@ export default function AdminsPage() {
           open={!!adminToDelete}
           onOpenChange={(open) => !open && setAdminToDelete(null)}
           onConfirm={confirmDelete}
-          title="Delete Administrator"
-          description="This action cannot be undone. This will permanently delete the administrator account."
+          title="Remove admin access"
+          description="They keep their account but lose platform admin access. You can add them back later."
           isDeleting={isDeleting}
         />
       </div>

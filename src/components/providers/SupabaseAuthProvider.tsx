@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
+import { RESET_PASSWORD_PATH } from '@/lib/password-reset';
 import { createContext, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -38,6 +39,14 @@ export function SupabaseAuthProvider({ children }: Props) {
     const redirectedFromRaw = url.searchParams.get('redirectedFrom');
     if (code && !exchangingCode.current) {
       exchangingCode.current = true;
+      // A "Forgot password?" link comes back to the reset page, which then
+      // asks for the new password. Everything else lands on /login.
+      if (url.pathname === RESET_PASSWORD_PATH) {
+        supabase.auth.exchangeCodeForSession(code)
+          .then(({ error }) => window.location.replace(error ? `${RESET_PASSWORD_PATH}?error=link` : RESET_PASSWORD_PATH))
+          .catch(() => window.location.replace(`${RESET_PASSWORD_PATH}?error=link`));
+        return;
+      }
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         const params = new URLSearchParams();
         if (error) params.set('error', 'oauth');

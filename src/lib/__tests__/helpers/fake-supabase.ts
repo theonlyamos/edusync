@@ -7,7 +7,7 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
   let nextId = 1
   const from = (table: string) => {
     const filters: Array<(row: Row) => boolean> = []
-    let op: 'select' | 'insert' | 'update' = 'select'
+    let op: 'select' | 'insert' | 'update' | 'delete' = 'select'
     let payload: any
     let countOnly = false
     let single = false
@@ -22,19 +22,26 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
       in: (col: string, values: unknown[]) => { filters.push((r) => values.includes(r[col])); return builder },
       order: () => builder,
       limit: () => builder,
+      neq: (col: string, value: unknown) => { filters.push((r) => r[col] !== value); return builder },
       maybeSingle: () => { single = true; return builder },
+      single: () => { single = true; return builder },
       insert: (value: Row | Row[]) => { op = 'insert'; payload = value; return builder },
       update: (value: Row) => { op = 'update'; payload = value; return builder },
+      delete: () => { op = 'delete'; return builder },
       then: (resolve: (result: unknown) => void, reject: (error: unknown) => void) => {
         try {
           if (op === 'insert') {
             const added = (Array.isArray(payload) ? payload : [payload]).map((r) => ({ id: `row-${nextId++}`, ...r }))
             rows().push(...added)
-            return resolve({ data: added, error: null })
+            return resolve({ data: single ? added[0] : added, error: null })
           }
           const matched = rows().filter((r) => filters.every((f) => f(r)))
           if (op === 'update') {
             matched.forEach((r) => Object.assign(r, payload))
+            return resolve({ data: single ? matched[0] ?? null : matched, error: null })
+          }
+          if (op === 'delete') {
+            tables[table] = rows().filter((r) => !matched.includes(r))
             return resolve({ data: matched, error: null })
           }
           if (countOnly) return resolve({ count: matched.length, error: null })

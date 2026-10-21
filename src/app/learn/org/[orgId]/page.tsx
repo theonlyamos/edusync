@@ -10,11 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle, ListChecks } from 'lucide-react';
+import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle, ListChecks, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { SchoolSetupChecklist } from '@/components/school/SchoolSetupChecklist';
 import { SchoolPeoplePanel } from '@/components/school/SchoolPeoplePanel';
+import { SchoolTimetablesPanel } from '@/components/school/SchoolTimetablesPanel';
 import OrgMembersTab from './components/OrgMembersTab';
 import OrgApiKeysTab from './components/OrgApiKeysTab';
 import OrgSettingsTab from './components/OrgSettingsTab';
@@ -200,7 +201,7 @@ export default function OrganizationDetailPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap">
           {showSetup && (
             <TabsTrigger value="setup">
               <ListChecks className="w-4 h-4 mr-2" />
@@ -215,6 +216,12 @@ export default function OrganizationDetailPage() {
             <TabsTrigger value="billing">
               <Coins className="w-4 h-4 mr-2" />
               Billing
+            </TabsTrigger>
+          )}
+          {isSchool && isOwnerOrAdmin && (
+            <TabsTrigger value="timetables">
+              <CalendarDays className="w-4 h-4 mr-2" />
+              Timetables
             </TabsTrigger>
           )}
           <TabsTrigger value="api-keys">
@@ -259,6 +266,12 @@ export default function OrganizationDetailPage() {
               purchased={searchParams?.get('purchase') === 'success'}
               onChanged={() => fetchOrganization(true)}
             />
+          </TabsContent>
+        )}
+
+        {isSchool && isOwnerOrAdmin && (
+          <TabsContent value="timetables">
+            <SchoolTimetablesPanel />
           </TabsContent>
         )}
 

@@ -88,7 +88,7 @@ export const getColumns = ({ onView, onDelete }: ColumnsProps): ColumnDef<Admin>
                             onClick={() => onDelete(admin)}
                         >
                             <Trash className="mr-2 h-4 w-4" />
-                            Delete
+                            Remove admin access
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

@@ -6,11 +6,11 @@ import { getColumns, Teacher } from "./columns";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, UserPlus } from "lucide-react";
 import { TeacherModal } from "@/components/users/TeacherModal";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePasswordResetEmail } from "@/components/admin/usePasswordResetEmail";
 
 
 export default function TeachersPage() {
@@ -24,6 +24,7 @@ export default function TeachersPage() {
   const [teacherToDelete, setTeacherToDelete] = useState<Teacher | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+  const sendPasswordReset = usePasswordResetEmail();
 
   const getTeachers = async () => {
     setLoading(true);
@@ -36,6 +37,7 @@ export default function TeachersPage() {
         id: String(row.id ?? row.user_id ?? row.userId ?? ''),
         name: row.name ?? '',
         email: row.email ?? '',
+        schoolName: row.schoolName ?? null,
         subject: Array.isArray(row.subjects) ? row.subjects.join(', ') : (row.subject ?? ''),
         gradesList: Array.isArray(row.grades) ? row.grades.join(', ') : 'Not assigned',
         status: row.isactive ? 'Active' : 'Inactive',
@@ -65,18 +67,14 @@ export default function TeachersPage() {
     const filtered = teachers.filter(teacher =>
       teacher.name.toLowerCase().includes(lowerQuery) ||
       teacher.email.toLowerCase().includes(lowerQuery) ||
-      teacher.subject.toLowerCase().includes(lowerQuery)
+      teacher.subject.toLowerCase().includes(lowerQuery) ||
+      (teacher.schoolName ?? '').toLowerCase().includes(lowerQuery)
     );
     setFilteredTeachers(filtered);
   }, [searchQuery, teachers]);
 
   const handleEdit = (teacher: Teacher) => {
     setSelectedTeacher(teacher);
-    setIsModalOpen(true);
-  };
-
-  const handleCreate = () => {
-    setSelectedTeacher(undefined);
     setIsModalOpen(true);
   };
 
@@ -115,7 +113,7 @@ export default function TeachersPage() {
     }
   };
 
-  const columns = getColumns({ onEdit: handleEdit, onDelete: handleDeleteClick });
+  const columns = getColumns({ onEdit: handleEdit, onDelete: handleDeleteClick, onResetPassword: sendPasswordReset });
 
   return (
     <DashboardLayout>
@@ -124,13 +122,9 @@ export default function TeachersPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Teachers Management</h1>
             <p className="text-muted-foreground">
-              Manage and monitor all teachers in the system
+              Every teacher on the platform, for support. Schools add teachers from their People tab.
             </p>
           </div>
-          <Button onClick={handleCreate} className="whitespace-nowrap">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Teacher
-          </Button>
         </div>
 
         <div className="flex items-center justify-end py-4">

@@ -20,7 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export interface MemberData {
     id?: string;
@@ -47,43 +47,30 @@ export function MemberModal({ open, onOpenChange, organizationId, member, onSucc
     const [isLoading, setIsLoading] = useState(false);
 
     const [formData, setFormData] = useState({
-        name: "",
         email: "",
-        password: "",
         role: "student" as RoleType,
         credits_allocated: 0,
     });
 
     const isEditMode = !!member?.id;
+    // School teachers and students keep their role; the school changes it, not support.
+    const schoolSeat = formData.role === 'teacher' || formData.role === 'student';
 
     useEffect(() => {
         if (member) {
             setFormData({
                 email: member.users.email,
-                name: member.users.name || "",
-                password: "",
-                role: member.role as RoleType,
+                role: ((member.role as string) === 'member' ? 'learner' : member.role) as RoleType,
                 credits_allocated: member.credits_allocated,
             });
         } else {
             setFormData({
                 email: "",
-                name: "",
-                password: "",
                 role: "admin",
                 credits_allocated: 0,
             });
         }
     }, [member, open]);
-
-    const generatePassword = () => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-        let password = '';
-        for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        setFormData(prev => ({ ...prev, password }));
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -103,10 +90,6 @@ export function MemberModal({ open, onOpenChange, organizationId, member, onSucc
 
             if (!isEditMode) {
                 bodyData.email = formData.email;
-                bodyData.name = formData.name;
-                if (formData.password) {
-                    bodyData.password = formData.password;
-                }
             }
 
             const response = await fetch(url, {
@@ -148,7 +131,7 @@ export function MemberModal({ open, onOpenChange, organizationId, member, onSucc
                     <DialogDescription>
                         {isEditMode
                             ? 'Update member role and credits.'
-                            : 'Add a user to this organization by email.'
+                            : 'Add an existing account by email. If they have no account yet, ask them to sign up first.'
                         }
                     </DialogDescription>
                 </DialogHeader>
@@ -166,47 +149,12 @@ export function MemberModal({ open, onOpenChange, organizationId, member, onSucc
                             />
                         </div>
 
-                        {!isEditMode && (
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Full Name</Label>
-                                <Input
-                                    id="name"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                    placeholder="John Doe"
-                                    required
-                                />
-                            </div>
-                        )}
-
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    id="password"
-                                    type="text"
-                                    value={formData.password}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                                    placeholder={!isEditMode ? "Leave empty for auto-generated" : "Leave blank to keep current"}
-                                />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={generatePassword}
-                                    title="Generate password"
-                                >
-                                    <RefreshCw className="h-4 w-4" />
-                                </Button>
-                            </div>
-                            {!isEditMode && <p className="text-xs text-muted-foreground">Optional. If left empty, a random password will be generated.</p>}
-                        </div>
-
                         <div className="space-y-2">
                             <Label htmlFor="role">Role</Label>
                             <Select
                                 value={formData.role}
                                 onValueChange={(v: RoleType) => setFormData(prev => ({ ...prev, role: v }))}
+                                disabled={schoolSeat}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select role" />
@@ -214,9 +162,8 @@ export function MemberModal({ open, onOpenChange, organizationId, member, onSucc
                                 <SelectContent>
                                     <SelectItem value="owner">Owner</SelectItem>
                                     <SelectItem value="admin">Admin</SelectItem>
-                                    <SelectItem value="teacher">Teacher</SelectItem>
-                                    <SelectItem value="student">Student</SelectItem>
-                                    <SelectItem value="learner">Learner</SelectItem>
+                                    <SelectItem value="learner">Member</SelectItem>
+                                    {schoolSeat && <SelectItem value={formData.role}>{formData.role === 'teacher' ? 'Teacher' : 'Student'}</SelectItem>}
                                 </SelectContent>
                             </Select>
                         </div>

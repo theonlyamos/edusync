@@ -48,7 +48,6 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
     const [formData, setFormData] = useState({
         name: "",
         email: "",
-        password: "",
         level: "" as GradeLevel | string,
         guardianName: "",
         guardianContact: "",
@@ -62,7 +61,6 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
             setFormData({
                 name: student.name || "",
                 email: student.email || "",
-                password: "", // Don't populate password on edit
                 level: student.grade || "",
                 guardianName: student.guardianName || "",
                 guardianContact: student.guardianContact || "",
@@ -72,8 +70,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
             setFormData({
                 name: "",
                 email: "",
-                password: "",
-                level: "",
+                        level: "",
                 guardianName: "",
                 guardianContact: "",
                 dateOfBirth: "",
@@ -86,11 +83,10 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
         setIsLoading(true);
 
         try {
-            const url = isEditMode
-                ? `/api/admin/users/students/${student.id}`
-                : "/api/admin/users/students";
-
-            const method = isEditMode ? "PATCH" : "POST";
+            // Support edits existing students only. Schools invite new ones.
+            if (!isEditMode) throw new Error('Students join through their school\'s invites.');
+            const url = `/api/admin/users/students/${student.id}`;
+            const method = "PATCH";
 
             // Build payload
             const bodyData: Record<string, any> = {
@@ -101,13 +97,6 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                 guardianContact: formData.guardianContact || null,
                 dateOfBirth: formData.dateOfBirth || null,
             };
-
-            // Only include password for create or if provided during edit
-            if (!isEditMode) {
-                bodyData.password = formData.password;
-            } else if (formData.password) {
-                bodyData.password = formData.password;
-            }
 
             const response = await fetch(url, {
                 method,
@@ -159,7 +148,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                     <DialogDescription>
                         {isEditMode
                             ? 'Update the student\'s information below.'
-                            : 'Create a new student account. They will receive login credentials via email.'
+                            : 'Students join through their school\'s invites.'
                         }
                     </DialogDescription>
                 </DialogHeader>
@@ -199,22 +188,6 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="password">
-                                    Password {isEditMode && <span className="text-muted-foreground text-xs">(Leave blank to keep current)</span>}
-                                </Label>
-                                <Input
-                                    id="password"
-                                    name="password"
-                                    type="password"
-                                    value={formData.password}
-                                    onChange={handleInputChange}
-                                    placeholder="••••••••"
-                                    required={!isEditMode}
-                                    minLength={6}
-                                />
-                            </div>
-
                             <div className="space-y-2">
                                 <Label htmlFor="level">Education Level</Label>
                                 <Select

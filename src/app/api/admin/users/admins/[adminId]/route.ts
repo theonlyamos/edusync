@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
+import { requirePlatformAdmin } from '@/lib/platform-admin.server';
 
 export async function GET(
     req: NextRequest,
@@ -97,48 +98,54 @@ export async function PATCH(
     }
 }
 
+/**
+ * Removes platform admin rights. The account itself stays, as a normal
+ * account, so nothing the person made is lost.
+ */
 export async function DELETE(
     req: NextRequest,
     { params }: { params: Promise<{ adminId: string }> }
 ) {
+    const access = await requirePlatformAdmin();
+    if (!access.ok) return access.response;
+    const { supabase, adminId: currentAdminId } = access.context;
+    const { adminId } = await params;
+
+    if (currentAdminId === adminId) {
+        return NextResponse.json({ error: 'You cannot remove your own admin rights.' }, { status: 400 });
+    }
+
     try {
-        const { adminId } = await params;
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        // Prevent admin from deleting themselves
-        if (session.user.id === adminId) {
-            return new NextResponse('Cannot delete your own admin account', { status: 400 });
-        }
-
-        const supabase = createServerSupabase();
-
-        // Delete from Auth users first (requires service role, which createServerSupabase provides)
-        const { error: authError } = await supabase.auth.admin.deleteUser(adminId);
-
-        if (authError) {
-            console.error('Error deleting auth user:', authError);
-            // If user not found in auth (already deleted?), proceed to check public.users
-            // But if other error, throw it.
-            if (!authError.message.includes('User not found')) {
-                throw authError;
-            }
-        }
-
-        // Also ensure deleted from public users if cascade didn't catch it or for safety
-        const { error: publicError } = await supabase
+        const { count, error: countError } = await supabase
             .from('users')
-            .delete()
-            .eq('id', adminId)
+            .select('id', { count: 'exact', head: true })
             .eq('role', 'admin');
+        if (countError) throw countError;
+        if ((count ?? 0) <= 1) {
+            return NextResponse.json({ error: 'There must be at least one platform admin.' }, { status: 409 });
+        }
 
-        if (publicError) throw publicError;
+        const { data: result, error } = await supabase
+            .from('users')
+            .update({ role: 'learner' })
+            .eq('id', adminId)
+            .eq('role', 'admin')
+            .select('id')
+            .maybeSingle();
+        if (error) throw error;
+        if (!result) return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
 
-        return NextResponse.json(null, { status: 200 });
+        // Database policies treat anyone with an admins row as a platform
+        // admin, so the row has to go too.
+        const { error: adminRowError } = await supabase.from('admins').delete().eq('user_id', adminId);
+        if (adminRowError) {
+            await supabase.from('users').update({ role: 'admin' }).eq('id', adminId);
+            throw adminRowError;
+        }
+
+        return NextResponse.json({ removed: true });
     } catch (error) {
-        console.error('Error deleting admin:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        console.error('Error removing admin:', error);
+        return NextResponse.json({ error: 'Failed to remove admin' }, { status: 500 });
     }
 }

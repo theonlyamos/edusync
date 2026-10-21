@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { newAccountUserRole, organizationMemberRole, type MemberFormRole } from '@/lib/school';
+import { organizationMemberRole, SCHOOL_MEMBERS_BY_INVITE_ONLY, type MemberFormRole } from '@/lib/school';
+
+const DEVELOPER_MEMBER_ROLES = ['owner', 'admin', 'learner'];
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 
@@ -41,6 +43,10 @@ export async function GET(
     }
 }
 
+/**
+ * Adds an existing account to a developer organization. Support never creates
+ * accounts or sets passwords here, and schools add people through invites.
+ */
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -53,26 +59,21 @@ export async function POST(
 
         const { id } = await params;
         const supabase = createServerSupabase();
-        const body = await request.json();
-        const { email, role, credits_allocated } = body;
+        const body = await request.json().catch(() => ({}));
+        const email = typeof body?.email === 'string' ? body.email.toLowerCase().trim() : '';
+        const role = body?.role;
+        const credits_allocated = Number(body?.credits_allocated) || 0;
 
         if (!email || !role) {
+            return NextResponse.json({ error: 'Email and role are required' }, { status: 400 });
+        }
+        if (!DEVELOPER_MEMBER_ROLES.includes(role)) {
             return NextResponse.json(
-                { error: 'Email and role are required' },
+                { error: `Invalid role. Must be one of: ${DEVELOPER_MEMBER_ROLES.join(', ')}` },
                 { status: 400 }
             );
         }
 
-        // Valid roles from frontend: owner, admin, teacher, student, learner
-        const validRoles = ['owner', 'admin', 'teacher', 'student', 'learner'];
-        if (!validRoles.includes(role)) {
-            return NextResponse.json(
-                { error: `Invalid role. Must be one of: ${validRoles.join(', ')}` },
-                { status: 400 }
-            );
-        }
-
-        const formRole = role as MemberFormRole;
         const { data: organization } = await supabase
             .from('organizations')
             .select('type')
@@ -81,87 +82,39 @@ export async function POST(
         if (!organization) {
             return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
         }
-        const isSchool = organization.type === 'school';
-        const orgMemberRole = organizationMemberRole(formRole, organization.type);
-
-        const normalizedEmail = email.toLowerCase().trim();
-
-        // 1. Find the account, or create one. Organization owners and admins
-        //    get a normal account, never platform admin rights.
-        let { data: user } = await supabase
-            .from('users')
-            .select('id, name, email, role')
-            .eq('email', normalizedEmail)
-            .maybeSingle();
-
-        if (!user) {
-            const userRole = newAccountUserRole(formRole);
-            const userPassword = body.password || (Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8));
-            const { data: authData, error: authCreateError } = await supabase.auth.admin.createUser({
-                email: normalizedEmail,
-                password: userPassword,
-                email_confirm: true,
-                user_metadata: {
-                    name: body.name,
-                    role: userRole,
-                },
-            });
-
-            if (authCreateError) {
-                console.error('Error creating auth user:', authCreateError);
-                return NextResponse.json({ error: `Failed to create auth user: ${authCreateError.message}` }, { status: 500 });
-            }
-
-            if (!authData.user) {
-                return NextResponse.json({ error: 'Failed to create auth user: No user returned' }, { status: 500 });
-            }
-
-            const newUserId = authData.user.id;
-            const userName = body.name || normalizedEmail.split('@')[0];
-
-            const { error: insertUserError } = await supabase
-                .from('users')
-                .insert({
-                    id: newUserId,
-                    email: normalizedEmail,
-                    name: userName,
-                    role: userRole,
-                    isactive: true,
-                });
-
-            if (insertUserError) {
-                await supabase.auth.admin.deleteUser(newUserId);
-                console.error('Error creating public user:', insertUserError);
-                return NextResponse.json({ error: 'Failed to create user record' }, { status: 500 });
-            }
-
-            user = { id: newUserId, email: normalizedEmail, name: userName, role: userRole };
+        if (organization.type === 'school') {
+            return NextResponse.json({ error: SCHOOL_MEMBERS_BY_INVITE_ONLY }, { status: 409 });
         }
 
-        const userId = user.id;
+        const { data: user } = await supabase
+            .from('users')
+            .select('id, name, email, role')
+            .eq('email', email)
+            .maybeSingle();
+        if (!user) {
+            return NextResponse.json(
+                { error: 'No account uses that email. Ask them to sign up first, then add them here.' },
+                { status: 404 }
+            );
+        }
 
-        // 2. Membership first, so the school is known before any profile row.
         const { data: existingMember } = await supabase
             .from('organization_members')
             .select('id')
             .eq('organization_id', id)
-            .eq('user_id', userId)
+            .eq('user_id', user.id)
             .maybeSingle();
-
         if (existingMember) {
-            return NextResponse.json(
-                { error: 'User is already a member of this organization' },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: 'User is already a member of this organization' }, { status: 400 });
         }
 
         const { data: member, error } = await supabase
             .from('organization_members')
             .insert({
                 organization_id: id,
-                user_id: userId,
-                role: orgMemberRole,
-                credits_allocated: credits_allocated || 0,
+                user_id: user.id,
+                role: organizationMemberRole(role as MemberFormRole, organization.type),
+                credits_allocated,
                 credits_used: 0,
                 is_active: true,
                 invited_by: session.user.id
@@ -171,52 +124,12 @@ export async function POST(
 
         if (error) {
             console.error('Error adding member:', error);
-            const otherSchool = error.message?.includes('another school');
-            return NextResponse.json(
-                { error: otherSchool ? 'This person already belongs to another school' : 'Failed to add member' },
-                { status: otherSchool ? 409 : 500 }
-            );
+            return NextResponse.json({ error: 'Failed to add member' }, { status: 500 });
         }
 
-        // 3. School teachers and students also need their profile row in this school.
-        if (isSchool && orgMemberRole === 'student') {
-            const { data: student } = await supabase
-                .from('students')
-                .select('id')
-                .eq('user_id', userId)
-                .maybeSingle();
-
-            if (!student) {
-                const { error: createStudentError } = await supabase
-                    .from('students')
-                    .insert({ user_id: userId, grade: 'N/A', organization_id: id });
-                if (createStudentError) console.error('Error creating student record:', createStudentError);
-            }
-        } else if (isSchool && orgMemberRole === 'teacher') {
-            const { data: teacher } = await supabase
-                .from('teachers')
-                .select('id')
-                .eq('user_id', userId)
-                .maybeSingle();
-
-            if (!teacher) {
-                const { error: createTeacherError } = await supabase
-                    .from('teachers')
-                    .insert({ user_id: userId, subjects: [], grades: [], organization_id: id });
-                if (createTeacherError) console.error('Error creating teacher record:', createTeacherError);
-            }
-        }
-
-        return NextResponse.json({
-            ...member,
-            users: user
-        }, { status: 201 });
-
+        return NextResponse.json({ ...member, users: user }, { status: 201 });
     } catch (error: any) {
         console.error('Error in POST /api/admin/organizations/[id]/members:', error);
-        return NextResponse.json(
-            { error: 'Failed to add member', details: error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Failed to add member' }, { status: 500 });
     }
 }
