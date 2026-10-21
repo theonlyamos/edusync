@@ -6,6 +6,9 @@
 -- skipped by writing to organizations directly.
 --
 -- Written without DROP statements: the Supabase MCP hangs on them.
+-- Applied to production on 2026-10-21 in two steps: sections 1-2 as
+-- 20261021182711_school_registration, sections 3-4 as
+-- 20261021182744_school_registration_guardrails.
 
 SET LOCAL lock_timeout = '10s';
 
