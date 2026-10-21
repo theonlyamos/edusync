@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { validateLiveClassGradeAndLesson } from '@/lib/live-class-lesson-validation'
-import { fetchStudentGrade, liveClassGradesEqual } from '@/lib/live-class-attendance'
+import { fetchStudentPlacement, liveClassGradesEqual } from '@/lib/live-class-attendance'
+import { inSameSchool } from '@/lib/school'
 import { enrollAllStudentsForGradeLevel } from '@/lib/live-class-auto-enroll'
 
 function canOrganize(role: string | null | undefined) {
@@ -50,11 +51,12 @@ export async function GET(request: NextRequest) {
   for (const e of enrolledEvents) byId.set(e.id as string, e)
 
   const merged = Array.from(byId.values())
-  const myGrade = await fetchStudentGrade(supabase, auth.userId)
+  const me = await fetchStudentPlacement(supabase, auth.userId)
   const items = merged.filter((e) => {
     const orgId = e.organizer_id as string
     if (orgId === auth.userId) return true
-    return liveClassGradesEqual(e.grade_level as string | null | undefined, myGrade)
+    if (!me.isStudent || !inSameSchool(e.organization_id as string | null | undefined, me.organizationId)) return false
+    return liveClassGradesEqual(e.grade_level as string | null | undefined, me.grade)
   })
 
   return NextResponse.json({ items })
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
       max_attendees: max_attendees ?? null,
       status: 'scheduled',
     })
-    .select('id')
+    .select('id, organization_id')
     .single()
 
   if (error || !data) {
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
   const { enrolled, rpcFailed } = await enrollAllStudentsForGradeLevel(supabase, {
     eventId: data.id,
     gradeLevelRaw: gl,
+    organizationId: (data as { organization_id?: string | null }).organization_id ?? null,
     organizerId: auth.userId,
     maxAttendees: maxCap,
   })

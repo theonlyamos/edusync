@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase.server";
 import { mapLessonRecord } from '@/lib/lesson-record';
+import { getUserSchoolId } from '@/lib/school';
 
 export async function GET(request: Request) {
     try {
@@ -46,6 +47,11 @@ export async function GET(request: Request) {
                 // Teacher record not found, return empty
                 return NextResponse.json([]);
             }
+        } else if (session.user.role !== 'admin') {
+            // Everyone else only sees lessons from their own school.
+            const schoolId = await getUserSchoolId(supabase, session.user.id);
+            if (!schoolId) return NextResponse.json([]);
+            query = query.eq('organization_id', schoolId);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false });

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { inSameSchool } from '@/lib/school'
 
 /** Trim; empty → null */
 export function normalizeLiveClassGrade(g: string | null | undefined): string | null {
@@ -21,12 +22,30 @@ export async function fetchStudentGrade(
   supabase: SupabaseClient,
   userId: string
 ): Promise<string | null> {
-  const { data } = await supabase.from('students').select('grade').eq('user_id', userId).maybeSingle()
-  return normalizeLiveClassGrade((data as { grade?: string } | null)?.grade ?? null)
+  return (await fetchStudentPlacement(supabase, userId)).grade
+}
+
+/** A student's grade and school; both null when the user has no student profile. */
+export async function fetchStudentPlacement(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<{ grade: string | null; organizationId: string | null; isStudent: boolean }> {
+  const { data } = await supabase
+    .from('students')
+    .select('grade, organization_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  const row = data as { grade?: string; organization_id?: string | null } | null
+  return {
+    grade: normalizeLiveClassGrade(row?.grade ?? null),
+    organizationId: row?.organization_id ?? null,
+    isStudent: Boolean(row),
+  }
 }
 
 /**
- * Host (organizer) always allowed. Otherwise requires a student profile whose grade matches the event.
+ * Host (organizer) always allowed. Otherwise requires a student profile in the event's school
+ * whose grade matches the event.
  */
 export async function isEligibleLiveClassAttendee(
   supabase: SupabaseClient,
@@ -34,12 +53,14 @@ export async function isEligibleLiveClassAttendee(
     organizerId: string
     attendeeUserId: string
     eventGradeLevel: string | null | undefined
+    eventOrganizationId: string | null | undefined
   }
 ): Promise<boolean> {
-  const { organizerId, attendeeUserId, eventGradeLevel } = params
+  const { organizerId, attendeeUserId, eventGradeLevel, eventOrganizationId } = params
   if (attendeeUserId === organizerId) return true
   const required = normalizeLiveClassGrade(eventGradeLevel)
   if (!required) return false
-  const studentGrade = await fetchStudentGrade(supabase, attendeeUserId)
-  return liveClassGradesEqual(required, studentGrade)
+  const student = await fetchStudentPlacement(supabase, attendeeUserId)
+  if (!student.isStudent || !inSameSchool(student.organizationId, eventOrganizationId)) return false
+  return liveClassGradesEqual(required, student.grade)
 }

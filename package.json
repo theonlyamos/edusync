@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:sql": "node --test scripts/test-voice-billing-sql.mjs",
+    "test:sql": "node --test scripts/test-voice-billing-sql.mjs scripts/test-school-scoping-sql.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",

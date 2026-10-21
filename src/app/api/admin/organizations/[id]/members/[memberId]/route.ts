@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { organizationMemberRole, type MemberFormRole } from '@/lib/school';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 
@@ -30,6 +31,19 @@ export async function PATCH(
                 { error: 'No valid updates provided' },
                 { status: 400 }
             );
+        }
+
+        if ('role' in updateData) {
+            const formRoles: MemberFormRole[] = ['owner', 'admin', 'teacher', 'student', 'learner'];
+            if (!formRoles.includes(updateData.role)) {
+                return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+            }
+            const { data: organization } = await supabase
+                .from('organizations')
+                .select('type')
+                .eq('id', id)
+                .maybeSingle();
+            updateData.role = organizationMemberRole(updateData.role, organization?.type);
         }
 
         const { data: member, error } = await supabase

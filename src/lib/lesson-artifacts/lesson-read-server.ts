@@ -2,6 +2,7 @@ import 'server-only';
 
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
+import { inSameSchool } from '@/lib/school';
 
 import { canManageLesson } from './access';
 import { LessonArtifactHttpError } from './server';
@@ -13,7 +14,7 @@ export async function requireLessonViewer(lessonId: string) {
   const supabase = createServerSupabase();
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
-    .select('id,gradelevel,teacher_id')
+    .select('id,gradelevel,teacher_id,organization_id')
     .eq('id', lessonId)
     .maybeSingle();
   if (lessonError) throw lessonError;
@@ -22,10 +23,13 @@ export async function requireLessonViewer(lessonId: string) {
   if (session.user.role === 'student') {
     const { data: student, error: studentError } = await supabase
       .from('students')
-      .select('grade')
+      .select('grade,organization_id')
       .eq('user_id', session.user.id)
       .maybeSingle();
     if (studentError) throw studentError;
+    if (!student || !inSameSchool(lesson.organization_id, student.organization_id)) {
+      throw new LessonArtifactHttpError(404, 'Lesson not found');
+    }
     const lessonGrade = lesson.gradelevel?.trim().toLowerCase();
     const studentGrade = student?.grade?.trim().toLowerCase();
     if (!lessonGrade || !studentGrade || lessonGrade !== studentGrade) {

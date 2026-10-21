@@ -46,6 +46,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
       organizerId: ev.organizer_id as string,
       attendeeUserId: auth.userId,
       eventGradeLevel: ev.grade_level as string | null,
+      eventOrganizationId: (ev as { organization_id?: string | null }).organization_id ?? null,
     })
     if (!okGrade) {
       return NextResponse.json({ error: 'Only the host or students in this grade can join the live room' }, { status: 403 })
