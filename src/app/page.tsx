@@ -514,13 +514,16 @@ function HomeContent() {
             </p>
             <Badge variant="secondary" className="mt-6">Coming soon</Badge>
           </div>
-          <div className="rounded-xl border bg-card p-6 shadow-sm">
-            <h3 className="text-xl font-semibold">For Admins</h3>
+          <Link href="/register-school" className="rounded-xl border bg-card p-6 shadow-sm hover:border-foreground/40 transition-colors">
+            <h3 className="text-xl font-semibold">For Schools</h3>
             <p className="mt-3 text-muted-foreground">
-              Manage classrooms, track progress, and support school-wide outcomes.
+              Register your school, set up grades, and bring your teachers and students together.
             </p>
-            <Badge variant="secondary" className="mt-6">Coming soon</Badge>
-          </div>
+            <div className="mt-6 flex items-center gap-2 text-sm text-foreground">
+              Register your school
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </Link>
         </div>
       </section>
 
@@ -543,6 +546,9 @@ function HomeContent() {
             </Button>
             <Button asChild size="lg" variant="outline" className="px-8 py-6 text-base">
               <Link href="/signup">Create free account</Link>
+            </Button>
+            <Button asChild size="lg" variant="ghost" className="px-8 py-6 text-base">
+              <Link href="/register-school">Register your school</Link>
             </Button>
           </div>
         </div>

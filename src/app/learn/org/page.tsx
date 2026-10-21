@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Plus, Building2, Users } from 'lucide-react';
+import Link from 'next/link';
+import { Loader2, Plus, Building2, School } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 type Organization = {
   id: string;
@@ -18,6 +20,7 @@ type Organization = {
   total_credits_purchased: number;
   total_credits_used: number;
   is_active: boolean;
+  type?: 'school' | 'developer';
   created_at: string;
 };
 
@@ -86,26 +89,42 @@ export default function OrganizationPage() {
 
   if (showCreateForm || organizations.length === 0) {
     return (
-      <div className="container max-w-2xl mx-auto p-6">
+      <div className="container max-w-2xl mx-auto p-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <School className="w-6 h-6" />
+              Running a school?
+            </CardTitle>
+            <CardDescription>
+              Register your school to add teachers, students, grades and a shared credit balance.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/register-school">Register your school</Link>
+            </Button>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="w-6 h-6" />
-              Create Your Organization
+              Create a developer organization
             </CardTitle>
             <CardDescription>
-              Create an organization to manage API keys, team members, and credits
+              For embedding the tutor on your own site: manage API keys, team members and credits
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreateOrganization} className="space-y-4">
               <div>
-                <Label htmlFor="name">Organization Name *</Label>
+                <Label htmlFor="name">Organization name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Acme Inc"
+                  placeholder="e.g. My learning app"
                   required
                   disabled={creating}
                 />
@@ -133,7 +152,7 @@ export default function OrganizationPage() {
                   ) : (
                     <>
                       <Plus className="w-4 h-4 mr-2" />
-                      Create Organization
+                      Create organization
                     </>
                   )}
                 </Button>
@@ -160,12 +179,12 @@ export default function OrganizationPage() {
     <div className="container max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Your Organizations</h1>
-          <p className="text-muted-foreground">Select an organization to manage</p>
+          <h1 className="text-3xl font-bold">Schools and organizations</h1>
+          <p className="text-muted-foreground">Select one to manage</p>
         </div>
         <Button onClick={() => setShowCreateForm(true)}>
           <Plus className="w-4 h-4 mr-2" />
-          New Organization
+          New organization
         </Button>
       </div>
 
@@ -178,8 +197,9 @@ export default function OrganizationPage() {
           >
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
+                {org.type === 'school' ? <School className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
                 {org.name}
+                {org.type === 'school' && <Badge variant="secondary">School</Badge>}
               </CardTitle>
               {org.description && (
                 <CardDescription>{org.description}</CardDescription>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { isSchoolOrganization, SCHOOL_MEMBERS_BY_INVITE_ONLY } from '@/lib/school';
 
 export async function POST(
   request: NextRequest,
@@ -28,6 +29,10 @@ export async function POST(
         { error: 'Access denied. Only owners and admins can allocate credits.' },
         { status: 403 }
       );
+    }
+
+    if (await isSchoolOrganization(supabase, id)) {
+      return NextResponse.json({ error: SCHOOL_MEMBERS_BY_INVITE_ONLY }, { status: 409 });
     }
 
     const body = await request.json();

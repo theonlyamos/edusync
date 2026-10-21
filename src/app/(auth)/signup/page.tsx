@@ -247,6 +247,13 @@ export default function SignupPage() {
               </Button>
 
               <div className="text-center text-sm">
+                <span className="text-muted-foreground">Setting up a school? </span>
+                <Link href="/register-school" className="font-medium text-foreground hover:underline underline-offset-4">
+                  Register your school
+                </Link>
+              </div>
+
+              <div className="text-center text-sm">
                 <span className="text-muted-foreground">Already have an account? </span>
                 <Link href="/login" className="font-medium text-foreground hover:underline underline-offset-4">
                   Sign in

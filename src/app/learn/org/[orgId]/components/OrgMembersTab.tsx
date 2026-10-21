@@ -16,7 +16,7 @@ import { Loader2, Plus, Coins, Trash2, Users } from 'lucide-react';
 type OrganizationMember = {
   id: string;
   user_id: string;
-  role: 'owner' | 'admin' | 'member';
+  role: 'owner' | 'admin' | 'member' | 'teacher' | 'student';
   credits_allocated: number;
   credits_used: number;
   joined_at: string;

@@ -17,6 +17,7 @@ const lessonId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 type HarnessOptions = {
   lesson?: Record<string, unknown> | null;
+  schoolId?: string | null;
   studentGrade?: string | null;
   publication?: Record<string, unknown> | null;
 };
@@ -27,7 +28,7 @@ function maybeSingle(result: { data: unknown; error: unknown }) {
 
 function createHarness(options: HarnessOptions = {}) {
   const lesson = options.lesson === undefined
-    ? { id: lessonId, gradelevel: 'JHS 1', current_publication_id: 'publication-1' }
+    ? { id: lessonId, organization_id: 'school-1', gradelevel: 'JHS 1', current_publication_id: 'publication-1' }
     : options.lesson;
   const publication = options.publication === undefined
     ? {
@@ -86,7 +87,8 @@ function createHarness(options: HarnessOptions = {}) {
     throw new Error(`Unexpected table ${table}`);
   });
 
-  createServerSupabaseMock.mockReturnValue({ from });
+  const schoolId = options.schoolId === undefined ? 'school-1' : options.schoolId;
+  createServerSupabaseMock.mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ data: schoolId, error: null }) });
   return { from };
 }
 
@@ -135,8 +137,16 @@ describe('student lesson detail route', () => {
     expect(response.status).toBe(404);
   });
 
+  it('returns 404 when the student no longer has an active school membership', async () => {
+    createHarness({ schoolId: null });
+
+    const { response } = await callGet();
+
+    expect(response.status).toBe(404);
+  });
+
   it('returns an explicit unpublished response when no current publication exists', async () => {
-    createHarness({ lesson: { id: lessonId, gradelevel: 'JHS 1', current_publication_id: null } });
+    createHarness({ lesson: { id: lessonId, organization_id: 'school-1', gradelevel: 'JHS 1', current_publication_id: null } });
 
     const { response, json } = await callGet();
 

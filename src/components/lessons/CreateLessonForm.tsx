@@ -123,7 +123,8 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       const response = await fetch('/api/organizations');
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not load your organizations');
-      const next: Organization[] = data.organizations ?? [];
+      // Lessons belong to a school; developer organizations are not offered.
+      const next: Organization[] = (data.organizations ?? []).filter((organization: { type?: string }) => organization.type === 'school');
       setOrganizations(next);
       setOrganizationId((current) => current || (next.length === 1 ? next[0].id : ''));
       setOrganizationStatus('ready');

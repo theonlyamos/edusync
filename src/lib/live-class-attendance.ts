@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { inSameSchool } from '@/lib/school'
+import { getUserSchoolId, inActiveSchool } from '@/lib/school'
 
 /** Trim; empty → null */
 export function normalizeLiveClassGrade(g: string | null | undefined): string | null {
@@ -30,15 +30,15 @@ export async function fetchStudentPlacement(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ grade: string | null; organizationId: string | null; isStudent: boolean }> {
-  const { data } = await supabase
-    .from('students')
-    .select('grade, organization_id')
-    .eq('user_id', userId)
-    .maybeSingle()
-  const row = data as { grade?: string; organization_id?: string | null } | null
+  const [{ data }, organizationId] = await Promise.all([
+    supabase.from('students').select('grade').eq('user_id', userId).maybeSingle(),
+    // The active membership, not students.organization_id, which outlives a deactivated membership.
+    getUserSchoolId(supabase, userId),
+  ])
+  const row = data as { grade?: string } | null
   return {
     grade: normalizeLiveClassGrade(row?.grade ?? null),
-    organizationId: row?.organization_id ?? null,
+    organizationId,
     isStudent: Boolean(row),
   }
 }
@@ -61,6 +61,6 @@ export async function isEligibleLiveClassAttendee(
   const required = normalizeLiveClassGrade(eventGradeLevel)
   if (!required) return false
   const student = await fetchStudentPlacement(supabase, attendeeUserId)
-  if (!student.isStudent || !inSameSchool(student.organizationId, eventOrganizationId)) return false
+  if (!student.isStudent || !inActiveSchool(student.organizationId, eventOrganizationId)) return false
   return liveClassGradesEqual(required, student.grade)
 }

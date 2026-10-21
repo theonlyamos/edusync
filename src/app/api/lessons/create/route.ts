@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getServerSession } from '@/lib/auth';
 import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
+import { getUserSchoolId } from '@/lib/school';
 
 const createLessonSchema = z.object({
   title: z.string().trim().min(1).max(160),
@@ -22,19 +23,13 @@ export async function POST(request: Request) {
     }
     const input = createLessonSchema.parse(await request.json());
     const supabase = createServerSupabase();
-    const { data: memberships, error: membershipError } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', session.user.id)
-      .eq('is_active', true);
-    if (membershipError) throw membershipError;
-    const organizationId = input.organizationId ?? (memberships?.length === 1 ? memberships[0].organization_id : null);
-    if (memberships && memberships.length > 1 && !input.organizationId) {
-      throw new LessonArtifactHttpError(400, 'Select the organization that owns this lesson');
+    // Lessons belong to the author's school. Developer organizations (API keys)
+    // never own lessons, or school students could not open them.
+    const schoolId = await getUserSchoolId(supabase, session.user.id);
+    if (input.organizationId && input.organizationId !== schoolId) {
+      throw new LessonArtifactHttpError(403, 'Lessons can only be created for your own school');
     }
-    if (organizationId && !memberships?.some((membership) => membership.organization_id === organizationId)) {
-      throw new LessonArtifactHttpError(403, 'You are not a member of the selected organization');
-    }
+    const organizationId = schoolId;
     const { data: lessonId, error } = await supabase.rpc('create_lesson_draft', {
       p_title: input.title,
       p_subject: input.subject,

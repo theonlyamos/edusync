@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { organizationMemberRole, type MemberFormRole } from '@/lib/school';
+import { canChangeSchoolMemberRole, organizationMemberRole, type MemberFormRole } from '@/lib/school';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 
@@ -44,6 +44,25 @@ export async function PATCH(
                 .eq('id', id)
                 .maybeSingle();
             updateData.role = organizationMemberRole(updateData.role, organization?.type);
+
+            if (organization?.type === 'school') {
+                const { data: current } = await supabase
+                    .from('organization_members')
+                    .select('role')
+                    .eq('id', memberId)
+                    .eq('organization_id', id)
+                    .maybeSingle();
+                if (!current) {
+                    return NextResponse.json({ error: 'Member not found' }, { status: 404 });
+                }
+                // A teacher or student also has an app role and a teacher/student profile,
+                // which this route does not convert. Only owner/admin changes are allowed.
+                if (current.role !== updateData.role && !canChangeSchoolMemberRole(current.role, updateData.role)) {
+                    return NextResponse.json({
+                        error: 'Teachers and students cannot switch roles here. Remove the person and add them again with the new role.',
+                    }, { status: 409 });
+                }
+            }
         }
 
         const { data: member, error } = await supabase

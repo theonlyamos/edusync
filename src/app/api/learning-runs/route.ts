@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { requireStudentSession } from '@/lib/lesson-artifacts/learning-server';
 import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
-import { inSameSchool } from '@/lib/school';
+import { getUserSchoolId, inActiveSchool } from '@/lib/school';
 import {
   isObjectiveSelectionChange,
   normalizePublishedObjectives,
@@ -23,13 +23,14 @@ export async function POST(request: Request) {
     const session = await requireStudentSession();
     const input = schema.parse(await request.json());
     const supabase = createServerSupabase();
-    const [{ data: lesson, error: lessonError }, { data: student, error: studentError }] = await Promise.all([
+    const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
       supabase.from('lessons').select('id,title,subject,gradelevel,current_publication_id,organization_id').eq('id', input.lessonId).maybeSingle(),
-      supabase.from('students').select('grade,organization_id').eq('user_id', session.user.id).maybeSingle(),
+      supabase.from('students').select('grade').eq('user_id', session.user.id).maybeSingle(),
+      getUserSchoolId(supabase, session.user.id),
     ]);
     if (lessonError) throw lessonError;
     if (studentError) throw studentError;
-    if (lesson && (!student || !inSameSchool(lesson.organization_id, student.organization_id))) {
+    if (lesson && (!student || !inActiveSchool(schoolId, lesson.organization_id))) {
       throw new LessonArtifactHttpError(404, 'Lesson not found');
     }
     if (!lesson?.current_publication_id) throw new LessonArtifactHttpError(409, 'This lesson has not been published yet');
