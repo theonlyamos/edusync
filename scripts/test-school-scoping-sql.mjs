@@ -140,9 +140,13 @@ await db.exec(`
     INSERT INTO public.live_class_events (organizer_id, grade_level) VALUES ('${teacherA}', 'Grade 5');
 `);
 
-const migration = (await readdir(path.join(root, 'supabase/migrations'))).find((name) => name.endsWith('_school_scoping.sql'));
-assert.ok(migration, 'school_scoping migration must exist');
-await db.exec(await readFile(path.join(root, 'supabase/migrations', migration), 'utf8'));
+// Production ran school scoping in eight steps, one file per recorded version.
+const migrationFiles = (await readdir(path.join(root, 'supabase/migrations'))).sort();
+const scopingSteps = migrationFiles.filter((name) => /^\d{14}_school_scoping_\d/.test(name));
+assert.equal(scopingSteps.length, 8, 'school scoping steps must all exist');
+for (const name of scopingSteps) {
+    await db.exec(await readFile(path.join(root, 'supabase/migrations', name), 'utf8'));
+}
 
 const rows = async (sql, params = []) => (await db.query(sql, params)).rows;
 const one = async (sql, params = []) => (await rows(sql, params))[0];
@@ -244,6 +248,7 @@ const migrationNamed = async (suffix) => {
 await db.exec(`INSERT INTO public.lessons (id, title, gradelevel, teacher_id, organization_id) VALUES ('${id(42)}', 'Old org lesson', 'Grade 5', '${id(30)}', '${developerOrg}')`);
 await db.exec(await migrationNamed('_school_scoping_fixes.sql'));
 await db.exec(await migrationNamed('_school_registration.sql'));
+await db.exec(await migrationNamed('_school_registration_guardrails.sql'));
 
 await test('lessons never stay under a developer organization', async () => {
     assert.equal((await one('SELECT organization_id FROM public.lessons WHERE id = $1', [id(42)])).organization_id, schoolA);
