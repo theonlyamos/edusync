@@ -26,6 +26,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
 import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2 } from 'lucide-react';
+import { LessonHomeworkPanel } from '@/components/lessons/LessonHomeworkPanel';
 import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
 import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
@@ -92,7 +93,7 @@ export default function LessonPage() {
 
     const requestedTab = searchParams.get('tab');
     useEffect(() => {
-        if (requestedTab && ['overview', 'studio', 'content', 'resources'].includes(requestedTab)) setActiveTab(requestedTab);
+        if (requestedTab && ['overview', 'studio', 'content', 'resources', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
     }, [requestedTab]);
 
     useEffect(() => {
@@ -304,7 +305,6 @@ export default function LessonPage() {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {status === 'live' && <Button variant="outline" asChild><Link href={`/teachers/homework/new?lessonId=${params.lessonId}`}>Create homework</Link></Button>}
                         <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDelete({ kind: 'lesson' })}>
                             <Trash2 className="mr-2 h-4 w-4" />{status === 'draft' ? 'Delete lesson' : 'Archive lesson'}
                         </Button>
@@ -312,11 +312,12 @@ export default function LessonPage() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid h-auto grid-cols-2 sm:inline-flex">
+                    <TabsList className="grid h-auto grid-cols-3 sm:inline-flex">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
                         <TabsTrigger value="resources">Resources</TabsTrigger>
+                        <TabsTrigger value="homework">Homework</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-6">
@@ -546,6 +547,10 @@ export default function LessonPage() {
                                 </Card>
                             ))}
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="homework" className="mt-6">
+                        <LessonHomeworkPanel lessonId={params.lessonId} live={status === 'live'} />
                     </TabsContent>
                 </Tabs>
             </div>
