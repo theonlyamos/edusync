@@ -91,6 +91,19 @@ await db.exec(`
     CREATE POLICY users_select_own ON public.users FOR SELECT USING (id = auth.uid());
     CREATE POLICY students_select_own ON public.students FOR SELECT USING (user_id = auth.uid());
     CREATE POLICY teachers_select_own ON public.teachers FOR SELECT USING (user_id = auth.uid());
+    -- Policies the migration rewrites in place. They start wide open here, so a
+    -- policy the migration forgot to change would fail the isolation tests.
+    DO $$ DECLARE p text[]; BEGIN
+      FOREACH p SLICE 1 IN ARRAY ARRAY[
+        ['lessons_teacher_select','lessons'], ['lessons_student_select','lessons'],
+        ['lesson_content_teacher_select','lesson_content'], ['lesson_content_student_select','lesson_content'],
+        ['students_teacher_select','students'], ['teachers_student_view_basic','teachers'],
+        ['timetables_teacher_select','timetables'], ['timetables_student_select','timetables'],
+        ['grades_select_all','grades'], ['assessments_teacher_select','assessments'],
+        ['assessments_student_select','assessments'], ['users_teacher_view_students','users']] LOOP
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (true)', p[1], p[2]);
+      END LOOP;
+    END $$;
 
     -- Existing data from before schools: one admin, a teacher with a lesson,
     -- a student, and a self-signup learner with no student row.

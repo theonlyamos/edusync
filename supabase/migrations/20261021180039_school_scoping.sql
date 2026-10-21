@@ -1,5 +1,11 @@
 -- School scoping (phase 1 of school onboarding)
 --
+-- Applied to production on 2026-10-21 in eight steps, recorded as versions
+-- 20261021175414 through 20261021180039 (school_scoping_1_organizations ...
+-- school_scoping_5_policies). This file is their combined content. Triggers
+-- and policies are replaced in place (CREATE OR REPLACE TRIGGER, ALTER
+-- POLICY) because the Supabase migration tool stalls on DROP statements.
+--
 -- Turns organizations into schools and ties teachers, students and their
 -- teaching data to exactly one school. Existing data moves into one default
 -- school, so nothing changes for current users.
@@ -14,6 +20,9 @@
 --   6. backfill into a default school owned by the first platform admin
 --   7. teacher/student RLS SELECT policies also require the same school
 --   8. grade lookup for live-class auto-enrollment is scoped to one school
+
+-- Fail fast instead of queueing behind live traffic for table locks.
+SET LOCAL lock_timeout = '10s';
 
 -- ---------------------------------------------------------------------------
 -- 1. Organization type
@@ -125,8 +134,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS organization_members_single_school ON public.organization_members;
-CREATE TRIGGER organization_members_single_school
+CREATE OR REPLACE TRIGGER organization_members_single_school
 BEFORE INSERT OR UPDATE OF organization_id, user_id, is_active ON public.organization_members
 FOR EACH ROW EXECUTE FUNCTION public.enforce_single_school_membership();
 
@@ -192,20 +200,13 @@ BEGIN
 END;
 $$;
 
-DO $$
-DECLARE
-  t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['students', 'teachers', 'grades', 'timetables', 'assessments', 'live_class_events', 'lessons']
-  LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS %I ON public.%I', t || '_set_school', t);
-    EXECUTE format(
-      'CREATE TRIGGER %I BEFORE INSERT ON public.%I FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert()',
-      t || '_set_school', t
-    );
-  END LOOP;
-END;
-$$;
+CREATE OR REPLACE TRIGGER students_set_school BEFORE INSERT ON public.students FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER teachers_set_school BEFORE INSERT ON public.teachers FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER grades_set_school BEFORE INSERT ON public.grades FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER timetables_set_school BEFORE INSERT ON public.timetables FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER assessments_set_school BEFORE INSERT ON public.assessments FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER live_class_events_set_school BEFORE INSERT ON public.live_class_events FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
+CREATE OR REPLACE TRIGGER lessons_set_school BEFORE INSERT ON public.lessons FOR EACH ROW EXECUTE FUNCTION public.set_school_on_insert();
 
 -- A new student or teacher row also makes its person a member of that school,
 -- so the profile row and the membership never drift apart.
@@ -235,13 +236,11 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS students_school_membership ON public.students;
-CREATE TRIGGER students_school_membership
+CREATE OR REPLACE TRIGGER students_school_membership
 AFTER INSERT ON public.students
 FOR EACH ROW EXECUTE FUNCTION public.ensure_school_membership_for_profile();
 
-DROP TRIGGER IF EXISTS teachers_school_membership ON public.teachers;
-CREATE TRIGGER teachers_school_membership
+CREATE OR REPLACE TRIGGER teachers_school_membership
 AFTER INSERT ON public.teachers
 FOR EACH ROW EXECUTE FUNCTION public.ensure_school_membership_for_profile();
 
@@ -341,17 +340,13 @@ $$;
 -- Platform-admin policies (*_admin_all) and owner policies (own row, own
 -- lesson via can_manage_lesson) are unchanged.
 
-DROP POLICY IF EXISTS lessons_teacher_select ON public.lessons;
-CREATE POLICY lessons_teacher_select ON public.lessons
-FOR SELECT TO authenticated
+ALTER POLICY lessons_teacher_select ON public.lessons TO authenticated
 USING (
   public.is_teacher()
   AND organization_id = public.current_school_id()
 );
 
-DROP POLICY IF EXISTS lessons_student_select ON public.lessons;
-CREATE POLICY lessons_student_select ON public.lessons
-FOR SELECT TO authenticated
+ALTER POLICY lessons_student_select ON public.lessons TO authenticated
 USING (
   organization_id = public.current_school_id()
   AND EXISTS (
@@ -379,9 +374,7 @@ AS $$
     );
 $$;
 
-DROP POLICY IF EXISTS lesson_content_teacher_select ON public.lesson_content;
-CREATE POLICY lesson_content_teacher_select ON public.lesson_content
-FOR SELECT TO authenticated
+ALTER POLICY lesson_content_teacher_select ON public.lesson_content TO authenticated
 USING (
   public.is_teacher()
   AND EXISTS (
@@ -391,27 +384,19 @@ USING (
   )
 );
 
-DROP POLICY IF EXISTS lesson_content_student_select ON public.lesson_content;
-CREATE POLICY lesson_content_student_select ON public.lesson_content
-FOR SELECT TO authenticated
+ALTER POLICY lesson_content_student_select ON public.lesson_content TO authenticated
 USING (public.can_access_lesson(lesson_content.lesson_id));
 
-DROP POLICY IF EXISTS students_teacher_select ON public.students;
-CREATE POLICY students_teacher_select ON public.students
-FOR SELECT TO authenticated
+ALTER POLICY students_teacher_select ON public.students TO authenticated
 USING (
   public.is_teacher()
   AND organization_id = public.current_school_id()
 );
 
-DROP POLICY IF EXISTS teachers_student_view_basic ON public.teachers;
-CREATE POLICY teachers_student_view_basic ON public.teachers
-FOR SELECT TO authenticated
+ALTER POLICY teachers_student_view_basic ON public.teachers TO authenticated
 USING (organization_id = public.current_school_id());
 
-DROP POLICY IF EXISTS timetables_teacher_select ON public.timetables;
-CREATE POLICY timetables_teacher_select ON public.timetables
-FOR SELECT TO authenticated
+ALTER POLICY timetables_teacher_select ON public.timetables TO authenticated
 USING (
   public.is_teacher()
   AND organization_id = public.current_school_id()
@@ -419,9 +404,7 @@ USING (
 
 -- The old student policy compared s.grade to itself, so every student could
 -- read every timetable.
-DROP POLICY IF EXISTS timetables_student_select ON public.timetables;
-CREATE POLICY timetables_student_select ON public.timetables
-FOR SELECT TO authenticated
+ALTER POLICY timetables_student_select ON public.timetables TO authenticated
 USING (
   organization_id = public.current_school_id()
   AND EXISTS (
@@ -430,22 +413,16 @@ USING (
   )
 );
 
-DROP POLICY IF EXISTS grades_select_all ON public.grades;
-CREATE POLICY grades_select_school ON public.grades
-FOR SELECT TO authenticated
+ALTER POLICY grades_select_all ON public.grades TO authenticated
 USING (organization_id = public.current_school_id() OR public.is_admin());
 
-DROP POLICY IF EXISTS assessments_teacher_select ON public.assessments;
-CREATE POLICY assessments_teacher_select ON public.assessments
-FOR SELECT TO authenticated
+ALTER POLICY assessments_teacher_select ON public.assessments TO authenticated
 USING (
   public.is_teacher()
   AND organization_id = public.current_school_id()
 );
 
-DROP POLICY IF EXISTS assessments_student_select ON public.assessments;
-CREATE POLICY assessments_student_select ON public.assessments
-FOR SELECT TO authenticated
+ALTER POLICY assessments_student_select ON public.assessments TO authenticated
 USING (
   organization_id = public.current_school_id()
   AND EXISTS (
@@ -454,9 +431,7 @@ USING (
   )
 );
 
-DROP POLICY IF EXISTS users_teacher_view_students ON public.users;
-CREATE POLICY users_teacher_view_students ON public.users
-FOR SELECT TO authenticated
+ALTER POLICY users_teacher_view_students ON public.users TO authenticated
 USING (
   role = 'student'
   AND public.is_teacher()
@@ -466,7 +441,23 @@ USING (
 -- ---------------------------------------------------------------------------
 -- 8. Live-class auto-enrollment by grade, within one school
 -- ---------------------------------------------------------------------------
-DROP FUNCTION IF EXISTS public.student_user_ids_for_grade_level(text);
+-- The one-argument version stays for app builds deployed before this
+-- migration; it now only looks inside the default school.
+CREATE OR REPLACE FUNCTION public.student_user_ids_for_grade_level(p_grade text)
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SET search_path = public
+AS $$
+  SELECT s.user_id
+  FROM public.students s
+  WHERE p_grade IS NOT NULL
+    AND btrim(p_grade) <> ''
+    AND lower(btrim(s.grade)) = lower(btrim(p_grade))
+    AND s.organization_id IS NOT DISTINCT FROM public.default_school_id()
+  ORDER BY s.user_id;
+$$;
+
 CREATE OR REPLACE FUNCTION public.student_user_ids_for_grade_level(p_grade text, p_organization_id uuid)
 RETURNS SETOF uuid
 LANGUAGE sql
