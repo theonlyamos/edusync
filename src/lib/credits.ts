@@ -1,4 +1,5 @@
 import { createServerSupabase } from '@/lib/supabase.server'
+import { schoolBalance } from '@/lib/school-billing'
 
 export async function getUserCredits(userId: string): Promise<number> {
     const supabase = createServerSupabase()
@@ -16,6 +17,29 @@ export async function getUserCredits(userId: string): Promise<number> {
 export async function hasEnoughCredits(userId: string, minutes: number = 1): Promise<boolean> {
     const credits = await getUserCredits(userId)
     return credits >= minutes
+}
+
+/**
+ * Whether whoever pays for this person's live AI time can cover `minutes`:
+ * their school's pool when they are a school member (signed in, not via an
+ * API key), otherwise their own credits.
+ */
+export async function payerHasEnoughCredits(userId: string, minutes: number, viaApiKey: boolean): Promise<boolean> {
+    if (!viaApiKey) {
+        const supabase = createServerSupabase()
+        const { data: schoolId, error } = await supabase.rpc('user_school_id', { p_user_id: userId })
+        if (error) throw error
+        if (typeof schoolId === 'string' && schoolId) {
+            const { data: school, error: schoolError } = await supabase
+                .from('organizations')
+                .select('credits, trial_credits, trial_expires_at')
+                .eq('id', schoolId)
+                .maybeSingle()
+            if (schoolError) throw schoolError
+            return school ? schoolBalance(school).total >= minutes : false
+        }
+    }
+    return hasEnoughCredits(userId, minutes)
 }
 
 export async function deductCreditsForMinute(

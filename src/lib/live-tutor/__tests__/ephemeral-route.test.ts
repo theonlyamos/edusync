@@ -29,6 +29,7 @@ let rateLimitAllowed: boolean;
 let finalizeStatus: string | null;
 let finalizeFailuresRemaining: number;
 let sessionOwner: { user_id: string; api_key_id: string | null };
+let schoolId: string | null;
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -41,6 +42,7 @@ beforeEach(() => {
     finalizeStatus = null;
     finalizeFailuresRemaining = 0;
     sessionOwner = { user_id: userId, api_key_id: null };
+    schoolId = null;
     grantRow = { status: 'charged', grant_id: grantId, issuance_id: issuanceId, expires_at: expiresAt, minutes_charged: 5, remaining_credits: 55 };
     genai.create.mockReset().mockResolvedValue({ name: 'auth_tokens/locked' });
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -56,6 +58,7 @@ beforeEach(() => {
                 return Response.json([{ status: finalizeStatus ?? (rpcs.at(-1)?.body.p_succeeded ? 'completed' : 'refunded'), remaining_credits: 55 }]);
             }
             if (name === 'add_user_credits') return Response.json(60);
+            if (name === 'user_school_id') return Response.json(schoolId);
         }
         if (url.pathname === '/rest/v1/learning_sessions') {
             return Response.json([{ id: sessionId, ...sessionOwner }]);
@@ -146,14 +149,23 @@ describe('POST /api/genai/ephemeral', () => {
         expect(rpcs.find(({ name }) => name === 'grant_voice_minutes_v2')?.body).toMatchObject({ p_user_id: userId, p_api_key_id: apiKeyId });
     });
 
-    it('does not charge school students but still locks and expires their token', async () => {
+    it('bills school students like everyone else and reports that the school paid', async () => {
+        schoolId = '60000000-0000-4000-8000-000000000001';
         const response = await POST(tokenRequest({ variant: 'studyCompanion' }, { role: 'student' }));
         expect(response.status).toBe(200);
-        expect(rpcs.some(({ name }) => name === 'grant_voice_minutes')).toBe(false);
+        expect(rpcs.find(({ name }) => name === 'grant_voice_minutes_v2')?.body).toMatchObject({ p_user_id: userId, p_api_key_id: null });
         const config = lockedConstraints();
-        expect(config.expireTime).toBe('2026-10-18T12:30:00.000Z');
-        expect(config.liveConnectConstraints.model).toBe('models/locked-live-model');
-        expect((await response.json()).billing).toBeNull();
+        expect(config.expireTime).toBe(expiresAt);
+        expect((await response.json()).billing).toMatchObject({ grantId, minutesCharged: 5, remainingCredits: 55, payer: 'school' });
+    });
+
+    it('tells a school member when the school is out of credits', async () => {
+        schoolId = '60000000-0000-4000-8000-000000000001';
+        grantRow = { status: 'insufficient_credits', grant_id: null, issuance_id: null, expires_at: null, minutes_charged: 0, remaining_credits: 0 };
+        const response = await POST(tokenRequest({}, { role: 'student' }));
+        expect(response.status).toBe(402);
+        expect(await response.json()).toMatchObject({ payer: 'school', error: 'Your school is out of credits' });
+        expect(genai.create).not.toHaveBeenCalled();
     });
 
     it('rate limits token minting per user', async () => {

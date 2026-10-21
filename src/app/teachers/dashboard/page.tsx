@@ -20,6 +20,8 @@ import {
   WeakObjectivesSection,
 } from '@/components/dashboard/TeacherInsights';
 import type { TeacherDashboardData } from '@/lib/dashboard-server';
+import { SchoolCreditsCard } from '@/components/dashboard/CreditWidgets';
+import type { CreditSummary } from '@/lib/school-billing.server';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
 import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window';
 import {
@@ -41,6 +43,7 @@ export default function TeacherDashboard() {
   const homework = useAllHomework();
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const insights = useHomeworkData<TeacherDashboardData>('/api/dashboard/teacher');
+  const credits = useHomeworkData<CreditSummary>('/api/credits/summary');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
   const userId = session?.user?.id;
@@ -99,7 +102,7 @@ export default function TeacherDashboard() {
           ]}
         />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
           <DashboardSection
             title="Needs your attention"
             icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
@@ -173,6 +176,8 @@ export default function TeacherDashboard() {
               </ul>
             )}
           </DashboardSection>
+
+          <SchoolCreditsCard request={credits} now={now} />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">

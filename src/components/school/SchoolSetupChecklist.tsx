@@ -168,8 +168,10 @@ export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
           <StepIcon done={Boolean(byId.credits?.done)} />
           <div className="flex-1 space-y-2">
             <h3 className="font-medium">{byId.credits?.title}</h3>
-            <p className="text-sm text-muted-foreground">1 credit is 1 minute of live AI tutoring.</p>
-            <Button asChild size="sm" variant="outline"><Link href="/learn/credits">Buy credits</Link></Button>
+            <p className="text-sm text-muted-foreground">
+              1 credit is 1 minute of live AI tutoring. New schools start with a free trial of 300 credits for 30 days.
+            </p>
+            <Button asChild size="sm" variant="outline"><Link href={`/learn/org/${data.school.id}?tab=billing`}>Buy credits</Link></Button>
           </div>
         </section>
       </CardContent>

@@ -1,6 +1,9 @@
 export class VoiceTokenRequestError extends Error {
-  constructor(readonly status: number) {
-    const message = status === 402
+  constructor(readonly status: number, readonly payer: 'school' | 'personal' | null = null) {
+    const schoolPays = status === 402 && payer === 'school';
+    const message = schoolPays
+      ? 'Your school is out of tutor minutes'
+      : status === 402
       ? 'Out of voice credits'
       : status === 401
       ? 'Voice authorization failed'
@@ -9,7 +12,9 @@ export class VoiceTokenRequestError extends Error {
         : status === 429
           ? 'Voice request limit reached'
           : 'Voice token request failed';
-    const nextStep = status === 402
+    const nextStep = schoolPays
+      ? 'Ask your teacher or school admin to add credits.'
+      : status === 402
       ? 'Buy more credits to keep talking.'
       : status === 401
       ? 'Please sign in again or check the API key.'

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { addCredits } from '@/lib/credits'
+import { addSchoolPurchase } from '@/lib/school-billing.server'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { requireEnv } from '@/lib/env'
 
@@ -59,9 +60,24 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Delayed payment methods (bank debits and the like) finish the checkout
+        // unpaid and confirm later with this event. Schools are credited then;
+        // the payment-intent unique index stops a double credit.
+        if (event.type === 'checkout.session.async_payment_succeeded') {
+            const session = event.data.object as Stripe.Checkout.Session
+            const { userId, credits, kind, organizationId } = session.metadata ?? {}
+            if (kind === 'school_credits') {
+                return await creditSchool(event, session, { organizationId, userId, credits })
+            }
+        }
+
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object as Stripe.Checkout.Session
-            const { userId, credits, quantity } = session.metadata!
+            const { userId, credits, quantity, kind, organizationId } = session.metadata ?? {}
+
+            if (kind === 'school_credits') {
+                return await creditSchool(event, session, { organizationId, userId, credits })
+            }
 
             if (userId) {
                 let creditsToAdd = 0
@@ -106,6 +122,42 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error('Webhook processing error:', error)
         return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+    }
+}
+
+/** A school bought credits for its pool (POST /api/schools/current/credits). */
+async function creditSchool(
+    event: Stripe.Event,
+    session: Stripe.Checkout.Session,
+    meta: { organizationId?: string; userId?: string; credits?: string },
+) {
+    const creditsToAdd = Number.parseInt(meta.credits ?? '', 10)
+    if (!meta.organizationId || !Number.isInteger(creditsToAdd) || creditsToAdd <= 0) {
+        console.error('School credit checkout is missing its school or amount', { eventId: event.id })
+        return NextResponse.json({ received: true })
+    }
+    if (session.payment_status !== 'paid') {
+        return NextResponse.json({ received: true, pending: true })
+    }
+    const claimed = await claimEvent(event.id, event.type)
+    if (!claimed) {
+        return NextResponse.json({ received: true, duplicate: true })
+    }
+    try {
+        const ok = await addSchoolPurchase({
+            schoolId: meta.organizationId,
+            credits: creditsToAdd,
+            userId: meta.userId ?? null,
+            paymentIntentId: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? session.id,
+        })
+        if (!ok) {
+            console.error('School credit checkout names a school that does not exist', { eventId: event.id })
+        }
+        return NextResponse.json({ received: true })
+    } catch (error) {
+        console.error('Failed to add school credits:', error)
+        await releaseEvent(event.id)
+        return NextResponse.json({ error: 'Failed to add credits' }, { status: 500 })
     }
 }
 

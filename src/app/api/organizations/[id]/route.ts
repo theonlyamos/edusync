@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { schoolBalance } from '@/lib/school-billing';
 
 export async function GET(
   request: NextRequest,
@@ -87,7 +88,10 @@ export async function GET(
 
     const organizationWithMembers = {
       ...organization,
-      credits: ownerData?.credits ?? organization.credits,
+      // Schools spend from their own pool; other organizations use the owner's balance.
+      credits: organization.type === 'school'
+        ? schoolBalance(organization).total
+        : ownerData?.credits ?? organization.credits,
       organization_members: membersWithUsers
     };
 

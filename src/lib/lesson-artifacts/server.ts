@@ -74,8 +74,18 @@ export function lessonArtifactErrorResponse(error: unknown) {
   if (error instanceof ZodError) {
     return NextResponse.json({ error: 'Invalid request', details: error.flatten() }, { status: 400 });
   }
-  if (error instanceof Error && error.message.includes('AI_QUOTA_EXCEEDED')) {
+  const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : '';
+  if (message.includes('AI_QUOTA_EXCEEDED')) {
     return NextResponse.json({ error: 'Your organization has reached its monthly AI content limit' }, { status: 429 });
+  }
+  if (message.includes('SCHOOL_CREDITS_EXHAUSTED')) {
+    return NextResponse.json(
+      {
+        error: 'Your school has used its free lesson visuals for this month and has no credits left. Ask your school admin to buy credits.',
+        code: 'school_credits_exhausted',
+      },
+      { status: 402 },
+    );
   }
   console.error('Lesson artifact request failed:', error);
   return NextResponse.json({ error: 'Lesson artifact request failed' }, { status: 500 });
