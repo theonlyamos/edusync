@@ -17,7 +17,7 @@ await db.exec(`
     CREATE TABLE public.lesson_objectives (id serial PRIMARY KEY, lesson_id uuid, revision integer NOT NULL DEFAULT 1,
       archived_at timestamptz, updated_at timestamptz);
 `);
-await db.exec(await readFile(path.join(root, 'supabase/migrations/20261021200000_lesson_content_keeps_approvals.sql'), 'utf8'));
+await db.exec(await readFile(path.join(root, 'supabase/migrations/20261021195159_lesson_content_keeps_approvals.sql'), 'utf8'));
 await db.exec(`
     CREATE TRIGGER lessons_visual_revision BEFORE UPDATE ON public.lessons
     FOR EACH ROW EXECUTE FUNCTION public.bump_lesson_visual_revision();
