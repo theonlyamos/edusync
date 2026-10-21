@@ -17,7 +17,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
 
   const { data: ev, error: evErr } = await supabase
     .from('live_class_events')
-    .select('id, organizer_id, max_attendees, status, grade_level')
+    .select('id, organizer_id, max_attendees, status, grade_level, organization_id')
     .eq('id', eventId)
     .maybeSingle()
 
@@ -41,6 +41,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
     organizerId: ev.organizer_id as string,
     attendeeUserId: auth.userId,
     eventGradeLevel: ev.grade_level as string | null,
+    eventOrganizationId: (ev as { organization_id?: string | null }).organization_id ?? null,
   })
   if (!eligible) {
     return NextResponse.json({ error: 'Only students in this class grade can join' }, { status: 403 })

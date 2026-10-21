@@ -4,7 +4,8 @@ import { normalizeLiveClassGrade } from '@/lib/live-class-attendance'
 const UPSERT_BATCH = 250
 
 /**
- * Enrolls every student whose grade matches the event grade (same rules as attendance).
+ * Enrolls every student in the event's school whose grade matches the event grade
+ * (same rules as attendance).
  * Respects max_attendees when set. Skips the organizer if they appear as a student.
  */
 export async function enrollAllStudentsForGradeLevel(
@@ -12,6 +13,7 @@ export async function enrollAllStudentsForGradeLevel(
   params: {
     eventId: string
     gradeLevelRaw: string | null | undefined
+    organizationId: string | null
     organizerId: string
     maxAttendees: number | null | undefined
   }
@@ -25,6 +27,7 @@ export async function enrollAllStudentsForGradeLevel(
 
   const { data: rpcData, error: rpcErr } = await supabase.rpc('student_user_ids_for_grade_level', {
     p_grade: grade,
+    p_organization_id: params.organizationId,
   })
 
   if (rpcErr) {

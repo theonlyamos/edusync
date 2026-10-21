@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
+import { inSameSchool } from '@/lib/school'
 import { liveClassGradesEqual, normalizeLiveClassGrade } from '@/lib/live-class-attendance'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
 
   const { data: ev, error: evErr } = await supabase
     .from('live_class_events')
-    .select('organizer_id, max_attendees, grade_level')
+    .select('organizer_id, max_attendees, grade_level, organization_id')
     .eq('id', eventId)
     .maybeSingle()
 
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
 
   const { data: studentRows, error: stErr } = await supabase
     .from('students')
-    .select('user_id, grade')
+    .select('user_id, grade, organization_id')
     .in('user_id', userIds)
 
   if (stErr) {
@@ -72,7 +73,11 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   for (const row of studentRows || []) {
     const uid = (row as { user_id: string; grade?: string }).user_id
     const g = (row as { grade?: string }).grade
-    if (uid && g) gradeByUser.set(uid, g)
+    const school = (row as { organization_id?: string | null }).organization_id ?? null
+    // Students from another school are left out, so they fail the grade check below.
+    if (uid && g && inSameSchool(school, (ev as { organization_id?: string | null }).organization_id)) {
+      gradeByUser.set(uid, g)
+    }
   }
 
   for (const uid of userIds) {
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     const g = gradeByUser.get(uid)
     if (!liveClassGradesEqual(requiredGrade, g)) {
       return NextResponse.json(
-        { error: 'Each user must be a student whose grade matches this class' },
+        { error: 'Each user must be a student in this school whose grade matches this class' },
         { status: 400 }
       )
     }
