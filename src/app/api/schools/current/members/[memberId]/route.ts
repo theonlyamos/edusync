@@ -37,6 +37,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Only the school owner can change other admins' }, { status: 403 });
     }
 
+    // Teacher and student access also follows users.role (portals and the
+    // service-role routes check it), so a deactivated teacher or student drops
+    // to a plain learner account and gets their role back on reactivation.
+    const portalRole = member.role === 'teacher' || member.role === 'student' ? member.role : null;
+    const setAppRole = async (role: string) => {
+      const { error } = await supabase.from('users').update({ role }).eq('id', member.user_id);
+      if (error) throw error;
+    };
+
+    if (!body.isActive && portalRole) await setAppRole('learner');
     const { error } = await supabase
       .from('organization_members')
       .update({ is_active: body.isActive })
@@ -47,6 +57,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
       throw error;
     }
+    if (body.isActive && portalRole) await setAppRole(portalRole);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Error in PATCH /api/schools/current/members/[memberId]:', error);

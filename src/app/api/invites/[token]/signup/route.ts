@@ -8,9 +8,10 @@ type Params = { params: Promise<{ token: string }> };
 const ACCOUNT_EXISTS = 'An account with this email already exists. Log in to accept the invite.';
 
 /**
- * Creates the account for a new person from their invite link. The link was
- * sent to the invited address, so that address counts as confirmed. The
- * person then signs in and accepts the invite as themselves.
+ * Creates the account for a new person from their invite link, already
+ * confirmed, because the link was emailed to the invited address. A link the
+ * school shared by hand proves nothing about the address, so for those the
+ * join page signs up normally and the person confirms their email first.
  */
 export async function POST(request: NextRequest, { params }: Params) {
   const limited = await rateLimit(request, 'api');
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!invite) return NextResponse.json({ error: 'This invite link is not valid' }, { status: 404 });
     if (invite.state !== 'pending') {
       return NextResponse.json({ error: 'This invite can no longer be used' }, { status: 409 });
+    }
+    if (!invite.linkEmailed) {
+      return NextResponse.json({ error: 'Confirm your email address to join', confirmEmail: true }, { status: 409 });
     }
 
     const { data: existing, error: lookupError } = await supabase.from('users').select('id').eq('email', invite.email).maybeSingle();

@@ -35,6 +35,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       gradeLevel: invite.gradeLevel,
       school: { name: invite.schoolName },
       accountExists,
+      linkEmailed: invite.linkEmailed,
     });
   } catch (error) {
     console.error('Error in GET /api/invites/[token]:', error);

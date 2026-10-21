@@ -21,6 +21,7 @@ type InviteInfo = {
   gradeLevel?: string | null;
   school?: { name: string };
   accountExists?: boolean;
+  linkEmailed?: boolean;
 };
 
 const errorText = (error: unknown, fallback: string) =>
@@ -46,6 +47,7 @@ export default function JoinInvitePage() {
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmSentTo, setConfirmSentTo] = useState<string | null>(null);
 
   useEffect(() => {
     axios
@@ -87,9 +89,24 @@ export default function JoinInvitePage() {
     setBusy(true);
     setError(null);
     try {
-      await axios.post(`/api/invites/${encodeURIComponent(token)}/signup`, { name, password });
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email: info.email, password });
-      if (signInError) throw signInError;
+      if (!info.linkEmailed) {
+        // The school shared this link by hand, so the address still needs confirming.
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: info.email,
+          password,
+          options: { emailRedirectTo: `${window.location.origin}${loginHref}`, data: { name } },
+        });
+        if (signUpError) throw signUpError;
+        if (!data?.session) {
+          setConfirmSentTo(info.email);
+          setBusy(false);
+          return;
+        }
+      } else {
+        await axios.post(`/api/invites/${encodeURIComponent(token)}/signup`, { name, password });
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: info.email, password });
+        if (signInError) throw signInError;
+      }
       await accept();
     } catch (err) {
       setError(errorText(err, 'Could not create your account.'));
@@ -144,6 +161,16 @@ export default function JoinInvitePage() {
         <Button className="w-full h-11" onClick={handleAccept} disabled={busy}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Accept invite'}
         </Button>
+      </JoinShell>
+    );
+  }
+
+  if (confirmSentTo) {
+    return (
+      <JoinShell title="Check your email" description={`We sent a confirmation link to ${confirmSentTo}.`}>
+        <p className="text-sm text-muted-foreground">
+          Open it to confirm your address. You will come back here to finish joining {schoolName}.
+        </p>
       </JoinShell>
     );
   }

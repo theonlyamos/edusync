@@ -153,7 +153,7 @@ export async function createSchoolInvites(context: SendContext, invites: Invite[
   for (const row of rows.filter((r) => openInvites.has(r.email))) {
     const { error } = await supabase
       .from('organization_invitations')
-      .update({ name: row.name, role: row.role, grade_level: row.grade_level, token: row.token, expires_at: row.expires_at })
+      .update({ name: row.name, role: row.role, grade_level: row.grade_level, token: row.token, expires_at: row.expires_at, last_sent_at: null })
       .eq('id', openInvites.get(row.email) as string)
     if (error) {
       console.error('Failed to refresh invite:', error)
@@ -203,7 +203,11 @@ type OutgoingInvite = {
   expiresAt: Date
 }
 
-/** Emails the invites and records when each was sent. Returns the emails that went out. */
+/**
+ * Emails the invites and records when each was sent. last_sent_at always
+ * describes the current link: it is cleared whenever the token changes and set
+ * only once that link has gone out by email. Returns the emails that went out.
+ */
 async function emailInvites({ supabase, school, inviter }: SendContext, outgoing: OutgoingInvite[]): Promise<Set<string>> {
   const delivered = new Set<string>()
   if (outgoing.length === 0 || !isEmailConfigured()) return delivered
@@ -256,7 +260,7 @@ export async function resendSchoolInvite(context: SendContext, inviteId: string)
   const expiresAt = inviteExpiry()
   const { error: updateError } = await supabase
     .from('organization_invitations')
-    .update({ token: hashInviteToken(token), expires_at: expiresAt.toISOString() })
+    .update({ token: hashInviteToken(token), expires_at: expiresAt.toISOString(), last_sent_at: null })
     .eq('id', invite.id)
   if (updateError) throw updateError
 

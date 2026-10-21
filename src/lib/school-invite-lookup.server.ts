@@ -9,6 +9,8 @@ export type InviteLookup = {
   role: string
   gradeLevel: string | null
   state: InviteState
+  /** The current link went to the invited address by email (not just shown to the inviter). */
+  linkEmailed: boolean
   schoolId: string
   schoolName: string
 }
@@ -18,7 +20,7 @@ export async function findInviteByToken(supabase: ServiceSupabase, token: string
   if (!token || token.length > 200) return null
   const { data, error } = await supabase
     .from('organization_invitations')
-    .select('id, email, name, role, grade_level, expires_at, accepted_at, revoked_at, organizations!inner(id, name, type, is_active)')
+    .select('id, email, name, role, grade_level, expires_at, accepted_at, revoked_at, last_sent_at, organizations!inner(id, name, type, is_active)')
     .eq('token', hashInviteToken(token))
     .maybeSingle()
   if (error) throw error
@@ -35,6 +37,7 @@ export async function findInviteByToken(supabase: ServiceSupabase, token: string
     role: data.role,
     gradeLevel: data.grade_level,
     state,
+    linkEmailed: Boolean(data.last_sent_at),
     schoolId: school.id,
     schoolName: school.name,
   }

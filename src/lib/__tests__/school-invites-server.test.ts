@@ -7,60 +7,7 @@ import {
   resendSchoolInvite,
 } from '@/lib/school-invites.server'
 import { JOIN_CODE_ALPHABET, type Invite } from '@/lib/school-invites'
-
-type Row = Record<string, any>
-
-/** A small in-memory stand-in for the Supabase query builder calls these helpers make. */
-function fakeSupabase(tables: Record<string, Row[]>) {
-  const rpcCalls: Array<{ name: string; args: unknown }> = []
-  let nextId = 1
-  const from = (table: string) => {
-    const filters: Array<(row: Row) => boolean> = []
-    let op: 'select' | 'insert' | 'update' = 'select'
-    let payload: any
-    let countOnly = false
-    let single = false
-    const rows = () => (tables[table] ??= [])
-    const builder: any = {
-      select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
-        if (opts?.head) countOnly = true
-        return builder
-      },
-      eq: (col: string, value: unknown) => { filters.push((r) => r[col] === value); return builder },
-      is: (col: string, value: unknown) => { filters.push((r) => (r[col] ?? null) === value); return builder },
-      in: (col: string, values: unknown[]) => { filters.push((r) => values.includes(r[col])); return builder },
-      order: () => builder,
-      limit: () => builder,
-      maybeSingle: () => { single = true; return builder },
-      insert: (value: Row | Row[]) => { op = 'insert'; payload = value; return builder },
-      update: (value: Row) => { op = 'update'; payload = value; return builder },
-      then: (resolve: (result: unknown) => void, reject: (error: unknown) => void) => {
-        try {
-          if (op === 'insert') {
-            const added = (Array.isArray(payload) ? payload : [payload]).map((r) => ({ id: `row-${nextId++}`, ...r }))
-            rows().push(...added)
-            return resolve({ data: added, error: null })
-          }
-          const matched = rows().filter((r) => filters.every((f) => f(r)))
-          if (op === 'update') {
-            matched.forEach((r) => Object.assign(r, payload))
-            return resolve({ data: matched, error: null })
-          }
-          if (countOnly) return resolve({ count: matched.length, error: null })
-          return resolve({ data: single ? matched[0] ?? null : matched, error: null })
-        } catch (error) {
-          reject(error)
-        }
-      },
-    }
-    return builder
-  }
-  return {
-    client: { from, rpc: async (name: string, args: unknown) => { rpcCalls.push({ name, args }); return { error: null } } } as any,
-    tables,
-    rpcCalls,
-  }
-}
+import { fakeSupabase } from './helpers/fake-supabase'
 
 const school = { id: 'school-1', name: 'Hilltop', owner_id: 'owner-1', total_credits_purchased: 0 }
 const context = (supabase: any) => ({ supabase, school, inviter: { id: 'owner-1', name: 'Mrs Owusu' }, origin: 'https://app.test' })
@@ -90,7 +37,7 @@ describe('createSchoolInvites', () => {
       users: [{ id: 'u-member', email: 'member@example.com' }],
       organization_members: [{ organization_id: 'school-1', user_id: 'u-member', is_active: true }],
       organization_invitations: [
-        { id: 'old', organization_id: 'school-1', email: 'again@example.com', role: 'student', grade_level: 'primary 1', token: 'old-hash', accepted_at: null, revoked_at: null },
+        { id: 'old', organization_id: 'school-1', email: 'again@example.com', role: 'student', grade_level: 'primary 1', token: 'old-hash', accepted_at: null, revoked_at: null, last_sent_at: '2026-10-20T10:00:00Z' },
       ],
       credit_transactions: [],
     })
@@ -113,7 +60,8 @@ describe('createSchoolInvites', () => {
     expect(fresh.token).toBe(hashInviteToken(token))
     expect(fresh.token).not.toBe(token)
     const refreshed = invites.find((i) => i.id === 'old')!
-    expect(refreshed).toMatchObject({ role: 'teacher', grade_level: null })
+    // The new link has not been emailed, so it no longer counts as sent.
+    expect(refreshed).toMatchObject({ role: 'teacher', grade_level: null, last_sent_at: null })
     expect(refreshed.token).not.toBe('old-hash')
     expect(fake.rpcCalls).toEqual([])
   })
@@ -161,7 +109,7 @@ describe('resendSchoolInvite', () => {
   it('rotates the link of an open invite and refuses closed ones', async () => {
     const fake = fakeSupabase({
       organization_invitations: [
-        { id: 'open', organization_id: 'school-1', email: 'a@example.com', role: 'teacher', token: 'h1', accepted_at: null, revoked_at: null },
+        { id: 'open', organization_id: 'school-1', email: 'a@example.com', role: 'teacher', token: 'h1', accepted_at: null, revoked_at: null, last_sent_at: '2026-10-20T10:00:00Z' },
         { id: 'done', organization_id: 'school-1', email: 'b@example.com', role: 'teacher', token: 'h2', accepted_at: '2026-10-20', revoked_at: null },
         { id: 'other', organization_id: 'school-2', email: 'c@example.com', role: 'teacher', token: 'h3', accepted_at: null, revoked_at: null },
       ],
@@ -169,6 +117,7 @@ describe('resendSchoolInvite', () => {
     const result = await resendSchoolInvite(context(fake.client), 'open')
     expect(result?.outcome).toBe('invited')
     expect(fake.tables.organization_invitations[0].token).toBe(hashInviteToken(decodeURIComponent(result!.inviteUrl!.split('/join/')[1])))
+    expect(fake.tables.organization_invitations[0].last_sent_at).toBeNull()
     expect(await resendSchoolInvite(context(fake.client), 'done')).toBeNull()
     expect(await resendSchoolInvite(context(fake.client), 'other')).toBeNull()
   })
