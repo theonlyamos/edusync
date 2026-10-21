@@ -19,6 +19,7 @@ function createHarness(lessonGrade: string, studentGrade: string) {
     if (table === 'lessons') {
       return { select: vi.fn(() => ({ eq: vi.fn(() => terminal({
         id: lessonId,
+        organization_id: 'school-1',
         gradelevel: lessonGrade,
         teacher_id: null,
       })) })) };
@@ -42,7 +43,7 @@ function createHarness(lessonGrade: string, studentGrade: string) {
     }
     throw new Error(`Unexpected table ${table}`);
   });
-  createServerSupabaseMock.mockReturnValue({ from });
+  createServerSupabaseMock.mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ data: 'school-1', error: null }) });
   return { lessonContentOrder };
 }
 

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
-import { inSameSchool } from '@/lib/school'
 import { liveClassGradesEqual, normalizeLiveClassGrade } from '@/lib/live-class-attendance'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -59,23 +58,32 @@ export async function POST(request: NextRequest, ctx: Ctx) {
   }
   const role = 'student' as const
 
-  const { data: studentRows, error: stErr } = await supabase
-    .from('students')
-    .select('user_id, grade, organization_id')
-    .in('user_id', userIds)
+  const eventSchoolId = (ev as { organization_id?: string | null }).organization_id ?? null
+  const [{ data: studentRows, error: stErr }, { data: memberRows, error: memberErr }] = await Promise.all([
+    supabase.from('students').select('user_id, grade').in('user_id', userIds),
+    // Active members of the event's school; a deactivated membership no longer counts.
+    eventSchoolId
+      ? supabase
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', eventSchoolId)
+        .eq('is_active', true)
+        .in('user_id', userIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
 
-  if (stErr) {
-    console.error('[enroll] students lookup', stErr)
+  if (stErr || memberErr) {
+    console.error('[enroll] students lookup', stErr ?? memberErr)
     return NextResponse.json({ error: 'Could not verify student grades' }, { status: 500 })
   }
 
+  const schoolMembers = new Set((memberRows || []).map((row) => (row as { user_id: string }).user_id))
   const gradeByUser = new Map<string, string>()
   for (const row of studentRows || []) {
     const uid = (row as { user_id: string; grade?: string }).user_id
     const g = (row as { grade?: string }).grade
-    const school = (row as { organization_id?: string | null }).organization_id ?? null
-    // Students from another school are left out, so they fail the grade check below.
-    if (uid && g && inSameSchool(school, (ev as { organization_id?: string | null }).organization_id)) {
+    // Students outside the event's school are left out, so they fail the grade check below.
+    if (uid && g && eventSchoolId && schoolMembers.has(uid)) {
       gradeByUser.set(uid, g)
     }
   }

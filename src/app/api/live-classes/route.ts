@@ -3,7 +3,7 @@ import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { validateLiveClassGradeAndLesson } from '@/lib/live-class-lesson-validation'
 import { fetchStudentPlacement, liveClassGradesEqual } from '@/lib/live-class-attendance'
-import { inSameSchool } from '@/lib/school'
+import { inActiveSchool } from '@/lib/school'
 import { enrollAllStudentsForGradeLevel } from '@/lib/live-class-auto-enroll'
 
 function canOrganize(role: string | null | undefined) {
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
   const items = merged.filter((e) => {
     const orgId = e.organizer_id as string
     if (orgId === auth.userId) return true
-    if (!me.isStudent || !inSameSchool(e.organization_id as string | null | undefined, me.organizationId)) return false
+    if (!me.isStudent || !inActiveSchool(me.organizationId, e.organization_id as string | null | undefined)) return false
     return liveClassGradesEqual(e.grade_level as string | null | undefined, me.grade)
   })
 

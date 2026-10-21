@@ -47,6 +47,7 @@ function createHarness(
         id: lessonId,
         title: 'Forces',
         subject: 'Physics',
+        organization_id: 'school-1',
         gradelevel: 'JHS 1',
         current_publication_id: 'publication-1',
       }, error: null }, 'maybeSingle')) })) };
@@ -89,7 +90,7 @@ function createHarness(
     throw new Error(`Unexpected table ${table}`);
   });
 
-  createServerSupabaseMock.mockReturnValue({ from });
+  createServerSupabaseMock.mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ data: 'school-1', error: null }) });
   return { insertRun, updateRun, insertEvent };
 }
 

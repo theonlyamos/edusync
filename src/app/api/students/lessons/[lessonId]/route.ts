@@ -10,7 +10,7 @@ import {
   LessonArtifactHttpError,
 } from '@/lib/lesson-artifacts/server';
 import { createServerSupabase } from '@/lib/supabase.server';
-import { inSameSchool } from '@/lib/school';
+import { getUserSchoolId, inActiveSchool } from '@/lib/school';
 
 export async function GET(
   _request: Request,
@@ -20,7 +20,7 @@ export async function GET(
     const session = await requireStudentSession();
     const { lessonId } = await params;
     const supabase = createServerSupabase();
-    const [{ data: lesson, error: lessonError }, { data: student, error: studentError }] = await Promise.all([
+    const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
       supabase
         .from('lessons')
         .select('id,gradelevel,current_publication_id,organization_id')
@@ -28,15 +28,16 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('students')
-        .select('grade,organization_id')
+        .select('grade')
         .eq('user_id', session.user.id)
         .maybeSingle(),
+      getUserSchoolId(supabase, session.user.id),
     ]);
 
     if (lessonError) throw lessonError;
     if (studentError) throw studentError;
     if (!lesson) throw new LessonArtifactHttpError(404, 'Lesson not found');
-    if (!student || !inSameSchool(lesson.organization_id, student.organization_id)) {
+    if (!student || !inActiveSchool(schoolId, lesson.organization_id)) {
       throw new LessonArtifactHttpError(404, 'Lesson not found');
     }
 
