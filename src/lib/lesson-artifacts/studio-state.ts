@@ -109,3 +109,16 @@ export function unpreparedObjectives<T extends { id: string; revision: number; p
     item.objective_id === objective.id && item.objective_revision === objective.revision && item.kind !== 'uploaded_media'
     && !['failed', 'rejected'].includes(item.status)));
 }
+
+export type ReviewStep = { objectiveId: string | null; key: string; approved: boolean; hasMaterial: boolean };
+
+/**
+ * Where to go after approving something: the next item waiting for review,
+ * then the next item that still needs generating, looking past the current
+ * step first and wrapping around. Null means everything is approved.
+ */
+export function nextReviewStep(order: ReviewStep[], current: { objectiveId: string | null; key: string }) {
+  const index = order.findIndex(step => step.objectiveId === current.objectiveId && step.key === current.key);
+  const rotated = [...order.slice(index + 1), ...order.slice(0, Math.max(index, 0))];
+  return rotated.find(step => !step.approved && step.hasMaterial) ?? rotated.find(step => !step.approved) ?? null;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { directionEditImpact, getStudioMaterials, unpreparedObjectives, type StudioArtifact } from '../studio-state';
+import { directionEditImpact, getStudioMaterials, nextReviewStep, unpreparedObjectives, type StudioArtifact } from '../studio-state';
 
 function artifact(overrides: Partial<StudioArtifact> = {}): StudioArtifact {
   return { id: 'intro', objective_id: 'objective', objective_revision: 2, series_id: 'intro', version: 1, position: 0,
@@ -92,5 +92,23 @@ describe('objectives to prepare', () => {
       artifact({ id: 'c1', objective_id: 'c', objective_revision: 1, status: 'rejected' }),
     ];
     expect(unpreparedObjectives(objectives, artifacts).map(item => item.id)).toEqual(['a', 'c']);
+  });
+});
+
+describe('next review step', () => {
+  const order = [
+    { objectiveId: null, key: 'lesson', approved: false, hasMaterial: true },
+    { objectiveId: 'a', key: 'introduction', approved: true, hasMaterial: true },
+    { objectiveId: 'a', key: 'exploration', approved: false, hasMaterial: false },
+    { objectiveId: 'b', key: 'introduction', approved: false, hasMaterial: true },
+  ];
+  it('prefers material waiting for review after the current step, then wraps around', () => {
+    expect(nextReviewStep(order, { objectiveId: null, key: 'lesson' })).toMatchObject({ objectiveId: 'b', key: 'introduction' });
+    expect(nextReviewStep(order, { objectiveId: 'b', key: 'introduction' })).toMatchObject({ objectiveId: null, key: 'lesson' });
+  });
+  it('falls back to steps still to generate, and returns null when all is approved', () => {
+    const generateOnly = order.map(step => ({ ...step, hasMaterial: false }));
+    expect(nextReviewStep(generateOnly, { objectiveId: 'a', key: 'introduction' })).toMatchObject({ objectiveId: 'a', key: 'exploration' });
+    expect(nextReviewStep(order.map(step => ({ ...step, approved: true })), { objectiveId: null, key: 'lesson' })).toBeNull();
   });
 });

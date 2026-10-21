@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { shouldApplyRemoteObjectives, summarizeContentJobs, type ArtifactBusyState, type ContentJobSummary } from '@/lib/lesson-artifacts/authoring-ui';
-import { directionEditImpact, getStudioMaterials, latestStudioArtifacts, PREPARE_OBJECTIVES_LIMIT, unpreparedObjectives, type DirectionEditImpact, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
+import { directionEditImpact, getStudioMaterials, latestStudioArtifacts, nextReviewStep, PREPARE_OBJECTIVES_LIMIT, type ReviewStep, unpreparedObjectives, type DirectionEditImpact, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ConceptEditor } from './ConceptEditor';
 import { StudioArtifactReview } from './StudioArtifactReview';
@@ -421,6 +421,22 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const requiredReady = lessonApproved && readiness.every(item => item.materials[0].approved);
   const approvedCount = Number(lessonApproved) + readiness.reduce((sum, item) => sum + item.materials.slice(0, 5).filter(material => material.approved).length, 0);
   const total = 1 + data.objectives.length * 5;
+  const waiting = (items: Artifact[], revision: number) => items.some(item => item.objective_revision === revision && item.status === 'draft');
+  const reviewOrder: ReviewStep[] = [
+    { objectiveId: null, key: 'lesson', approved: lessonApproved, hasMaterial: waiting(lessonArtifacts, data.lesson.visualRevision) },
+    ...readiness.flatMap(({ objective, materials: items }) => items.filter(item => item.key !== 'media').map(item => ({
+      objectiveId: objective.id, key: item.key, approved: item.approved, hasMaterial: waiting(item.artifacts, objective.revision),
+    }))),
+  ];
+  /** After approving, jump to whatever needs the teacher next instead of the next slot in order. */
+  const continueReview = () => {
+    if (selectionRef.current !== selectionToken) return;
+    moveFocusRef.current = true;
+    const next = nextReviewStep(reviewOrder, { objectiveId: step === 'lesson' ? null : activeObjectiveId ?? null, key: step === 'lesson' ? 'lesson' : currentMaterial.key });
+    if (!next) navigate('publish');
+    else if (next.objectiveId === null) navigate('lesson');
+    else navigate('objective', next.objectiveId, next.hasMaterial ? next.key : 'concept');
+  };
   const toPrepare = unpreparedObjectives(data.objectives, artifacts).slice(0, PREPARE_OBJECTIVES_LIMIT);
   const needConcept = toPrepare.filter(objective => !conceptFor(objective)).length;
   const title = step === 'direction' ? 'Set the direction' : step === 'lesson' ? 'Introduce the lesson' : step === 'publish' ? 'Ready for your students?' : materialKey === 'concept' ? 'Choose a creative concept' : currentMaterial.label;
@@ -428,10 +444,10 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const status = (complete: boolean) => complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : <Circle className="h-4 w-4 shrink-0 text-muted-foreground/50" />;
   const renderFocusedArtifact = () => selectedArtifact ? <>
     {choices.length > 1 && <label className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">Material alternatives<select disabled={mutationDisabled} aria-label="Material alternatives" className="rounded-lg border bg-background p-2 text-foreground" value={selectedArtifact.series_id} onChange={event => { setSelectedSeries(event.target.value); setHistoricalId(''); }}>{choices.map((item, index) => <option key={item.series_id} value={item.series_id}>Option {choices.length - index} · {item.status}{item.objective_revision !== (step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision) ? ' · earlier directions' : ''}</option>)}</select></label>}
-    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onEditQuiz={editQuiz} onValidation={validateArtifact} onContinue={advance} />
+    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onEditQuiz={editQuiz} onValidation={validateArtifact} onContinue={continueReview} />
   </> : <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center"><ImageIcon className="mb-4 h-9 w-9 text-muted-foreground/50" /><h4 className="text-lg font-medium">{batchId ? 'Your material is on its way' : 'Bring this idea to life'}</h4><p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{batchId ? 'Generation continues in the background. You can review other steps while you wait.' : step === 'lesson' ? 'Generate a visual introduction using your lesson directions.' : 'Choose a creative concept to generate the five materials for this objective.'}</p>{!batchId && <Button className="mt-6" disabled={generationDisabled} onClick={() => step === 'lesson' ? void generateBundle(true) : navigate('objective', activeObjectiveId, 'concept')}><Sparkles className="mr-2 h-4 w-4" />{step === 'lesson' ? 'Generate introduction' : 'Choose concept'}</Button>}</div>;
 
-  return <div className="overflow-hidden rounded-2xl border bg-background">
+  return <div className="overflow-clip rounded-2xl border bg-background">
     <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-5 sm:px-7"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Objective Studio</p><p className="mt-1 text-sm text-muted-foreground">Shape the experience, one step at a time.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">{approvedCount}/{total} approved</span>{toPrepare.length > 0 && <Button size="sm" variant="outline" disabled={generationDisabled} onClick={() => setPrepareOpen(true)}>{busy === 'prepare' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}{busy === 'prepare' ? 'Preparing…' : `Prepare ${toPrepare.length === data.objectives.length ? 'all objectives' : `${toPrepare.length} remaining`}`}</Button>}{data.currentPublication && <Badge variant="outline">Live · v{data.currentPublication.version}</Badge>}<Button variant="outline" size="sm" className="lg:hidden" aria-expanded={showOutline} aria-controls="studio-outline" onClick={() => setShowOutline(value => !value)}><List className="mr-2 h-4 w-4" />Outline</Button></div></header>
     {batchId && <div role="status" className="flex flex-wrap items-center gap-3 border-b bg-primary/5 px-5 py-3 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /><span>Preparing materials · {jobProgress?.done ?? 0}/{jobProgress?.total ?? 5} finished</span><span className="text-muted-foreground">You can keep reviewing.</span></div>}
     {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 p-4 text-sm text-destructive"><span>{loadError}</span><Button variant="outline" size="sm" onClick={() => void load({ restoreJobs: true }).catch(() => undefined)}>Refresh</Button></div>}
