@@ -48,6 +48,8 @@ export async function GET(
         artifacts: records.map((record) => ({ id: record.id, kind: record.kind })),
       }),
       materials,
+      // The introduction publishing would use now, not the latest approved one.
+      introduction: (() => { const record = manifest.lesson.introductionArtifactId ? byId.get(manifest.lesson.introductionArtifactId) : undefined; return record ? toStudentSafeArtifact(record) : null; })(),
       missing: missingPublicationIntroductions(manifest),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

@@ -13,11 +13,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { formatGradeLevel } from '@/lib/lesson-record';
 import type { StudentLessonDetail } from '@/lib/lesson-artifacts/student-learning';
 import type { ObjectiveLearningArtifact } from '@/lib/lesson-artifacts/objective-learning-controller';
+import type { StudentSafeArtifact } from '@/lib/lesson-artifacts/domain';
 
 type Preview = {
   detail: StudentLessonDetail;
   materials: Record<string, ObjectiveLearningArtifact['artifact'][]>;
   missing: string[];
+  introduction?: StudentSafeArtifact | null;
 };
 
 /** Shows a teacher what students get if the lesson is published now. Nothing is recorded. */
@@ -59,7 +61,7 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
             <h1 className="text-3xl font-bold break-words">{lesson.title}</h1>
             <p className="text-muted-foreground">{lesson.subject} • {formatGradeLevel(lesson.gradeLevel)}</p>
           </div>
-          <LessonIntroduction lessonId={lessonId} />
+          <LessonIntroduction lessonId={lessonId} artifact={preview.introduction ?? null} />
           <section className="rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-4 text-white sm:p-6">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-lime-300"><Target className="h-4 w-4" /> Objective roadmap</div>
             <h2 className="text-2xl font-semibold leading-tight">Learn one clear outcome at a time.</h2>
