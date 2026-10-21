@@ -1,3 +1,5 @@
+import { GRADE_LEVELS } from './constants';
+
 type LessonRecord = Record<string, unknown> & {
   id?: string;
   _id?: string;
@@ -44,4 +46,13 @@ export function formatGradeLevel(value: unknown): string {
   return value.trim().split(/\s+/).map((word) => (
     word.length <= 3 && /^[a-z]+$/i.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)
   )).join(' ');
+}
+
+/** Grades in school order (Primary 1 up to SHS 3); unknown grades keep their order at the end. */
+export function orderGradeLevels(grades: readonly string[]): string[] {
+  const rank = (grade: string) => {
+    const index = (GRADE_LEVELS as readonly string[]).indexOf(grade.trim().toLowerCase());
+    return index === -1 ? GRADE_LEVELS.length : index;
+  };
+  return [...new Set(grades)].map((grade, index) => ({ grade, index })).sort((a, b) => rank(a.grade) - rank(b.grade) || a.index - b.index).map(item => item.grade);
 }

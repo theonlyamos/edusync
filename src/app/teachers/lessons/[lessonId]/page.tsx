@@ -2,7 +2,7 @@
 
 import { LessonIntroduction } from '@/components/lessons/LessonIntroduction';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,8 @@ import type {
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
-import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2 } from 'lucide-react';
+import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2, Pencil } from 'lucide-react';
+import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
 import { LessonHomeworkPanel } from '@/components/lessons/LessonHomeworkPanel';
 import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
@@ -91,6 +92,9 @@ export default function LessonPage() {
     const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content' | 'resource'; id: string } | null>(null);
     const [deleting, setDeleting] = useState(false);
 
+    const [editingDetails, setEditingDetails] = useState(false);
+    const [studioKey, setStudioKey] = useState(0);
+    const openedTab = useRef(false);
     const requestedTab = searchParams.get('tab');
     useEffect(() => {
         if (requestedTab && ['overview', 'studio', 'content', 'resources', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
@@ -112,7 +116,8 @@ export default function LessonPage() {
             const data = await response.json();
             setLesson(data);
             // Lessons still being built open where the work happens.
-            if (!requestedTab && !data.current_publication_id && !data.archived_at) setActiveTab('studio');
+            if (!openedTab.current && !requestedTab && !data.current_publication_id && !data.archived_at) setActiveTab('studio');
+            openedTab.current = true;
         } catch (error) {
             console.error('Error:', error);
             setLessonLoadError(error instanceof Error ? error.message : 'The lesson could not be loaded.');
@@ -305,6 +310,7 @@ export default function LessonPage() {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                        {status !== 'archived' && <Button variant="outline" onClick={() => setEditingDetails(true)}><Pencil className="mr-2 h-4 w-4" />Edit details</Button>}
                         <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDelete({ kind: 'lesson' })}>
                             <Trash2 className="mr-2 h-4 w-4" />{status === 'draft' ? 'Delete lesson' : 'Archive lesson'}
                         </Button>
@@ -402,7 +408,7 @@ export default function LessonPage() {
                     </TabsContent>
 
                     <TabsContent value="studio" className="mt-6">
-                        <ObjectiveAuthoringWorkspace lessonId={params.lessonId as string} />
+                        <ObjectiveAuthoringWorkspace key={studioKey} lessonId={params.lessonId as string} />
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">
@@ -554,6 +560,16 @@ export default function LessonPage() {
                     </TabsContent>
                 </Tabs>
             </div>
+            {editingDetails && (
+                <CreateLessonForm
+                    lesson={lesson}
+                    onClose={() => setEditingDetails(false)}
+                    onSaved={() => {
+                        void fetchLesson();
+                        setStudioKey((key) => key + 1);
+                    }}
+                />
+            )}
             <DeleteConfirmationDialog
                 open={!!pendingDelete}
                 onOpenChange={(open) => { if (!open && !deleting) setPendingDelete(null); }}

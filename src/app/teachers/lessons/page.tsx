@@ -168,16 +168,12 @@ export default function LessonsPage() {
         )}
 
         {isCreating && (
-          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50">
-            <div className="fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] z-50 w-[calc(100%-2rem)] max-w-2xl">
-              <CreateLessonForm
-                onClose={() => {
-                  setIsCreating(false);
-                  void fetchLessons(view);
-                }}
-              />
-            </div>
-          </div>
+          <CreateLessonForm
+            onClose={() => {
+              setIsCreating(false);
+              void fetchLessons(view);
+            }}
+          />
         )}
       </div>
     </DashboardLayout>

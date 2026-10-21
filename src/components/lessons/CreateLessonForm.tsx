@@ -6,14 +6,9 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -21,9 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Wand2, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Wand2 } from "lucide-react";
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
+import { formatGradeLevel, orderGradeLevels } from '@/lib/lesson-record';
 import { buildLessonSubmissionPayload, mergeGeneratedLessonDraft } from '@/lib/lesson-artifacts/authoring-ui';
 
 interface Teacher {
@@ -47,10 +43,12 @@ interface Lesson {
 
 interface CreateLessonFormProps {
   onClose: () => void;
+  /** Called after a successful save, before onClose. */
+  onSaved?: () => void;
   lesson?: Lesson | null;
 }
 
-export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
+export function CreateLessonForm({ onClose, onSaved, lesson }: CreateLessonFormProps) {
   const router = useRouter();
   const session = useContext(SupabaseSessionContext);
   const [title, setTitle] = useState(lesson?.title || '');
@@ -75,6 +73,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
   const [organizationStatus, setOrganizationStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [organizationError, setOrganizationError] = useState('');
   const [formError, setFormError] = useState('');
+  const [confirmDraft, setConfirmDraft] = useState(false);
 
   const isEditing = !!lesson;
 
@@ -86,12 +85,11 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
     return SUBJECTS;
   }, [teacherData]);
 
+  const currentGrade = lesson?.gradeLevel;
   const availableGrades = useMemo(() => {
-    if (teacherData?.grades?.length) {
-      return teacherData.grades;
-    }
-    return GRADE_LEVELS;
-  }, [teacherData]);
+    const grades: string[] = teacherData?.grades?.length ? teacherData.grades : [...GRADE_LEVELS];
+    return orderGradeLevels(currentGrade ? [...grades, currentGrade] : grades);
+  }, [teacherData, currentGrade]);
 
   useEffect(() => {
     // Fetch teacher's subjects and grades
@@ -149,13 +147,23 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       const url = isEditing ? `/api/lessons/${lesson._id}` : '/api/lessons/create';
       const method = isEditing ? 'PUT' : 'POST';
 
+      // Edit only changes title, subject and grade; objectives and lesson text
+      // are saved from the Studio and Content tab, so send their current values.
+      let current = { objectives, content: generatedContent };
+      if (isEditing) {
+        const latest = await fetch(`/api/lessons/${lesson._id}`, { cache: 'no-store' });
+        if (!latest.ok) throw new Error('Could not load the latest lesson');
+        const data = await latest.json();
+        current = { objectives: Array.isArray(data.objectives) ? data.objectives : String(data.objectives ?? '').split('\n').filter(Boolean), content: data.content ?? '' };
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(buildLessonSubmissionPayload(
-          { title, subject, gradeLevel, objectives, content: generatedContent },
+          { title, subject, gradeLevel, objectives: current.objectives, content: current.content },
           isEditing ? { mode: 'edit' } : { mode: 'create', organizationId },
         )),
       });
@@ -163,6 +171,7 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || (isEditing ? 'Failed to update lesson' : 'Failed to create lesson'));
 
+      onSaved?.();
       onClose();
       if (!isEditing && result.id) router.push(`/teachers/lessons/${result.id}?tab=studio`);
     } catch (error) {
@@ -173,10 +182,19 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
     }
   };
 
-  const generateLessonContent = async () => {
-    const hasExistingGeneratedFields = generatedContent.trim() || objectives.some((objective) => objective.trim());
-    const replaceExisting = Boolean(hasExistingGeneratedFields) && window.confirm('Replace your current objectives and lesson content with a new AI draft? Choose Cancel to preserve them and fill only fields that are still empty. Your title will always be preserved.');
-    if (hasExistingGeneratedFields && !replaceExisting && generatedContent.trim() && objectives.some((objective) => objective.trim())) return;
+  const hasDraftFields = Boolean(generatedContent.trim() || objectives.some((objective) => objective.trim()));
+  const requestDraft = () => { if (hasDraftFields) setConfirmDraft(true); else void generateLessonContent(false); };
+
+  /** Splits pasted lists ("1. …", "- …", one per line) into separate objectives. */
+  const pasteObjectives = (index: number, event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const lines = event.clipboardData.getData('text').split(/\r?\n/).map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+    if (lines.length < 2 || objectives[index].trim()) return;
+    event.preventDefault();
+    setObjectives((items) => [...items.slice(0, index), ...lines, ...items.slice(index + 1)].slice(0, 20));
+  };
+
+  const generateLessonContent = async (replaceExisting: boolean) => {
+    setConfirmDraft(false);
     setGenerating(true);
     setFormError('');
     try {
@@ -211,182 +229,153 @@ export function CreateLessonForm({ onClose, lesson }: CreateLessonFormProps) {
     }
   };
 
+  const canDraft = !loading && !!title && !!subject && !!gradeLevel && (isEditing || organizationStatus === 'ready');
+  const detailsChanged = isEditing && (title.trim() !== lesson.title || subject !== lesson.subject || gradeLevel !== lesson.gradeLevel);
+
   return (
-    <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col">
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle>{isEditing ? 'Edit Lesson' : 'Create New Lesson'}</CardTitle>
-            <CardDescription>
-              {isEditing ? 'Update lesson details or redraft them with AI' : 'Write your objectives, or let AI draft them and the lesson notes from your title and brief.'}
-            </CardDescription>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            type="button"
-            aria-label="Close lesson form"
-            title="Close"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-        <CardContent className="space-y-4 flex-1 overflow-y-auto">
-          <div className="space-y-2">
-            <Label htmlFor="title">Lesson Title</Label>
-            <Input
-              id="title"
-              placeholder="Enter lesson title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+    <Dialog open onOpenChange={(open) => { if (!open && !loading) onClose(); }}>
+      <DialogContent className="flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b p-6 pr-12">
+          <DialogTitle>{isEditing ? 'Edit lesson details' : 'Create a lesson'}</DialogTitle>
+          <DialogDescription>
+            {isEditing ? 'Change the title, subject or grade. Objectives are edited in the Objective Studio, and lesson text on the Content tab.' : 'Write your objectives, or let AI draft them and the lesson text from your title and brief.'}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
             <div className="space-y-2">
-              <Label htmlFor="subject">Subject</Label>
-              <Select
-                value={subject}
-                onValueChange={setSubject}
-              >
-                <SelectTrigger id="subject" aria-label="Subject">
-                  <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select subject"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableSubjects.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="title">Lesson title</Label>
+              <Input id="title" placeholder="e.g. Photosynthesis" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="gradeLevel">Grade Level</Label>
-              <Select
-                value={gradeLevel}
-                onValueChange={setGradeLevel}
-              >
-                <SelectTrigger id="gradeLevel" aria-label="Grade level">
-                  <SelectValue placeholder={loadingTeacher ? "Loading..." : "Select grade level"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableGrades.map((g) => (
-                    <SelectItem key={g} value={g}>
-                      {g.toUpperCase()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {!isEditing && organizationStatus === 'loading' && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading organization access…</div>
-          )}
-
-          {!isEditing && organizationStatus === 'error' && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-              <p className="text-destructive">{organizationError}</p>
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void loadOrganizations()}>Try again</Button>
-            </div>
-          )}
-
-          {!isEditing && organizationStatus === 'ready' && organizations.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="organization">Organization</Label>
-              <Select value={organizationId} onValueChange={setOrganizationId}>
-                <SelectTrigger id="organization"><SelectValue placeholder="Select organization" /></SelectTrigger>
-                <SelectContent>
-                  {organizations.map((organization) => (
-                    <SelectItem key={organization.id} value={organization.id}>{organization.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="teacherBrief">Teacher brief <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <textarea
-              id="teacherBrief"
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="What should students understand? Mention standards, misconceptions, or context."
-              value={teacherBrief}
-              onChange={(e) => setTeacherBrief(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Learning Objectives</Label>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setObjectives((items) => [...items, ''])}><Plus className="mr-1 h-3.5 w-3.5" />Add</Button>
-            </div>
-            <div className="space-y-2">
-              {objectives.map((objective, index) => (
-                <div key={index} className="flex gap-2">
-                  <span className="mt-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">{index + 1}</span>
-                  <Input
-                    aria-label={`Learning objective ${index + 1}`}
-                    value={objective}
-                    onChange={(event) => setObjectives((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
-                    placeholder="Students will be able to…"
-                    required
-                  />
-                  <Button type="button" size="icon" variant="ghost" aria-label={`Remove learning objective ${index + 1}`} title="Remove objective" disabled={objectives.length === 1} onClick={() => setObjectives((items) => items.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {generatedContent && (
-            <div className="space-y-2">
-              <Label>Lesson text</Label>
-              <div className="max-h-72 overflow-y-auto rounded-md border bg-muted/40 p-4">
-                <MarkdownContent>{generatedContent}</MarkdownContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="subject">Subject</Label>
+                <Select value={subject} onValueChange={setSubject}>
+                  <SelectTrigger id="subject" aria-label="Subject"><SelectValue placeholder={loadingTeacher ? 'Loading…' : 'Select subject'} /></SelectTrigger>
+                  <SelectContent>
+                    {[...new Set([...availableSubjects, ...(lesson?.subject ? [lesson.subject] : [])])].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <p className="text-xs text-muted-foreground">You can edit this on the lesson&apos;s Content tab after creating it.</p>
+              <div className="space-y-2">
+                <Label htmlFor="gradeLevel">Grade</Label>
+                <Select value={gradeLevel} onValueChange={setGradeLevel}>
+                  <SelectTrigger id="gradeLevel" aria-label="Grade level"><SelectValue placeholder={loadingTeacher ? 'Loading…' : 'Select grade'} /></SelectTrigger>
+                  <SelectContent>
+                    {availableGrades.map((g) => <SelectItem key={g} value={g}>{formatGradeLevel(g)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
 
-          {formError && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{formError}</div>}
-        </CardContent>
+            {detailsChanged && (
+              <p role="status" className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">The AI uses these details. Saving marks approved Studio materials as outdated, so they will need new versions before you publish changes.</p>
+            )}
 
-        <CardFooter className="flex justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={generateLessonContent}
-              disabled={loading || !title || !subject || !gradeLevel || (!isEditing && organizationStatus !== 'ready')}
-            >
-              {generating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Wand2 className="mr-2 h-4 w-4" />
-              )}
-              {isEditing ? 'Redraft with AI' : 'Draft with AI'}
-            </Button>
-            <Button type="submit" disabled={loading || !title.trim() || !subject || !gradeLevel || objectives.some((objective) => !objective.trim()) || (!isEditing && organizationStatus !== 'ready') || (organizations.length > 1 && !organizationId)}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isEditing ? 'Update Lesson' : 'Create Lesson'}
-            </Button>
+            {!isEditing && organizationStatus === 'loading' && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading your school…</div>
+            )}
+
+            {!isEditing && organizationStatus === 'error' && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <p className="text-destructive">{organizationError}</p>
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void loadOrganizations()}>Try again</Button>
+              </div>
+            )}
+
+            {!isEditing && organizationStatus === 'ready' && organizations.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="organization">School</Label>
+                <Select value={organizationId} onValueChange={setOrganizationId}>
+                  <SelectTrigger id="organization"><SelectValue placeholder="Select school" /></SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((organization) => <SelectItem key={organization.id} value={organization.id}>{organization.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {!isEditing && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="teacherBrief">Brief for the AI draft <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                  <Textarea id="teacherBrief" className="min-h-20" placeholder="What should students understand? Mention standards, misconceptions, or context." value={teacherBrief} onChange={(e) => setTeacherBrief(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Learning objectives</Label>
+                    <Button type="button" size="sm" variant="ghost" disabled={objectives.length >= 20} onClick={() => setObjectives((items) => [...items, ''])}><Plus className="mr-1 h-3.5 w-3.5" />Add</Button>
+                  </div>
+                  <ol className="space-y-2">
+                    {objectives.map((objective, index) => (
+                      <li key={index} className="flex gap-2">
+                        <span className="mt-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">{index + 1}</span>
+                        <Textarea
+                          aria-label={`Learning objective ${index + 1}`}
+                          className="min-h-[2.75rem] flex-1 resize-y py-2"
+                          rows={1}
+                          maxLength={500}
+                          value={objective}
+                          onChange={(event) => setObjectives((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                          onPaste={(event) => pasteObjectives(index, event)}
+                          placeholder="Students will be able to…"
+                          required
+                        />
+                        <Button type="button" size="icon" variant="ghost" aria-label={`Remove learning objective ${index + 1}`} title="Remove objective" disabled={objectives.length === 1} onClick={() => setObjectives((items) => items.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="text-xs text-muted-foreground">Tip: paste a list to add several objectives at once.</p>
+                </div>
+
+                {generatedContent && (
+                  <div className="space-y-2">
+                    <Label>Lesson text</Label>
+                    <div className="max-h-72 overflow-y-auto rounded-md border bg-muted/40 p-4">
+                      <MarkdownContent>{generatedContent}</MarkdownContent>
+                    </div>
+                    <p className="text-xs text-muted-foreground">You can edit this on the lesson&apos;s Content tab after creating it.</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {formError && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{formError}</div>}
           </div>
-        </CardFooter>
-      </form>
-    </Card>
+
+          <DialogFooter className="gap-2 border-t p-4 sm:justify-between sm:space-x-0">
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              {!isEditing && (
+                <Button type="button" variant="secondary" onClick={requestDraft} disabled={!canDraft}>
+                  {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                  {generating ? 'Drafting…' : 'Draft objectives with AI'}
+                </Button>
+              )}
+              <Button type="submit" disabled={loading || !title.trim() || !subject || !gradeLevel || (!isEditing && objectives.some((objective) => !objective.trim())) || (!isEditing && organizationStatus !== 'ready') || (!isEditing && organizations.length > 1 && !organizationId)}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isEditing ? 'Save details' : 'Create lesson'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+
+        <AlertDialog open={confirmDraft} onOpenChange={setConfirmDraft}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace what you have written?</AlertDialogTitle>
+              <AlertDialogDescription>The AI can replace your objectives and lesson text with a new draft, or only fill in the parts that are still empty. Your title stays as it is.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              {(!generatedContent.trim() || !objectives.some((objective) => objective.trim())) && <Button variant="outline" onClick={() => void generateLessonContent(false)}>Fill empty parts only</Button>}
+              <Button onClick={() => void generateLessonContent(true)}>Replace with new draft</Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
