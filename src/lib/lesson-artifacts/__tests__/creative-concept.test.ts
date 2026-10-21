@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { acceptedCreativeConcepts, artifactMaterialRole, bundleRequestSchema, creativeConceptPrompt, creativeConceptSchema, materialRoles } from '../creative-concept';
+import { acceptedCreativeConcepts, artifactMaterialRole, bundleRequestSchema, creativeConceptPrompt, creativeConceptSchema, joinConceptSections, materialRoles, parseConceptSections } from '../creative-concept';
 import { buildArtifactInsert, generateArtifactPayload, type ContentJobRecord } from '../jobs';
 
 const concept = 'Rescue a stranded rover: compare force arrows, test a ramp, and plan a safe route.';
@@ -81,5 +81,30 @@ describe('accepted creative concepts', () => {
       { objective_id: 'objective', input: { objectiveRevision: 2, creativeConcept: 'Older plan for the same revision.' } },
       { objective_id: 'archived', input: { objectiveRevision: 2, creativeConcept: concept } },
     ])).toEqual({ objective: { revision: 2, concept } });
+  });
+});
+
+describe('concept sections', () => {
+  const labelled = `**Concept:** Rover rescue on Mars.
+A dusty red world with force arrows.
+
+Introduction: A rover stuck in sand.
+- Explore: Drag thrusters and watch the net force arrow.
+## Apply — Plan a route across ice.
+Knowledge check: Questions on balanced forces.
+Visual challenge: Arrange thrusters to free the rover.`;
+
+  it('splits labelled concepts into cards and joins them back', () => {
+    const sections = parseConceptSections(labelled)!;
+    expect(sections.map(section => section.label)).toEqual(['Concept', 'Introduction', 'Explore', 'Apply', 'Knowledge check', 'Visual challenge']);
+    expect(sections[0].text).toBe('Rover rescue on Mars.\nA dusty red world with force arrows.');
+    expect(sections[3].text).toBe('Plan a route across ice.');
+    expect(parseConceptSections(joinConceptSections(sections))).toEqual(sections);
+  });
+
+  it('keeps free-form or repeated text as one block', () => {
+    expect(parseConceptSections('A rover story where learners explore forces and then apply them.')).toBeNull();
+    expect(parseConceptSections('Intro text first\nConcept: x\nExplore: y\nApply: z\nKnowledge check: q')).toBeNull();
+    expect(parseConceptSections('Concept: a\nExplore: b\nExplore: c\nApply: d')).toBeNull();
   });
 });
