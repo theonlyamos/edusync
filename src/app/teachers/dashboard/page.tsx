@@ -14,6 +14,12 @@ import {
 } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
 import { useAllHomework } from '@/components/dashboard/useAllHomework';
+import {
+  LessonPipelineSection,
+  StudentsBehindSection,
+  WeakObjectivesSection,
+} from '@/components/dashboard/TeacherInsights';
+import type { TeacherDashboardData } from '@/lib/dashboard-server';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
 import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window';
 import {
@@ -34,6 +40,7 @@ export default function TeacherDashboard() {
   const session = useContext(SupabaseSessionContext);
   const homework = useAllHomework();
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
+  const insights = useHomeworkData<TeacherDashboardData>('/api/dashboard/teacher');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
   const userId = session?.user?.id;
@@ -166,6 +173,12 @@ export default function TeacherDashboard() {
               </ul>
             )}
           </DashboardSection>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          <StudentsBehindSection request={insights} />
+          <WeakObjectivesSection request={insights} />
+          <LessonPipelineSection request={insights} />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">

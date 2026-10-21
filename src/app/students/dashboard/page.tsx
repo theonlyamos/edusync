@@ -15,6 +15,8 @@ import {
 } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
 import { useAllHomework } from '@/components/dashboard/useAllHomework';
+import { ContinueLearningSection, RecentActivitySection } from '@/components/dashboard/StudentInsights';
+import type { StudentDashboardData } from '@/lib/dashboard-server';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
 import { resolveStudentDisplayName } from '@/lib/student-profile';
@@ -44,6 +46,7 @@ export default function StudentDashboard() {
   const homework = useAllHomework();
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const practice = useHomeworkData<PracticeStats>('/api/students/practice/stats');
+  const insights = useHomeworkData<StudentDashboardData>('/api/dashboard/student');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
 
@@ -192,6 +195,11 @@ export default function StudentDashboard() {
               </div>
             )}
           </DashboardSection>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2">
+          <ContinueLearningSection request={insights} now={now} />
+          <RecentActivitySection request={insights} now={now} />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3">
