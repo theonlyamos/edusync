@@ -96,3 +96,16 @@ export function directionEditImpact(
 
   return { lessonIntroduction, objectives, total: Number(lessonIntroduction) + objectives.reduce((sum, item) => sum + item.approved, 0) };
 }
+
+/** Six objectives (30 materials) finish well inside one background generation run. */
+export const PREPARE_OBJECTIVES_LIMIT = 6;
+
+/**
+ * Objectives with nothing generated for their current directions, in order.
+ * These are the ones "Prepare all objectives" fills in.
+ */
+export function unpreparedObjectives<T extends { id: string; revision: number; position: number }>(objectives: T[], artifacts: StudioArtifact[]) {
+  return [...objectives].sort((a, b) => a.position - b.position).filter(objective => !artifacts.some(item =>
+    item.objective_id === objective.id && item.objective_revision === objective.revision && item.kind !== 'uploaded_media'
+    && !['failed', 'rejected'].includes(item.status)));
+}

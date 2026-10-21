@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { directionEditImpact, getStudioMaterials, type StudioArtifact } from '../studio-state';
+import { directionEditImpact, getStudioMaterials, unpreparedObjectives, type StudioArtifact } from '../studio-state';
 
 function artifact(overrides: Partial<StudioArtifact> = {}): StudioArtifact {
   return { id: 'intro', objective_id: 'objective', objective_revision: 2, series_id: 'intro', version: 1, position: 0,
@@ -80,5 +80,17 @@ describe('direction edit impact', () => {
     const impact = directionEditImpact(saved, { ...same, objectives: [same.objectives[1]] });
     expect(impact.objectives).toEqual([expect.objectContaining({ id: 'a', removed: true, approved: 2 })]);
     expect(directionEditImpact(saved, { ...same, objectives: [...same.objectives].reverse() })).toMatchObject({ lessonIntroduction: true, total: 1 });
+  });
+});
+
+describe('objectives to prepare', () => {
+  const objectives = [{ id: 'b', revision: 1, position: 1 }, { id: 'a', revision: 2, position: 0 }, { id: 'c', revision: 1, position: 2 }];
+  it('lists objectives with no current, usable materials in lesson order', () => {
+    const artifacts = [
+      artifact({ objective_id: 'a', objective_revision: 1 }),
+      artifact({ id: 'b1', objective_id: 'b', objective_revision: 1, status: 'draft' }),
+      artifact({ id: 'c1', objective_id: 'c', objective_revision: 1, status: 'rejected' }),
+    ];
+    expect(unpreparedObjectives(objectives, artifacts).map(item => item.id)).toEqual(['a', 'c']);
   });
 });

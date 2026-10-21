@@ -1,13 +1,13 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, ImageIcon, List, Loader2, Sparkles, Upload } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, ImageIcon, List, Loader2, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { shouldApplyRemoteObjectives, summarizeContentJobs, type ArtifactBusyState, type ContentJobSummary } from '@/lib/lesson-artifacts/authoring-ui';
-import { directionEditImpact, getStudioMaterials, latestStudioArtifacts, type DirectionEditImpact, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
+import { directionEditImpact, getStudioMaterials, latestStudioArtifacts, PREPARE_OBJECTIVES_LIMIT, unpreparedObjectives, type DirectionEditImpact, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { StudioArtifactReview } from './StudioArtifactReview';
 import { StudioDirections } from './StudioDirections';
@@ -55,6 +55,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const [conceptError, setConceptError] = useState<string>();
   const [storageReady, setStorageReady] = useState('');
   const [pendingImpact, setPendingImpact] = useState<DirectionEditImpact>();
+  const [prepareOpen, setPrepareOpen] = useState(false);
   const restoredKey = useRef('');
   const loadSequenceRef = useRef(0);
   const syncDraftsRef = useRef(false);
@@ -351,6 +352,34 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
     }
   };
 
+  const conceptFor = (objective: Objective) => {
+    const local = conceptDrafts[objective.id];
+    const saved = data?.creativeConcepts?.[objective.id];
+    const text = local?.revision === objective.revision ? local.concept : saved?.revision === objective.revision ? saved.concept : '';
+    return text.trim().length >= 20 ? text.trim() : undefined;
+  };
+
+  const prepareObjectives = async (targets: Objective[]) => {
+    setPrepareOpen(false);
+    setBusy('prepare');
+    try {
+      const result = await readJson(await fetch(`/api/teachers/lessons/${lessonId}/prepare-objectives`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectives: targets.map(objective => ({ id: objective.id, revision: objective.revision, creativeConcept: conceptFor(objective) })) }),
+      }));
+      setBatchId(result.batchId);
+      setJobProgress({ total: result.prepared.length * 5, done: 0, succeeded: 0, failed: 0, cancelled: 0, active: result.prepared.length * 5 });
+      await load({ restoreJobs: false });
+      toast({
+        title: `Preparing ${result.prepared.length} ${result.prepared.length === 1 ? 'objective' : 'objectives'}`,
+        description: result.failed.length ? `${result.failed.length} could not start: ${result.failed[0].error}. You can prepare them one by one.` : 'Materials generate in the background. Review and approve each one when it is ready.',
+        variant: result.failed.length ? 'destructive' : undefined,
+      });
+    } catch (error) {
+      toast({ title: 'Could not prepare objectives', description: (error as Error).message, variant: 'destructive' });
+    } finally { setBusy(undefined); }
+  };
+
   const editQuiz = async (artifactId: string, payload: unknown) => {
     setArtifactBusy({ artifactId, action: 'regenerate' });
     try {
@@ -391,6 +420,8 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const requiredReady = lessonApproved && readiness.every(item => item.materials[0].approved);
   const approvedCount = Number(lessonApproved) + readiness.reduce((sum, item) => sum + item.materials.slice(0, 5).filter(material => material.approved).length, 0);
   const total = 1 + data.objectives.length * 5;
+  const toPrepare = unpreparedObjectives(data.objectives, artifacts).slice(0, PREPARE_OBJECTIVES_LIMIT);
+  const needConcept = toPrepare.filter(objective => !conceptFor(objective)).length;
   const title = step === 'direction' ? 'Set the direction' : step === 'lesson' ? 'Introduce the lesson' : step === 'publish' ? 'Ready for your students?' : materialKey === 'concept' ? 'Choose a creative concept' : currentMaterial.label;
   const navClass = (active: boolean) => cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', active ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground');
   const status = (complete: boolean) => complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : <Circle className="h-4 w-4 shrink-0 text-muted-foreground/50" />;
@@ -400,7 +431,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   </> : <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center"><ImageIcon className="mb-4 h-9 w-9 text-muted-foreground/50" /><h4 className="text-lg font-medium">{batchId ? 'Your material is on its way' : 'Bring this idea to life'}</h4><p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{batchId ? 'Generation continues in the background. You can review other steps while you wait.' : step === 'lesson' ? 'Generate a visual introduction using your lesson directions.' : 'Choose a creative concept to generate the five materials for this objective.'}</p>{!batchId && <Button className="mt-6" disabled={generationDisabled} onClick={() => step === 'lesson' ? void generateBundle(true) : navigate('objective', activeObjectiveId, 'concept')}><Sparkles className="mr-2 h-4 w-4" />{step === 'lesson' ? 'Generate introduction' : 'Choose concept'}</Button>}</div>;
 
   return <div className="overflow-hidden rounded-2xl border bg-background">
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-5 sm:px-7"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Objective Studio</p><p className="mt-1 text-sm text-muted-foreground">Shape the experience, one step at a time.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">{approvedCount}/{total} approved</span>{data.currentPublication && <Badge variant="outline">Live · v{data.currentPublication.version}</Badge>}<Button variant="outline" size="sm" className="lg:hidden" aria-expanded={showOutline} aria-controls="studio-outline" onClick={() => setShowOutline(value => !value)}><List className="mr-2 h-4 w-4" />Outline</Button></div></header>
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-5 sm:px-7"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Objective Studio</p><p className="mt-1 text-sm text-muted-foreground">Shape the experience, one step at a time.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">{approvedCount}/{total} approved</span>{toPrepare.length > 0 && <Button size="sm" variant="outline" disabled={generationDisabled} onClick={() => setPrepareOpen(true)}>{busy === 'prepare' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}{busy === 'prepare' ? 'Preparing…' : `Prepare ${toPrepare.length === data.objectives.length ? 'all objectives' : `${toPrepare.length} remaining`}`}</Button>}{data.currentPublication && <Badge variant="outline">Live · v{data.currentPublication.version}</Badge>}<Button variant="outline" size="sm" className="lg:hidden" aria-expanded={showOutline} aria-controls="studio-outline" onClick={() => setShowOutline(value => !value)}><List className="mr-2 h-4 w-4" />Outline</Button></div></header>
     {batchId && <div role="status" className="flex flex-wrap items-center gap-3 border-b bg-primary/5 px-5 py-3 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /><span>Preparing materials · {jobProgress?.done ?? 0}/{jobProgress?.total ?? 5} finished</span><span className="text-muted-foreground">You can keep reviewing.</span></div>}
     {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 p-4 text-sm text-destructive"><span>{loadError}</span><Button variant="outline" size="sm" onClick={() => void load({ restoreJobs: true }).catch(() => undefined)}>Refresh</Button></div>}
     {objectivesDirty && step !== 'direction' && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b bg-amber-500/10 p-4 text-sm"><span>Save your direction changes before generating, approving, or publishing.</span><Button variant="outline" size="sm" onClick={() => navigate('direction')}>Review directions</Button></div>}
@@ -429,6 +460,22 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
         {step === 'publish' && <div className="space-y-6"><p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Check the introductions and reviewed materials below. Your current publication stays available until you publish these changes.</p><button className="flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left" onClick={() => navigate('lesson')}><span className="flex items-center gap-3">{status(lessonApproved)}Lesson introduction</span><span className="text-xs text-muted-foreground">{lessonApproved ? 'Approved' : 'Required'}</span></button>{readiness.map(({ objective, materials: items }) => <section key={objective.id} className="rounded-xl border p-5"><p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Objective {objective.position + 1}</p><h4 className="text-sm font-medium leading-relaxed">{objective.text}</h4><div className="mt-4 grid gap-2 sm:grid-cols-2">{items.map(item => <button key={item.key} className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted" onClick={() => navigate('objective', objective.id, item.key)}>{status(item.approved)}<span>{item.label}</span><span className="ml-auto text-xs text-muted-foreground">{item.approved ? 'Ready' : item.key === 'introduction' ? 'Required' : 'Recommended'}</span></button>)}</div></section>)}{!requiredReady && <p role="status" className="rounded-xl bg-amber-500/10 p-4 text-sm">Approve a current introduction for the lesson and every objective before publishing. Other materials are recommended.</p>}<div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5"><p className="text-sm text-muted-foreground">{approvedCount} of {total} recommended materials approved.</p><Button disabled={!requiredReady || mutationDisabled || !!batchId} onClick={() => void publish()}>{busy === 'publish' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{data.currentPublication ? 'Publish reviewed changes' : 'Publish lesson'}</Button></div></div>}
       </section>
     </div>
+    <AlertDialog open={prepareOpen} onOpenChange={setPrepareOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Prepare {toPrepare.length === 1 ? '1 objective' : `${toPrepare.length} objectives`}?</AlertDialogTitle>
+          <AlertDialogDescription>For each objective below, the AI {needConcept ? 'suggests a teaching concept where you have none, then ' : ''}creates the five materials: an introduction image, two interactive visuals, a knowledge check and a visual challenge. You still review and approve each one.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <ul className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-sm">
+          {toPrepare.map(objective => <li key={objective.id} className="flex justify-between gap-3"><span className="line-clamp-1">Objective {objective.position + 1}: {objective.text}</span><span className="shrink-0 text-muted-foreground">{conceptFor(objective) ? 'your concept' : 'AI concept'}</span></li>)}
+        </ul>
+        <p className="text-sm text-muted-foreground">Uses your school&apos;s AI allowance: {toPrepare.length * 3 + needConcept} visuals{needConcept ? ` (including ${needConcept} concept ${needConcept === 1 ? 'suggestion' : 'suggestions'})` : ''}, {toPrepare.length} {toPrepare.length === 1 ? 'image' : 'images'} and {toPrepare.length} {toPrepare.length === 1 ? 'quiz' : 'quizzes'}.</p>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button onClick={() => void prepareObjectives(toPrepare)}><Wand2 className="mr-2 h-4 w-4" />Prepare materials</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <AlertDialog open={!!pendingImpact} onOpenChange={open => { if (!open) setPendingImpact(undefined); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
