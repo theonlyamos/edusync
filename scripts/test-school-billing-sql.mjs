@@ -84,7 +84,7 @@ const voiceMigration = (await readdir(migrations)).find((name) => name.endsWith(
 await db.exec(await readFile(path.join(migrations, voiceMigration), 'utf8'));
 
 const billingSteps = (await readdir(migrations)).filter((name) => /^\d{14}_school_billing_\d/.test(name)).sort();
-assert.equal(billingSteps.length, 5, 'school billing steps must all exist');
+assert.equal(billingSteps.length, 6, 'school billing steps must all exist');
 for (const name of billingSteps) {
     await db.exec(await readFile(path.join(migrations, name), 'utf8'));
 }
