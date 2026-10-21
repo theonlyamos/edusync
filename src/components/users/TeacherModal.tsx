@@ -28,7 +28,6 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
     const [formData, setFormData] = useState({
         name: "",
         email: "",
-        password: "",
         subjects: [] as string[],
         grades: [] as string[],
         qualifications: [] as string[],
@@ -40,7 +39,6 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
             setFormData({
                 name: teacher.name || "",
                 email: teacher.email || "",
-                password: "", // Don't populate password on edit
                 subjects: Array.isArray(teacher.subjects) ? teacher.subjects :
                     teacher.subject ? teacher.subject.split(',').map((s: string) => s.trim()) : [],
                 grades: Array.isArray(teacher.grades) ? teacher.grades :
@@ -52,7 +50,6 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
             setFormData({
                 name: "",
                 email: "",
-                password: "",
                 subjects: [],
                 grades: [],
                 qualifications: [],
@@ -66,18 +63,11 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
         setIsLoading(true);
 
         try {
-            const url = teacher
-                ? `/api/admin/users/teachers?id=${teacher.id}`
-                : "/api/admin/users/teachers";
-
-            const method = teacher ? "PUT" : "POST";
-
-            // If editing and password is empty, don't send it (assuming backend handles this)
-            // Or if backend requires it, validation will fail. Usually updates don't require password unless changing.
+            // Support edits existing teachers only. Schools invite new ones.
+            if (!teacher) throw new Error('Teachers join through their school\'s invites.');
+            const url = `/api/admin/users/teachers?id=${teacher.id}`;
+            const method = "PUT";
             const bodyData = { ...formData };
-            if (teacher && !bodyData.password) {
-                delete (bodyData as any).password;
-            }
 
             const response = await fetch(url, {
                 method,
@@ -157,7 +147,7 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>{teacher ? 'Edit Teacher' : 'Create Teacher'}</DialogTitle>
+                    <DialogTitle>Edit teacher</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -181,18 +171,6 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
                                 value={formData.email}
                                 onChange={handleInputChange}
                                 required
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password {teacher && '(Leave blank to keep current)'}</Label>
-                            <Input
-                                id="password"
-                                name="password"
-                                type="password"
-                                value={formData.password}
-                                onChange={handleInputChange}
-                                required={!teacher}
                             />
                         </div>
 

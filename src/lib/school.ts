@@ -39,16 +39,6 @@ export function organizationMemberRole(role: MemberFormRole, orgType: string | n
   return role === 'teacher' ? 'teacher' : 'student'
 }
 
-/**
- * App-wide users.role for a brand-new account added through an organization.
- * Organization owners and admins are never made platform admins.
- */
-export function newAccountUserRole(role: MemberFormRole): 'teacher' | 'student' | 'learner' {
-  if (role === 'teacher') return 'teacher'
-  if (role === 'student') return 'student'
-  return 'learner'
-}
-
 /** Shown when someone tries to add or edit school members from the organization screens. */
 export const SCHOOL_MEMBERS_BY_INVITE_ONLY = 'People join a school by invite. Use the People tab on your school page to invite them.'
 

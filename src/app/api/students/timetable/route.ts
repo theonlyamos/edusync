@@ -1,86 +1,57 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { readTimetable } from '@/lib/timetable';
 
-export async function GET(request: Request) {
+/** The timetable for the signed-in student's grade in their school. */
+export async function GET() {
     try {
         const supabase = await createSSRUserSupabase();
         const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
+        if (!user) return new NextResponse('Unauthorized', { status: 401 });
 
-        // Verify user is a student
-        const { data: userData } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        if (!userData || userData.role !== 'student') {
+        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).maybeSingle();
+        if (userData?.role !== 'student') {
             return new NextResponse('Unauthorized - Student access required', { status: 403 });
         }
 
-        const { data: studentRow, error: studentErr } = await supabase
-            .from('students_view')
-            .select('grade')
-            .eq('id', user.id)
+        const { data: student, error: studentError } = await supabase
+            .from('students')
+            .select('grade, organization_id')
+            .eq('user_id', user.id)
             .maybeSingle();
-        if (studentErr) throw studentErr;
-
-        if (!studentRow?.grade) {
-            return NextResponse.json({ timeTable: {} });
+        if (studentError) throw studentError;
+        if (!student?.grade || !student.organization_id) {
+            return NextResponse.json({ timeTable: {}, periods: [], teachers: [], lessons: [] });
         }
 
-        // Get the timetable for the student's grade
-        const { data: timetable, error: tErr } = await supabase
+        const { data: row, error } = await supabase
             .from('timetables')
-            .select('*')
-            .eq('grade', studentRow.grade)
+            .select('periods, schedule')
+            .eq('organization_id', student.organization_id)
+            .eq('grade', student.grade)
+            .order('updated_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
-        if (tErr) throw tErr;
+        if (error) throw error;
+        const timetable = readTimetable(row);
 
-        // Get all teachers for this grade
-        const { data: teachers } = await supabase
-            .from('users')
-            .select('id, name')
-            .eq('role', 'teacher');
+        const teacherIds = [...new Set(Object.values(timetable.schedule).flatMap((cells) => Object.values(cells).map((c) => c.teacherId)).filter(Boolean))];
+        const { data: teachers } = teacherIds.length
+            ? await supabase.from('users').select('id, name').in('id', teacherIds)
+            : { data: [] as Array<{ id: string; name: string | null }> };
+        const names = new Map((teachers ?? []).map((t: any) => [String(t.id), t.name as string | null]));
 
-        // Get all lessons for this grade level
-        const { data: lessons } = await supabase
-            .from('lessons')
-            .select('id, title, gradeLevel')
-            .eq('gradeLevel', studentRow.grade);
-
-        // Add teacher names and lesson titles to the timetable
-        const timeTableWithDetails = { ...(timetable as any)?.schedule } as any;
-        if (timeTableWithDetails) {
-            Object.entries(timeTableWithDetails).forEach(([day, periods]: [string, any]) => {
-                Object.entries(periods).forEach(([periodId, data]: [string, any]) => {
-                    const teacher = (teachers || []).find((t: any) => String(t.id) === data.teacherId);
-                    const lesson = (lessons || []).find((l: any) => String(l.id) === data.lessonId);
-
-                    timeTableWithDetails[day][periodId] = {
-                        ...data,
-                        teacherName: teacher?.name || 'No teacher assigned',
-                        lessonTitle: lesson?.title
-                    };
-                });
-            });
+        const timeTable: Record<string, Record<string, { subject: string; teacherId: string; teacherName: string }>> = {};
+        for (const [day, cells] of Object.entries(timetable.schedule)) {
+            for (const [periodId, cell] of Object.entries(cells)) {
+                (timeTable[day] ??= {})[periodId] = {
+                    ...cell,
+                    teacherName: (cell.teacherId && names.get(cell.teacherId)) || 'No teacher assigned',
+                };
+            }
         }
 
-        // Sort periods by start time
-        const periods = (timetable as any)?.periods || [];
-        periods.sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
-
-        return NextResponse.json({
-            timeTable: timeTableWithDetails || {},
-            lessons: (lessons ?? []).map(lesson => ({
-                ...lesson,
-                _id: String((lesson as any)._id ?? lesson.id)
-            })),
-            periods
-        });
+        return NextResponse.json({ timeTable, periods: timetable.periods, teachers: [], lessons: [] });
     } catch (error) {
         console.error('[TIMETABLE_GET]', error);
         return new NextResponse('Internal Error', { status: 500 });

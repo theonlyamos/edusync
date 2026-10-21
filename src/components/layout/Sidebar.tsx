@@ -15,7 +15,6 @@ import {
   FileText,
   MessagesSquare,
   Users,
-  School,
   Calendar,
   BarChart,
   FileCheck,
@@ -63,19 +62,9 @@ const adminLinks: SidebarLink[] = [
     href: '/admin/users/admins'
   },
   {
-    label: 'Organizations',
+    label: 'Schools & orgs',
     icon: <Building2 className="h-5 w-5" />,
     href: '/admin/organizations'
-  },
-  {
-    label: 'Grades',
-    icon: <School className="h-5 w-5" />,
-    href: '/admin/grades'
-  },
-  {
-    label: 'Time Tables',
-    icon: <Calendar className="h-5 w-5" />,
-    href: '/admin/timetables'
   },
   {
     label: 'Lessons',

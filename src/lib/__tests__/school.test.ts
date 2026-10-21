@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canChangeSchoolMemberRole, inActiveSchool, inSameSchool, newAccountUserRole, organizationMemberRole } from '@/lib/school'
+import { canChangeSchoolMemberRole, inActiveSchool, inSameSchool, organizationMemberRole } from '@/lib/school'
 
 describe('inSameSchool', () => {
   it('matches equal schools and two rows with no school', () => {
@@ -23,14 +23,6 @@ describe('organizationMemberRole', () => {
   it('uses member for other organizations', () => {
     expect(organizationMemberRole('teacher', 'developer')).toBe('member')
     expect(organizationMemberRole('owner', 'developer')).toBe('owner')
-  })
-})
-
-describe('newAccountUserRole', () => {
-  it('never creates platform admins for organization owners or admins', () => {
-    expect(newAccountUserRole('owner')).toBe('learner')
-    expect(newAccountUserRole('admin')).toBe('learner')
-    expect(newAccountUserRole('teacher')).toBe('teacher')
   })
 })
 

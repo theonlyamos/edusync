@@ -10,7 +10,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { MoreHorizontal, Pencil, Trash, Eye } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, Eye, KeyRound } from "lucide-react";
 import Link from "next/link";
 
 export type Teacher = {
@@ -21,14 +21,16 @@ export type Teacher = {
     gradesList: string;
     status: string;
     createdAt: string;
+    schoolName?: string | null;
 };
 
 interface ColumnsProps {
     onEdit: (teacher: Teacher) => void;
     onDelete: (teacher: Teacher) => void;
+    onResetPassword?: (teacher: Teacher) => void;
 }
 
-export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Teacher>[] => [
+export const getColumns = ({ onEdit, onDelete, onResetPassword }: ColumnsProps): ColumnDef<Teacher>[] => [
     {
         accessorKey: "name",
         header: ({ column }) => (
@@ -40,6 +42,13 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Teache
         header: ({ column }) => (
             <DataTableColumnHeader column={column} title="Email" />
         ),
+    },
+    {
+        accessorKey: "schoolName",
+        header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="School" />
+        ),
+        cell: ({ row }) => row.original.schoolName ?? <span className="text-muted-foreground">No school</span>,
     },
     {
         accessorKey: "subject",
@@ -101,6 +110,12 @@ export const getColumns = ({ onEdit, onDelete }: ColumnsProps): ColumnDef<Teache
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
                         </DropdownMenuItem>
+                        {onResetPassword && (
+                            <DropdownMenuItem onClick={() => onResetPassword(teacher)}>
+                                <KeyRound className="mr-2 h-4 w-4" />
+                                Email password reset
+                            </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                             className="text-red-600"
                             onClick={() => onDelete(teacher)}

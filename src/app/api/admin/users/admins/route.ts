@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server'
+import { requirePlatformAdmin } from '@/lib/platform-admin.server';
+import { adminPromotionProblem } from '@/lib/platform-admin';
+import { isValidEmail, normalizeEmail } from '@/lib/school-invites';
 export async function GET() {
     const supabase = createServerSupabase();
     try {
@@ -25,62 +28,53 @@ export async function GET() {
     }
 }
 
+/**
+ * Makes an existing account a platform admin. Nobody types a password here:
+ * the person signs up (or already has an account) and keeps their own login.
+ */
 export async function POST(request: Request) {
-    const supabase = createServerSupabase();
+    const access = await requirePlatformAdmin();
+    if (!access.ok) return access.response;
+    const { supabase } = access.context;
+
+    const body = await request.json().catch(() => ({}));
+    const email = typeof body?.email === 'string' ? normalizeEmail(body.email) : '';
+    if (!isValidEmail(email)) {
+        return NextResponse.json({ error: 'Enter the email of an existing account.' }, { status: 400 });
+    }
+
     try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'admin') {
-            return new NextResponse('Unauthorized', { status: 401 });
-        }
-
-        const body = await request.json();
-        const { email, password, name } = body;
-
-        const { data: existing, error: checkErr } = await supabase
+        const { data: user, error } = await supabase
             .from('users')
-            .select('id')
+            .select('id, email, name, role')
             .eq('email', email)
             .maybeSingle();
-        if (checkErr) throw checkErr;
-        if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
-
-        const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: {
-                name: name,
-                role: 'admin' // Default role
-            }
-        });
-
-        const { data, error } = await supabase
-            .from('users')
-            .insert({ id: authUser.user?.id, email, name, role: 'admin' })
-            .select('id, email, name, role, image, isactive, lastlogin, created_at, updated_at')
-            .single();
         if (error) throw error;
+        if (!user) {
+            return NextResponse.json({ error: 'No account uses that email. Ask them to sign up first.' }, { status: 404 });
+        }
+        const problem = adminPromotionProblem(user.role);
+        if (problem) return NextResponse.json({ error: problem }, { status: 409 });
 
-        const { data: adminRow, error: adminErr } = await supabase
-            .from('admins')
-            .insert({ user_id: authUser.user?.id, issuperadmin: true, permissions: [] })
-            .select('*')
-            .maybeSingle();
-        if (adminErr) throw adminErr;
+        const { data: updated, error: updateError } = await supabase
+            .from('users')
+            .update({ role: 'admin' })
+            .eq('id', user.id)
+            .select('id, email, name, image, isactive, lastlogin, created_at, updated_at')
+            .single();
+        if (updateError) throw updateError;
+
+        const { data: adminRow } = await supabase.from('admins').select('id').eq('user_id', user.id).maybeSingle();
         if (!adminRow) {
-            return NextResponse.json(
-                { error: "Admin details not found" },
-                { status: 404 }
-            );
+            const { error: adminError } = await supabase
+                .from('admins')
+                .insert({ user_id: user.id, issuperadmin: true, permissions: [] });
+            if (adminError) console.error('Could not add admin details row:', adminError);
         }
 
-        const { password: _pw, ...userWithoutPassword } = data as any;
-        return NextResponse.json({ ...userWithoutPassword, ...adminRow });
+        return NextResponse.json(updated);
     } catch (error) {
-        console.error('Error creating admin:', error);
-        return NextResponse.json(
-            { error: 'Failed to create admin' },
-            { status: 500 }
-        );
+        console.error('Error adding admin:', error);
+        return NextResponse.json({ error: 'Failed to add admin' }, { status: 500 });
     }
-} 
+}

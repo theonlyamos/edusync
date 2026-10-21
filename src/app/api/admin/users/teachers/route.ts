@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ACCOUNTS_COME_FROM_SCHOOLS, withSchoolNames } from "@/lib/platform-admin.server";
 import { getServerSession } from "@/lib/auth";
 import { createServerSupabase } from '@/lib/supabase.server'
 
@@ -18,7 +19,7 @@ export async function GET() {
             .select('*')
             .order('createdat', { ascending: false });
         if (error) throw error;
-        return NextResponse.json(data ?? []);
+        return NextResponse.json(await withSchoolNames(supabase, (data ?? []) as Array<{ id: string }>));
     } catch (error) {
         console.error("Error fetching teachers:", error);
         return NextResponse.json(
@@ -28,69 +29,9 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
-    try {
-        const session = await getServerSession();
-        if (!session || session.user?.role !== 'admin') {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
-
-        const supabase = createServerSupabase()
-
-        const body = await request.json();
-        const { email, password, name, subjects, grades, qualifications, specializations } = body as any;
-
-        const { data: authUser, error } = await supabase.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: {
-                name: name,
-                role: 'teacher' // Default role
-            }
-        });
-
-        const { data: existing, error: checkErr } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', email)
-            .maybeSingle();
-        if (checkErr) throw checkErr;
-        if (existing) return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
-
-        const { data: userRow, error: userErr } = await supabase
-            .from('users')
-            .insert({ id: authUser.user?.id, email, name, role: 'teacher' })
-            .select('*')
-            .single();
-        if (userErr) throw userErr;
-
-        const { data: teacherRow, error: teacherErr } = await supabase
-            .from('teachers')
-            .insert({
-                user_id: userRow.id,
-                subjects,
-                grades,
-                qualifications,
-                specializations
-            })
-            .select('*')
-            .single();
-        if (teacherErr) throw teacherErr;
-
-        const { password: _pw, ...userWithoutPassword } = userRow as any;
-        return NextResponse.json({ ...userWithoutPassword, ...teacherRow });
-    } catch (error) {
-        console.error("Error creating teacher:", error);
-        return NextResponse.json(
-            { error: "Failed to create teacher" },
-            { status: 500 }
-        );
-    }
-
+/** Support no longer creates accounts or types passwords. Schools invite people. */
+export async function POST() {
+    return NextResponse.json({ error: ACCOUNTS_COME_FROM_SCHOOLS }, { status: 410 });
 }
 
 export async function PUT(request: Request) {

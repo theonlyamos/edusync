@@ -10,7 +10,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
-import { MoreHorizontal, Eye, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Eye, Pencil, Trash, KeyRound } from "lucide-react";
 import { EducationLevelBadge } from "@/components/ui/education-level-badge";
 import { type GradeLevel } from "@/lib/constants";
 
@@ -23,15 +23,17 @@ export type Student = {
     createdAt: string;
     guardianName?: string;
     guardianContact?: string;
+    schoolName?: string | null;
 };
 
 interface ColumnsProps {
     onView: (student: Student) => void;
     onEdit: (student: Student) => void;
     onDelete: (student: Student) => void;
+    onResetPassword?: (student: Student) => void;
 }
 
-export const getColumns = ({ onView, onEdit, onDelete }: ColumnsProps): ColumnDef<Student>[] => [
+export const getColumns = ({ onView, onEdit, onDelete, onResetPassword }: ColumnsProps): ColumnDef<Student>[] => [
     {
         accessorKey: "name",
         header: ({ column }) => (
@@ -43,6 +45,13 @@ export const getColumns = ({ onView, onEdit, onDelete }: ColumnsProps): ColumnDe
         header: ({ column }) => (
             <DataTableColumnHeader column={column} title="Email" />
         ),
+    },
+    {
+        accessorKey: "schoolName",
+        header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="School" />
+        ),
+        cell: ({ row }) => row.original.schoolName ?? <span className="text-muted-foreground">No school</span>,
     },
     {
         accessorKey: "grade",
@@ -100,6 +109,12 @@ export const getColumns = ({ onView, onEdit, onDelete }: ColumnsProps): ColumnDe
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
                         </DropdownMenuItem>
+                        {onResetPassword && (
+                            <DropdownMenuItem onClick={() => onResetPassword(student)}>
+                                <KeyRound className="mr-2 h-4 w-4" />
+                                Email password reset
+                            </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                             className="text-red-600"
                             onClick={() => onDelete(student)}

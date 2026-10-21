@@ -7,15 +7,16 @@ import { getColumns, Student } from "./columns";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { UserPlus } from "lucide-react";
 import { DeleteConfirmationDialog } from "@/components/ui/delete-confirmation-dialog";
 import { StudentModal, type StudentData } from "@/components/users/StudentModal";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePasswordResetEmail } from "@/components/admin/usePasswordResetEmail";
 
 export default function StudentsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const sendPasswordReset = usePasswordResetEmail();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,6 +43,7 @@ export default function StudentsPage() {
         name: row.name ?? '',
         email: row.email ?? '',
         grade: row.grade ?? '',
+        schoolName: row.schoolName ?? null,
         status: (row.isactive ?? row.isActive) ? 'Active' : 'Inactive',
         createdAt: row.createdat ?? row.createdAt ?? new Date().toISOString(),
       }));
@@ -69,7 +71,8 @@ export default function StudentsPage() {
     const filtered = students.filter(student =>
       student.name.toLowerCase().includes(lowerQuery) ||
       student.email.toLowerCase().includes(lowerQuery) ||
-      student.grade.toLowerCase().includes(lowerQuery)
+      student.grade.toLowerCase().includes(lowerQuery) ||
+      (student.schoolName ?? '').toLowerCase().includes(lowerQuery)
     );
     setFilteredStudents(filtered);
   }, [searchQuery, students]);
@@ -88,11 +91,6 @@ export default function StudentsPage() {
       guardianName: student.guardianName,
       guardianContact: student.guardianContact,
     });
-    setIsModalOpen(true);
-  };
-
-  const handleCreate = () => {
-    setSelectedStudent(null);
     setIsModalOpen(true);
   };
 
@@ -135,7 +133,8 @@ export default function StudentsPage() {
   const columns = getColumns({
     onView: handleView,
     onEdit: handleEdit,
-    onDelete: handleDeleteClick
+    onDelete: handleDeleteClick,
+    onResetPassword: sendPasswordReset,
   });
 
   return (
@@ -145,13 +144,9 @@ export default function StudentsPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Student Management</h1>
             <p className="text-muted-foreground">
-              Manage and monitor all students in the system
+              Every student on the platform, for support. Schools add students from their People tab.
             </p>
           </div>
-          <Button onClick={handleCreate} className="whitespace-nowrap">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Student
-          </Button>
         </div>
 
         <div className="flex items-center justify-end py-4">
