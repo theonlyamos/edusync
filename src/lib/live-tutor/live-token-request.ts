@@ -32,7 +32,7 @@ export type LiveTokenResponse = {
     config: Record<string, unknown>;
     expireTime: string;
     newSessionExpireTime: string;
-    billing: { grantId: string; minutesCharged: number; remainingCredits: number } | null;
+    billing: { grantId: string; minutesCharged: number; remainingCredits: number; payer?: 'school' | 'personal' } | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

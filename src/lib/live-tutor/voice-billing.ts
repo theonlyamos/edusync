@@ -23,12 +23,24 @@ export function voiceBlockMinutes(): number {
     return Math.min(raw, MAX_BLOCK_MINUTES);
 }
 
+/** Whose credits paid: the person's school pool, or their own (or the API key owner's) credits. */
+export type VoicePayer = 'school' | 'personal';
+
 export type VoiceGrantResult =
-    | { status: 'charged'; grantId: string; issuanceId: string; expiresAt: Date; minutesCharged: number; remainingCredits: number }
-    | { status: 'insufficient_credits'; remainingCredits: number }
+    | { status: 'charged'; grantId: string; issuanceId: string; expiresAt: Date; minutesCharged: number; remainingCredits: number; payer: VoicePayer }
+    | { status: 'insufficient_credits'; remainingCredits: number; payer: VoicePayer }
     | { status: 'not_found' }
     | { status: 'active_grant' }
     | { status: 'pending_issuance' };
+
+async function voicePayerSchoolId(supabase: ReturnType<typeof createServerSupabase>, userId: string): Promise<string | null> {
+    const { data, error } = await supabase.rpc('user_school_id', { p_user_id: userId });
+    if (error) {
+        console.error('user_school_id lookup failed:', error.message);
+        return null;
+    }
+    return typeof data === 'string' && data ? data : null;
+}
 
 export async function grantVoiceMinutes(input: {
     userId: string;
@@ -57,6 +69,9 @@ export async function grantVoiceMinutes(input: {
         remaining_credits: number | null;
     } | null;
     if (!row) throw new Error('grant_voice_minutes returned no row');
+    // Same rule the database used to pick the pool: signed-in school members pay from their school.
+    const payer: VoicePayer = !input.apiKeyId && (row.status === 'charged' || row.status === 'insufficient_credits')
+        && (await voicePayerSchoolId(supabase, input.userId)) ? 'school' : 'personal';
 
     switch (row.status) {
         case 'charged':
@@ -68,9 +83,10 @@ export async function grantVoiceMinutes(input: {
                 expiresAt: new Date(row.expires_at),
                 minutesCharged: row.minutes_charged ?? 0,
                 remainingCredits: row.remaining_credits ?? 0,
+                payer,
             };
         case 'insufficient_credits':
-            return { status: 'insufficient_credits', remainingCredits: row.remaining_credits ?? 0 };
+            return { status: 'insufficient_credits', remainingCredits: row.remaining_credits ?? 0, payer };
         case 'not_found':
             return { status: 'not_found' };
         case 'active_grant':

@@ -16,6 +16,8 @@ import {
 import { useHomeworkData } from '@/components/homework/shared';
 import { useAllHomework } from '@/components/dashboard/useAllHomework';
 import { ContinueLearningSection, RecentActivitySection } from '@/components/dashboard/StudentInsights';
+import { TutorMinutesCard } from '@/components/dashboard/CreditWidgets';
+import type { CreditSummary } from '@/lib/school-billing.server';
 import type { StudentDashboardData } from '@/lib/dashboard-server';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
@@ -47,6 +49,7 @@ export default function StudentDashboard() {
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const practice = useHomeworkData<PracticeStats>('/api/students/practice/stats');
   const insights = useHomeworkData<StudentDashboardData>('/api/dashboard/student');
+  const credits = useHomeworkData<CreditSummary>('/api/credits/summary');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
 
@@ -197,9 +200,10 @@ export default function StudentDashboard() {
           </DashboardSection>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-2 xl:grid-cols-3">
           <ContinueLearningSection request={insights} now={now} />
           <RecentActivitySection request={insights} now={now} />
+          <TutorMinutesCard request={credits} />
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-3">

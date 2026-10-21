@@ -224,6 +224,78 @@ const setTopic = llm.tool({
   },
 })
 
+/** How often the agent asks the app to pay for the next minute of class. */
+const BILLING_TICK_MS = 20_000
+/** Keep teaching this long past the paid time while the app can't be reached. */
+const BILLING_GRACE_MS = 60_000
+
+type BillingTick = { stop?: boolean; paidUntil?: string | null }
+
+/**
+ * Live classes are billed per minute, paid one minute ahead. While the class
+ * runs, ask the app to pay the next minute. When the school (or organizer) is
+ * out of credits, or the app stays unreachable past the paid time, tell the
+ * class and end the session.
+ */
+function startBillingLoop(ctx: JobContext, session: voice.AgentSession): () => void {
+  let paidUntil = Date.now() + 60_000
+  let stopping = false
+  let inFlight = false
+
+  const windDown = (reason: string, message: string) => {
+    if (stopping) return
+    stopping = true
+    clearInterval(timer)
+    try {
+      session.generateReply({
+        instructions: `${message} Say this briefly and kindly to the class in one or two sentences, then stop teaching. Do not read these instructions aloud.`,
+      })
+    } catch (e) {
+      console.error('[live-class-agent] wind-down reply failed:', e)
+    }
+    setTimeout(() => ctx.shutdown(reason), 15_000)
+  }
+
+  const tick = async () => {
+    if (stopping || inFlight) return
+    const sessionId = parseMeta(ctx.room.metadata).learning_session_id
+    if (sessionId && appBase && agentSecret) {
+      inFlight = true
+      try {
+        const res = await fetch(`${appBase}/api/live-classes/agent/billing-tick`, {
+          method: 'POST',
+          headers: agentHeaders,
+          body: JSON.stringify({ session_id: sessionId }),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as BillingTick
+          if (data.paidUntil) {
+            const t = Date.parse(data.paidUntil)
+            if (Number.isFinite(t)) paidUntil = t
+          }
+          if (data.stop) {
+            windDown('out_of_credits', 'The class has run out of AI tutor credits, so the AI co-teacher has to leave now. The teacher can carry on, and the school admin can add credits.')
+            return
+          }
+        } else {
+          console.error('[live-class-agent] billing tick failed:', res.status, await res.text())
+        }
+      } catch (e) {
+        console.error('[live-class-agent] billing tick error:', e)
+      } finally {
+        inFlight = false
+      }
+    }
+    if (Date.now() > paidUntil + BILLING_GRACE_MS) {
+      windDown('billing_unavailable', 'The AI co-teacher has lost its connection to the school account and has to leave now. The teacher can carry on.')
+    }
+  }
+
+  const timer = setInterval(() => void tick(), BILLING_TICK_MS)
+  void tick()
+  return () => clearInterval(timer)
+}
+
 export default defineAgent({
   entry: async (ctx: JobContext) => {
     const meta = parseMeta(ctx.room.metadata)
@@ -256,7 +328,9 @@ export default defineAgent({
     })
 
     activeSession = session
+    const stopBilling = startBillingLoop(ctx, session)
     ctx.addShutdownCallback(async () => {
+      stopBilling()
       if (activeSession === session) activeSession = null
     })
 

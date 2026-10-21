@@ -9,8 +9,6 @@ import {
 } from '@/lib/live-tutor/live-connect-config';
 import { allowVoiceTokenRequest, finalizeVoiceTokenIssuance, grantVoiceMinutes } from '@/lib/live-tutor/voice-billing';
 
-/** Students using their school's tutor are not charged credits; tokens still expire. */
-const UNBILLED_TOKEN_MINUTES = 30;
 /** A token must open its Live session within this window. */
 const NEW_SESSION_WINDOW_MS = 60 * 1000;
 
@@ -87,44 +85,43 @@ export async function POST(request: NextRequest) {
             sessionId = input.sessionId;
         }
 
-        const billed = !(auth.authType === 'session' && auth.userRole === 'student');
+        // Every token is paid for: school members from their school's credit
+        // pool, everyone else (and embed API keys) from their own credits.
+        // The database decides which pool (grant_voice_minutes_v2).
         const now = Date.now();
-        let expireTime: Date;
-        let billing: { grantId: string; minutesCharged: number; remainingCredits: number } | null = null;
-        let issuance: { grantId: string; issuanceId: string } | null = null;
-
-        if (billed) {
-            const grant = await grantVoiceMinutes({
-                userId: auth.userId,
-                apiKeyId,
-                grantId: input.grantId ?? null,
-                sessionId,
-            });
-            if (grant.status === 'insufficient_credits') {
-                return NextResponse.json(
-                    { error: 'Insufficient credits', remainingCredits: grant.remainingCredits },
-                    { status: 402 },
-                );
-            }
-            if (grant.status === 'not_found') {
-                return NextResponse.json({ error: 'Voice session not found' }, { status: 403 });
-            }
-            if (grant.status === 'active_grant' || grant.status === 'pending_issuance') {
-                return NextResponse.json(
-                    { error: grant.status === 'active_grant' ? 'Resume with the existing voice token' : 'Voice token issuance is already pending' },
-                    { status: 409 },
-                );
-            }
-            expireTime = grant.expiresAt;
-            issuance = { grantId: grant.grantId, issuanceId: grant.issuanceId };
-            billing = {
-                grantId: grant.grantId,
-                minutesCharged: grant.minutesCharged,
-                remainingCredits: grant.remainingCredits,
-            };
-        } else {
-            expireTime = new Date(now + UNBILLED_TOKEN_MINUTES * 60 * 1000);
+        const grant = await grantVoiceMinutes({
+            userId: auth.userId,
+            apiKeyId,
+            grantId: input.grantId ?? null,
+            sessionId,
+        });
+        if (grant.status === 'insufficient_credits') {
+            return NextResponse.json(
+                {
+                    error: grant.payer === 'school' ? 'Your school is out of credits' : 'Insufficient credits',
+                    remainingCredits: grant.remainingCredits,
+                    payer: grant.payer,
+                },
+                { status: 402 },
+            );
         }
+        if (grant.status === 'not_found') {
+            return NextResponse.json({ error: 'Voice session not found' }, { status: 403 });
+        }
+        if (grant.status === 'active_grant' || grant.status === 'pending_issuance') {
+            return NextResponse.json(
+                { error: grant.status === 'active_grant' ? 'Resume with the existing voice token' : 'Voice token issuance is already pending' },
+                { status: 409 },
+            );
+        }
+        const expireTime = grant.expiresAt;
+        const issuance = { grantId: grant.grantId, issuanceId: grant.issuanceId };
+        const billing = {
+            grantId: grant.grantId,
+            minutesCharged: grant.minutesCharged,
+            remainingCredits: grant.remainingCredits,
+            payer: grant.payer,
+        };
 
         const newSessionExpireTime = new Date(Math.min(now + NEW_SESSION_WINDOW_MS, expireTime.getTime()));
         const config = buildLiveConnectConfig(input);
@@ -155,25 +152,21 @@ export async function POST(request: NextRequest) {
             tokenName = token.name;
             if (!tokenName) throw new Error('Gemini returned a token without a name');
         } catch (error) {
-            if (issuance) {
-                try {
-                    await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: false });
-                } catch (refundError) {
-                    console.error('Failed to roll back voice token issuance:', refundError);
-                }
+            try {
+                await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: false });
+            } catch (refundError) {
+                console.error('Failed to roll back voice token issuance:', refundError);
             }
             throw error;
         }
 
-        if (issuance) {
-            // The token exists and the block is paid for, so hand it over even if
-            // marking the issuance complete fails. The database clears a stale
-            // pending issuance on the next request for this grant.
-            try {
-                await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: true });
-            } catch (finalizeError) {
-                console.error('Failed to mark voice token issuance complete:', finalizeError);
-            }
+        // The token exists and the block is paid for, so hand it over even if
+        // marking the issuance complete fails. The database clears a stale
+        // pending issuance on the next request for this grant.
+        try {
+            await finalizeVoiceTokenIssuance({ ...issuance, userId: auth.userId, apiKeyId, succeeded: true });
+        } catch (finalizeError) {
+            console.error('Failed to mark voice token issuance complete:', finalizeError);
         }
 
         return NextResponse.json({

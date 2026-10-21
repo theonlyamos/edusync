@@ -646,7 +646,12 @@ export function useAudioStreaming(
                 if (!ownsRequest()) return;
                 if (!tokenResponse.ok) {
                     if (tokenResponse.status === 403) voiceGrantIdRef.current = null;
-                    throw new VoiceTokenRequestError(tokenResponse.status);
+                    let payer: 'school' | 'personal' | null = null;
+                    if (tokenResponse.status === 402) {
+                        const body = await tokenResponse.json().catch(() => null) as { payer?: string } | null;
+                        if (body?.payer === 'school' || body?.payer === 'personal') payer = body.payer;
+                    }
+                    throw new VoiceTokenRequestError(tokenResponse.status, payer);
                 }
                 liveToken = await tokenResponse.json() as LiveTokenResponse;
                 if (!ownsRequest()) return;

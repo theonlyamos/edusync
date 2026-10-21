@@ -17,6 +17,7 @@ import { SchoolSetupChecklist } from '@/components/school/SchoolSetupChecklist';
 import OrgMembersTab from './components/OrgMembersTab';
 import OrgApiKeysTab from './components/OrgApiKeysTab';
 import OrgSettingsTab from './components/OrgSettingsTab';
+import SchoolBillingTab from './components/SchoolBillingTab';
 
 type Organization = {
   id: string;
@@ -53,7 +54,10 @@ export default function OrganizationDetailPage() {
   const searchParams = useSearchParams();
   const session = useContext(SupabaseSessionContext);
   const orgId = params?.orgId as string;
-  const [tab, setTab] = useState<string | null>(searchParams?.get('tab') ?? null);
+  const tabParam = searchParams?.get('tab') ?? null;
+  const [tab, setTab] = useState<string | null>(tabParam);
+  // Links such as the setup checklist's "Buy credits" change ?tab= on this same page.
+  useEffect(() => { if (tabParam) setTab(tabParam); }, [tabParam]);
 
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -164,7 +168,7 @@ export default function OrganizationDetailPage() {
 
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-sm text-muted-foreground">Available Credits</div>
+              <div className="text-sm text-muted-foreground">{isSchool ? 'School credits' : 'Available Credits'}</div>
               <div className="text-2xl font-bold flex items-center gap-1">
                 <Coins className="w-5 h-5 text-yellow-500" />
                 {organization.credits}
@@ -206,6 +210,12 @@ export default function OrganizationDetailPage() {
             <Users className="w-4 h-4 mr-2" />
             Members
           </TabsTrigger>
+          {showSetup && (
+            <TabsTrigger value="billing">
+              <Coins className="w-4 h-4 mr-2" />
+              Billing
+            </TabsTrigger>
+          )}
           <TabsTrigger value="api-keys">
             <Key className="w-4 h-4 mr-2" />
             API Keys
@@ -234,6 +244,15 @@ export default function OrganizationDetailPage() {
             onRefresh={fetchOrganization}
           />
         </TabsContent>
+
+        {showSetup && (
+          <TabsContent value="billing">
+            <SchoolBillingTab
+              purchased={searchParams?.get('purchase') === 'success'}
+              onChanged={() => fetchOrganization(true)}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="api-keys">
           <OrgApiKeysTab 

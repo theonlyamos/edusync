@@ -8,7 +8,7 @@ import {
   mintLiveKitParticipantToken,
   type LiveClassRoomLessonMetadata,
 } from '@/lib/livekit-token'
-import { deductCreditsForMinute, hasEnoughCredits } from '@/lib/credits'
+import { billLiveClassMinute } from '@/lib/school-billing.server'
 import { isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -80,17 +80,23 @@ export async function GET(request: NextRequest, ctx: Ctx) {
     })
     learningSessionId = ensured.sessionId
 
-    if (ensured.created) {
-      const okCredits = await hasEnoughCredits(ev.organizer_id as string, 1)
-      if (!okCredits) {
+    // Live classes are paid one minute ahead (school pool for school classes,
+    // otherwise the organizer). Each join tops up the next minute if it is due;
+    // the co-teacher agent keeps paying while the class runs.
+    const bill = await billLiveClassMinute(learningSessionId)
+    if (bill.status === 'insufficient_credits' || bill.status === 'not_found') {
+      if (ensured.created) {
         await supabase.from('learning_sessions').delete().eq('id', learningSessionId)
-        return NextResponse.json({ error: 'Organizer has insufficient credits' }, { status: 402 })
       }
-      const deduct = await deductCreditsForMinute(ev.organizer_id as string, learningSessionId)
-      if (!deduct.success) {
-        await supabase.from('learning_sessions').delete().eq('id', learningSessionId)
-        return NextResponse.json({ error: deduct.error || 'Credit deduction failed' }, { status: 402 })
-      }
+      return NextResponse.json(
+        {
+          error: bill.payer === 'school'
+            ? 'Your school is out of credits for live classes'
+            : 'Organizer has insufficient credits',
+          payer: bill.payer,
+        },
+        { status: 402 }
+      )
     }
   } catch (e: unknown) {
     console.error('[token ensure session]', e)

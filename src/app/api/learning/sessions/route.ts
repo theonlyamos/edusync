@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { hasEnoughCredits } from '@/lib/credits'
+import { payerHasEnoughCredits } from '@/lib/credits'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Check if user has enough credits to start a session (at least 1 credit for 1 minute)
-    const hasCredits = await hasEnoughCredits(userId, 1)
+    const hasCredits = await payerHasEnoughCredits(userId, 1, authContext?.authType === 'apiKey')
     if (!hasCredits) {
       return NextResponse.json({
         error: 'Insufficient credits. You need at least 1 credit to start an AI session.',

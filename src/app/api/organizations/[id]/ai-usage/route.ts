@@ -34,7 +34,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     periodStart.setUTCDate(1); periodStart.setUTCHours(0, 0, 0, 0);
     const [{ data: quota, error: quotaError }, { data: usage, error: usageError }] = await Promise.all([
       supabase.from('organization_ai_quotas').select('*').eq('organization_id', organizationId).maybeSingle(),
-      supabase.from('organization_ai_usage').select('category,quantity').eq('organization_id', organizationId).gte('created_at', periodStart.toISOString()),
+      supabase.from('organization_ai_usage').select('category,quantity').eq('organization_id', organizationId).is('refunded_at', null).gte('created_at', periodStart.toISOString()),
     ]);
     if (quotaError) throw quotaError;
     if (usageError) throw usageError;
