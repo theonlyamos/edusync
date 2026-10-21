@@ -20,7 +20,7 @@ import { PracticeExercise } from '@/components/practice/PracticeExercise';
 import { ContentDisplay } from '@/components/content/ContentDisplay';
 import { CircleHelp, ExternalLink, FileText, Link as LinkIcon, Loader2, Play, Presentation, Sparkles, Target } from 'lucide-react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
+import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { FloatingActionButton } from '@/components/ui/floating-action-button';
 import type { 
   QuizContentType, 
@@ -314,9 +314,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
                 {lesson.content && (
                   <div>
                     <h3 className="font-semibold mb-2">Content</h3>
-                    <div className="prose prose-sm max-w-none break-words [&_pre]:overflow-x-auto [&_table]:block [&_table]:overflow-x-auto">
-                      <ReactMarkdown>{typeof lesson.content === 'string' ? lesson.content : JSON.stringify(lesson.content)}</ReactMarkdown>
-                    </div>
+                    <MarkdownContent>{typeof lesson.content === 'string' ? lesson.content : JSON.stringify(lesson.content)}</MarkdownContent>
                   </div>
                 )}
               </TabsContent>

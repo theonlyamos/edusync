@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { shouldApplyRemoteObjectives, summarizeContentJobs, type ArtifactBusyState, type ContentJobSummary } from '@/lib/lesson-artifacts/authoring-ui';
-import { getStudioMaterials, latestStudioArtifacts, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
+import { directionEditImpact, getStudioMaterials, latestStudioArtifacts, type DirectionEditImpact, type StudioArtifact as Artifact } from '@/lib/lesson-artifacts/studio-state';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { StudioArtifactReview } from './StudioArtifactReview';
 import { StudioDirections } from './StudioDirections';
 type Objective = { id: string; text: string; position: number; revision: number; visualInstructions: string };
@@ -53,6 +54,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const [conceptBusyId, setConceptBusyId] = useState<string>();
   const [conceptError, setConceptError] = useState<string>();
   const [storageReady, setStorageReady] = useState('');
+  const [pendingImpact, setPendingImpact] = useState<DirectionEditImpact>();
   const restoredKey = useRef('');
   const loadSequenceRef = useRef(0);
   const syncDraftsRef = useRef(false);
@@ -216,6 +218,10 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const suggesting = !!conceptBusyId && conceptBusyId === activeObjectiveId;
   const generationDisabled = !!busy || !!batchId || objectivesDirty;
   const mutationDisabled = !!busy || (!!artifactBusy && artifactBusy.action !== 'regenerate') || objectivesDirty;
+  const editImpact = useMemo(() => data && objectivesDirty ? directionEditImpact(
+    { lessonInstructions: data.lesson.visualInstructions, lessonRevision: data.lesson.visualRevision, objectives: data.objectives, artifacts: data.artifacts },
+    { lessonInstructions: visualInstructions, objectives: draftObjectives },
+  ) : undefined, [data, objectivesDirty, visualInstructions, draftObjectives]);
   const navigate = (nextStep: Step, objectiveId = activeObjectiveId, nextMaterial = 'concept') => {
     selectionRef.current = `${nextStep}:${objectiveId}:${nextMaterial}`;
     setStep(nextStep); setActiveObjectiveId(objectiveId); setMaterialKey(nextMaterial); setSelectedSeries(''); setHistoricalId(''); setShowOutline(false); setConceptError(undefined);
@@ -345,6 +351,22 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
     }
   };
 
+  const editQuiz = async (artifactId: string, payload: unknown) => {
+    setArtifactBusy({ artifactId, action: 'regenerate' });
+    try {
+      await readJson(await fetch(`/api/teachers/artifacts/${artifactId}/edit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload }),
+      }));
+      await load();
+      setHistoricalId('');
+      toast({ title: 'Quiz saved as a new version', description: 'Review it, then approve it to use it.' });
+      return true;
+    } catch (error) {
+      toast({ title: 'Could not save the quiz', description: (error as Error).message, variant: 'destructive' });
+      return false;
+    } finally { setArtifactBusy(undefined); }
+  };
+
   const publish = async () => {
     setBusy('publish');
     try {
@@ -360,6 +382,10 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   };
 
 
+  const saveDirectionsAndContinue = async () => {
+    if (!objectivesDirty || await saveObjectives()) { moveFocusRef.current = true; navigate('lesson'); }
+  };
+
   if (!data) return <div className="flex min-h-96 flex-col items-center justify-center gap-4 rounded-2xl border p-8 text-center">{loadError ? <><p role="alert" className="text-destructive">{loadError}</p><Button variant="outline" onClick={() => void load({ forceDraftSync: true, restoreJobs: true }).catch(() => undefined)}>Try again</Button></> : <><Loader2 className="h-6 w-6 animate-spin" /><p className="text-sm text-muted-foreground">Opening Objective Studio…</p></>}</div>;
   const readiness = data.objectives.map(objective => ({ objective, materials: getStudioMaterials(artifacts, objective.id, objective.revision) }));
   const requiredReady = lessonApproved && readiness.every(item => item.materials[0].approved);
@@ -370,7 +396,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const status = (complete: boolean) => complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : <Circle className="h-4 w-4 shrink-0 text-muted-foreground/50" />;
   const renderFocusedArtifact = () => selectedArtifact ? <>
     {choices.length > 1 && <label className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">Material alternatives<select disabled={mutationDisabled} aria-label="Material alternatives" className="rounded-lg border bg-background p-2 text-foreground" value={selectedArtifact.series_id} onChange={event => { setSelectedSeries(event.target.value); setHistoricalId(''); }}>{choices.map((item, index) => <option key={item.series_id} value={item.series_id}>Option {choices.length - index} · {item.status}{item.objective_revision !== (step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision) ? ' · earlier directions' : ''}</option>)}</select></label>}
-    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onValidation={validateArtifact} onContinue={advance} />
+    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onEditQuiz={editQuiz} onValidation={validateArtifact} onContinue={advance} />
   </> : <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center"><ImageIcon className="mb-4 h-9 w-9 text-muted-foreground/50" /><h4 className="text-lg font-medium">{batchId ? 'Your material is on its way' : 'Bring this idea to life'}</h4><p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{batchId ? 'Generation continues in the background. You can review other steps while you wait.' : step === 'lesson' ? 'Generate a visual introduction using your lesson directions.' : 'Choose a creative concept to generate the five materials for this objective.'}</p>{!batchId && <Button className="mt-6" disabled={generationDisabled} onClick={() => step === 'lesson' ? void generateBundle(true) : navigate('objective', activeObjectiveId, 'concept')}><Sparkles className="mr-2 h-4 w-4" />{step === 'lesson' ? 'Generate introduction' : 'Choose concept'}</Button>}</div>;
 
   return <div className="overflow-hidden rounded-2xl border bg-background">
@@ -390,7 +416,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
       </nav></aside>
       <section aria-label="Current Studio step" className="min-w-0 p-4 sm:p-7">
         <div className="mb-6"><p className="mb-2 text-xs uppercase tracking-widest text-muted-foreground">{step === 'objective' && activeObjective ? `Objective ${activeObjective.position + 1} · ${materialKey === 'concept' ? 'Creative direction' : `${materials.findIndex(item => item.key === currentMaterial.key) + 1} of ${materials.length}`}` : 'Your lesson'}</p><h3 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none">{title}</h3>{step === 'objective' && activeObjective && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">{activeObjective.text}</p>}{step === 'lesson' && <p className="mt-3 text-sm text-muted-foreground">Give students the big picture before they begin.</p>}</div>
-        {step === 'direction' && <StudioDirections instructions={visualInstructions} objectives={draftObjectives} editIndex={editIndex} onEditIndex={setEditIndex} onInstructions={text => { setVisualInstructions(text); setDirty(true); }} onObjectives={items => updateDraftObjectives(() => items)} dirty={objectivesDirty} saving={busy === 'save'} disabled={!!busy || !!batchId} onContinue={async () => { if (!objectivesDirty || await saveObjectives()) { moveFocusRef.current = true; navigate('lesson'); } }} />}
+        {step === 'direction' && <StudioDirections instructions={visualInstructions} objectives={draftObjectives} editIndex={editIndex} onEditIndex={setEditIndex} onInstructions={text => { setVisualInstructions(text); setDirty(true); }} onObjectives={items => updateDraftObjectives(() => items)} dirty={objectivesDirty} impact={editImpact} saving={busy === 'save'} disabled={!!busy || !!batchId} onContinue={() => { if (editImpact?.total) setPendingImpact(editImpact); else void saveDirectionsAndContinue(); }} />}
         {step === 'lesson' && <div className="space-y-5">{renderFocusedArtifact()}{choices.length > 0 && <details className="text-sm"><summary className="cursor-pointer text-muted-foreground">Try a different introduction</summary><div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><p className="text-sm text-muted-foreground">Generate another idea using your saved lesson directions.</p><Button variant="outline" disabled={generationDisabled} onClick={() => void generateBundle(true)}><Sparkles className="mr-2 h-4 w-4" />Generate another idea</Button></div></details>}</div>}
         {step === 'objective' && activeObjective && <>
           {materialKey === 'concept' ? <div className="space-y-5"><p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Choose a setting and a connected sequence of experiences. Each material will use this concept, with a different way to explore or apply the idea.</p>
@@ -403,5 +429,21 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
         {step === 'publish' && <div className="space-y-6"><p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Check the introductions and reviewed materials below. Your current publication stays available until you publish these changes.</p><button className="flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left" onClick={() => navigate('lesson')}><span className="flex items-center gap-3">{status(lessonApproved)}Lesson introduction</span><span className="text-xs text-muted-foreground">{lessonApproved ? 'Approved' : 'Required'}</span></button>{readiness.map(({ objective, materials: items }) => <section key={objective.id} className="rounded-xl border p-5"><p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Objective {objective.position + 1}</p><h4 className="text-sm font-medium leading-relaxed">{objective.text}</h4><div className="mt-4 grid gap-2 sm:grid-cols-2">{items.map(item => <button key={item.key} className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted" onClick={() => navigate('objective', objective.id, item.key)}>{status(item.approved)}<span>{item.label}</span><span className="ml-auto text-xs text-muted-foreground">{item.approved ? 'Ready' : item.key === 'introduction' ? 'Required' : 'Recommended'}</span></button>)}</div></section>)}{!requiredReady && <p role="status" className="rounded-xl bg-amber-500/10 p-4 text-sm">Approve a current introduction for the lesson and every objective before publishing. Other materials are recommended.</p>}<div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5"><p className="text-sm text-muted-foreground">{approvedCount} of {total} recommended materials approved.</p><Button disabled={!requiredReady || mutationDisabled || !!batchId} onClick={() => void publish()}>{busy === 'publish' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{data.currentPublication ? 'Publish reviewed changes' : 'Publish lesson'}</Button></div></div>}
       </section>
     </div>
+    <AlertDialog open={!!pendingImpact} onOpenChange={open => { if (!open) setPendingImpact(undefined); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Save these changes?</AlertDialogTitle>
+          <AlertDialogDescription>Saving marks {pendingImpact?.total === 1 ? '1 approved item' : `${pendingImpact?.total ?? 0} approved items`} as made with earlier directions. You will need to generate and approve new versions before publishing them. What students see now stays live until you publish again.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <ul className="space-y-1.5 rounded-lg bg-muted/40 p-3 text-sm">
+          {pendingImpact?.lessonIntroduction && <li>Lesson introduction</li>}
+          {pendingImpact?.objectives.map(item => <li key={item.id} className="flex justify-between gap-3"><span className="line-clamp-1">Objective {item.position + 1}{item.removed ? ' (removed)' : ''}: {item.text}</span><span className="shrink-0 text-muted-foreground">{item.approved} approved</span></li>)}
+        </ul>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <Button onClick={() => { setPendingImpact(undefined); void saveDirectionsAndContinue(); }}>Save changes</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>;
 }

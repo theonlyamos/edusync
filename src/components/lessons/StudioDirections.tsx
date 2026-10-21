@@ -2,9 +2,10 @@
 import { ArrowDown, ArrowRight, ArrowUp, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import type { DirectionEditImpact } from '@/lib/lesson-artifacts/studio-state';
 
 type DraftObjective = { id?: string; text: string; visualInstructions?: string };
-export function StudioDirections({ instructions, objectives, onInstructions, onObjectives, editIndex, onEditIndex, disabled, dirty, saving, onContinue }: {
+export function StudioDirections({ instructions, objectives, onInstructions, onObjectives, editIndex, onEditIndex, disabled, dirty, impact, saving, onContinue }: {
   instructions: string;
   objectives: DraftObjective[];
   onInstructions: (text: string) => void;
@@ -13,6 +14,7 @@ export function StudioDirections({ instructions, objectives, onInstructions, onO
   onEditIndex: (index: number) => void;
   disabled: boolean;
   dirty: boolean;
+  impact?: DirectionEditImpact;
   saving: boolean;
   onContinue: () => void;
 }) {
@@ -39,6 +41,6 @@ export function StudioDirections({ instructions, objectives, onInstructions, onO
         </div></details>
       </div>}
     </section>
-    <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-5"><p className="text-xs text-muted-foreground">{dirty ? 'Changes are not saved yet.' : 'Directions saved.'}</p><Button disabled={disabled || objectives.some(item => !item.text.trim())} onClick={onContinue}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{dirty ? 'Save & continue' : 'Continue'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-5"><p role="status" className={impact?.total ? 'max-w-md text-xs text-amber-700 dark:text-amber-400' : 'text-xs text-muted-foreground'}>{!dirty ? 'Directions saved.' : impact?.total ? `Changes are not saved yet. Saving outdates ${impact.total === 1 ? '1 approved item' : `${impact.total} approved items`}, which will need new versions.` : 'Changes are not saved yet.'}</p><Button disabled={disabled || objectives.some(item => !item.text.trim())} onClick={onContinue}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{dirty ? 'Save & continue' : 'Continue'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
   </div>;
 }

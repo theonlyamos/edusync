@@ -1,5 +1,6 @@
 'use client';
 
+import { MarkdownContent } from '@/components/content/MarkdownContent';
 import {
   Card,
   CardContent,
@@ -70,9 +71,7 @@ export function ExplanationContent({ content }: ExplanationContentProps) {
                 />
               )}
               
-              <div className="prose max-w-none break-words">
-                <p>{section.content}</p>
-              </div>
+              <MarkdownContent size="base">{section.content}</MarkdownContent>
 
               {section.keyPoints && section.keyPoints.length > 0 && (
                 <div className="mt-4 p-4 bg-muted rounded-lg">
