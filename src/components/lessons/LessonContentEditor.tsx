@@ -46,7 +46,7 @@ export function LessonContentEditor({ lessonId, content, live, onSaved }: { less
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
         <div className="space-y-1.5">
           <CardTitle>Lesson text</CardTitle>
-          <CardDescription>What students read on the lesson overview. Supports Markdown and math such as $x^2$ or $$E = mc^2$$.</CardDescription>
+          <CardDescription>What students read on the lesson overview. Supports Markdown, and math between dollar signs such as <code className="rounded bg-muted px-1 font-mono text-xs">$F = ma$</code>.</CardDescription>
         </div>
         {!editing && <Button variant="outline" size="sm" onClick={start}><Pencil className="mr-2 h-4 w-4" />{content ? 'Edit' : 'Add lesson text'}</Button>}
       </CardHeader>
