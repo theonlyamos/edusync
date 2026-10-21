@@ -60,6 +60,17 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+        // Delayed payment methods (bank debits and the like) finish the checkout
+        // unpaid and confirm later with this event. Schools are credited then;
+        // the payment-intent unique index stops a double credit.
+        if (event.type === 'checkout.session.async_payment_succeeded') {
+            const session = event.data.object as Stripe.Checkout.Session
+            const { userId, credits, kind, organizationId } = session.metadata ?? {}
+            if (kind === 'school_credits') {
+                return await creditSchool(event, session, { organizationId, userId, credits })
+            }
+        }
+
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object as Stripe.Checkout.Session
             const { userId, credits, quantity, kind, organizationId } = session.metadata ?? {}

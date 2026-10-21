@@ -84,7 +84,7 @@ const voiceMigration = (await readdir(migrations)).find((name) => name.endsWith(
 await db.exec(await readFile(path.join(migrations, voiceMigration), 'utf8'));
 
 const billingSteps = (await readdir(migrations)).filter((name) => /^\d{14}_school_billing_\d/.test(name)).sort();
-assert.equal(billingSteps.length, 4, 'school billing steps must all exist');
+assert.equal(billingSteps.length, 5, 'school billing steps must all exist');
 for (const name of billingSteps) {
     await db.exec(await readFile(path.join(migrations, name), 'utf8'));
 }
@@ -144,10 +144,46 @@ await test('purchases count once per payment and refunds go back to a running tr
     assert.equal((await one(`SELECT public.add_school_credits($1, 100, 'purchase', 'Bought', $2, 'pi_1') AS v`, [school, owner])).v, 105);
     await assert.rejects(db.query(`SELECT public.add_school_credits($1, 100, 'purchase', 'Bought', $2, 'pi_1')`, [school, owner]), /unique|duplicate/i);
     assert.equal((await pool()).total_credits_purchased, 100);
-    await db.query(`SELECT public.deduct_school_credits($1, $2, 5, 'voice', 'x')`, [school, student]);
-    await db.query(`SELECT public.add_school_credits($1, 5, 'refund', 'Refund', $2)`, [school, student]);
+    await db.query(`SELECT public.deduct_school_credits($1, $2, 5, 'voice', 'x', NULL, 'r1')`, [school, student]);
+    await db.query(`SELECT public.add_school_credits($1, 5, 'refund', 'Refund', $2, NULL, 'voice', 'r1')`, [school, student]);
     assert.deepEqual(await pool(), { credits: 100, trial_credits: 5, total_credits_used: 0, total_credits_purchased: 100 });
     await db.exec(`UPDATE public.organizations SET total_credits_purchased = 0 WHERE id = '${school}'`);
+});
+
+await test('a refund restores the trial and purchased split of the charge it undoes', async () => {
+    await setPool(10, 3);
+    await db.query(`SELECT public.deduct_school_credits($1, $2, 5, 'voice', 'x', NULL, 'split')`, [school, student]);
+    assert.deepEqual(await pool(), { credits: 8, trial_credits: 0, total_credits_used: 5, total_credits_purchased: 0 });
+    await db.query(`SELECT public.add_school_credits($1, 5, 'refund', 'Refund', $2, NULL, 'voice', 'split')`, [school, student]);
+    assert.deepEqual(await pool(), { credits: 10, trial_credits: 3, total_credits_used: 0, total_credits_purchased: 0 });
+    // A charge paid from purchased credits during a running trial goes back to purchased credits.
+    await setPool(10, 0);
+    await db.query(`SELECT public.deduct_school_credits($1, $2, 4, 'voice', 'x', NULL, 'paidonly')`, [school, student]);
+    await db.query(`SELECT public.add_school_credits($1, 4, 'refund', 'Refund', $2, NULL, 'voice', 'paidonly')`, [school, student]);
+    assert.deepEqual(await pool(), { credits: 10, trial_credits: 0, total_credits_used: 0, total_credits_purchased: 0 });
+    // A second refund for the same charge has nothing left to restore from the trial.
+    await setPool(0, 6);
+    await db.query(`SELECT public.deduct_school_credits($1, $2, 6, 'voice', 'x', NULL, 'twice')`, [school, student]);
+    await db.query(`SELECT public.add_school_credits($1, 4, 'refund', 'Refund', $2, NULL, 'voice', 'twice')`, [school, student]);
+    await db.query(`SELECT public.add_school_credits($1, 2, 'refund', 'Refund', $2, NULL, 'voice', 'twice')`, [school, student]);
+    assert.deepEqual(await pool(), { credits: 0, trial_credits: 6, total_credits_used: 0, total_credits_purchased: 0 });
+});
+
+await test('trial credits refunded after the trial ended expire straight away', async () => {
+    await setPool(2, 5);
+    await db.query(`SELECT public.deduct_school_credits($1, $2, 5, 'voice', 'x', NULL, 'late')`, [school, student]);
+    await db.exec(`UPDATE public.organizations SET trial_expires_at = now() - interval '1 minute' WHERE id = '${school}'`);
+    const after = await one(`SELECT public.add_school_credits($1, 5, 'refund', 'Refund', $2, NULL, 'voice', 'late') AS v`, [school, student]);
+    assert.equal(after.v, 2);
+    assert.deepEqual(await pool(), { credits: 2, trial_credits: 0, total_credits_used: 0, total_credits_purchased: 0 });
+    const last = await rows(`SELECT transaction_type, credits FROM public.organization_credit_transactions WHERE organization_id = $1 ORDER BY created_at DESC, transaction_type LIMIT 2`, [school]);
+    assert.deepEqual(last.map((r) => r.transaction_type).sort(), ['expiry', 'refund']);
+});
+
+await test('a refund with no matching charge goes to purchased credits', async () => {
+    await setPool(0, 5);
+    await db.query(`SELECT public.add_school_credits($1, 3, 'refund', 'Refund', $2, NULL, 'voice', 'nothing')`, [school, student]);
+    assert.deepEqual(await pool(), { credits: 3, trial_credits: 5, total_credits_used: 0, total_credits_purchased: 0 });
 });
 
 await test('school owners cannot write their own credits', async () => {

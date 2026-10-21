@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { CheckCircle, Coins, Loader2, Mic, Presentation, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -44,27 +44,59 @@ export default function SchoolBillingTab({ purchased, onChanged }: { purchased?:
   const [amount, setAmount] = useState('500');
   const [buying, setBuying] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async (quiet = false): Promise<BillingResponse | null> => {
+    if (!quiet) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const response = await axios.get<BillingResponse>('/api/schools/current/credits');
       setData(response.data);
+      return response.data;
     } catch (e) {
-      setError((e as any)?.response?.data?.error ?? 'Could not load school credits');
+      if (!quiet) setError((e as any)?.response?.data?.error ?? 'Could not load school credits');
+      return null;
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
-  // After Stripe sends the buyer back, refresh the page header once.
-  const refreshedAfterPurchase = useRef(false);
+  // Stripe often sends the buyer back before its webhook has added the credits.
+  // After a purchase, check again every few seconds until the purchased balance
+  // goes up (or we give up), then refresh the page header.
+  const [purchaseState, setPurchaseState] = useState<'waiting' | 'added' | 'slow'>('waiting');
   useEffect(() => {
-    if (!purchased || refreshedAfterPurchase.current) return;
-    refreshedAfterPurchase.current = true;
-    onChanged?.();
-  }, [purchased, onChanged]);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void (async () => {
+      const first = await load();
+      if (!purchased || cancelled) return;
+      const startPaid = first?.balance.paid ?? 0;
+      const startPurchases = first?.transactions.filter((t) => t.type === 'purchase').length ?? 0;
+      let tries = 0;
+      const check = async () => {
+        if (cancelled) return;
+        tries += 1;
+        const next = await load(true);
+        const arrived = next
+          && (next.balance.paid > startPaid
+            || next.transactions.filter((t) => t.type === 'purchase').length > startPurchases);
+        if (arrived || tries >= 20) {
+          setPurchaseState(arrived ? 'added' : 'slow');
+          onChanged?.();
+          return;
+        }
+        timer = setTimeout(() => void check(), 3000);
+      };
+      timer = setTimeout(() => void check(), 2000);
+    })();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+    // Runs once per mount: a purchase always comes back through a full page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const buy = async () => {
     const credits = Number(amount);
@@ -107,7 +139,11 @@ export default function SchoolBillingTab({ purchased, onChanged }: { purchased?:
       {purchased && (
         <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
           <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          Thanks! Your payment went through. Credits appear here as soon as Stripe confirms it, usually within a minute.
+          {purchaseState === 'waiting'
+            ? 'Thanks! Your payment went through. Waiting for Stripe to confirm it, which usually takes a few seconds…'
+            : purchaseState === 'added'
+              ? 'Thanks! Your credits have been added.'
+              : 'Thanks! Your payment went through. Stripe is still confirming it; refresh this page in a few minutes to see the new credits.'}
         </div>
       )}
 

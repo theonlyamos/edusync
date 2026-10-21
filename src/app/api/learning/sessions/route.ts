@@ -19,26 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
 
-
     const supabase = createServerSupabase();
-
-    const { data: user } = await supabase
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
-
-    const credits = user?.credits;
-
-    if (!credits || credits.credits < 1) {
-      return NextResponse.json(
-        {
-          error: 'Insufficient credits. The API key owner needs at least 1 credit to start a session.',
-          code: 'INSUFFICIENT_CREDITS',
-        },
-        { status: 402 }
-      );
-    }
 
     const { session_id, session_handle, topic } = await request.json().catch(() => ({}))
 
