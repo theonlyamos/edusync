@@ -72,7 +72,15 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs typecheck + tests on pushes
 
 ### Live-class agent worker
 
-The agent in `agents/live-class-agent` is deployed separately (LiveKit Cloud or self-hosted worker). See `agents/README.md` and `docs/live-class-spike.md`. It calls back into the app via `/api/live-classes/agent/*` routes authenticated with `LIVE_CLASS_AGENT_SECRET`.
+The agent in `agents/live-class-agent` is deployed separately to LiveKit Cloud, from the **repo root** so the build can see `packages/shared` (the root `Dockerfile` and `.dockerignore` are for this agent only; Vercel ignores them):
+
+```bash
+lk agent config      # once: links this folder to your LiveKit Cloud agent (writes livekit.toml)
+lk agent deploy      # build and roll out a new version
+lk agent update-secrets --secrets "LIVE_CLASS_APP_BASE_URL=https://insyte.vercel.app" --secrets "LIVE_CLASS_AGENT_SECRET=..."
+```
+
+Locally: `pnpm --filter live-class-agent dev`. See `docs/live-class-spike.md`. It calls back into the app via `/api/live-classes/agent/*` routes authenticated with `LIVE_CLASS_AGENT_SECRET`.
 
 ## Deployment
 
