@@ -248,3 +248,35 @@ export function weakestObjectives(input: {
     (a, b) => a.percentage - b.percentage || b.submissions - a.submissions,
   );
 }
+
+export interface ReviewArtifact {
+  lesson_id: string;
+  objective_id: string | null;
+  series_id: string;
+  version: number;
+  status: string;
+}
+
+/**
+ * Visuals waiting for teacher review, per lesson: the latest version of each
+ * artifact series is a draft and its objective is still in the lesson
+ * (the same "latest per series" rule as Objective Studio).
+ */
+export function draftsToReview(
+  artifacts: ReviewArtifact[],
+  liveObjectiveIds: Set<string>,
+): Map<string, number> {
+  const latest = new Map<string, ReviewArtifact>();
+  for (const a of artifacts) {
+    const seen = latest.get(a.series_id);
+    if (!seen || a.version > seen.version) latest.set(a.series_id, a);
+  }
+  const counts = new Map<string, number>();
+  for (const a of latest.values())
+    if (
+      a.status === "draft" &&
+      (!a.objective_id || liveObjectiveIds.has(a.objective_id))
+    )
+      counts.set(a.lesson_id, (counts.get(a.lesson_id) ?? 0) + 1);
+  return counts;
+}

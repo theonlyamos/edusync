@@ -7,9 +7,11 @@ import { inSameSchool } from "@/lib/school";
 import {
   lessonProgress,
   mergeActivity,
+  draftsToReview,
   studentsFallingBehind,
   weakestObjectives,
   type ActivityItem,
+  type ReviewArtifact,
   type InsightAttempt,
   type InsightGrade,
   type InsightHomework,
@@ -115,16 +117,25 @@ export async function studentDashboard(
       ...mastered.slice(0, ACTIVITY_LIMIT).map((e) => e.lesson_id as string),
     ]),
   ];
-  const publicationIds = [...new Set(runs.map((r) => r.publication_id as string))];
-  const [lessonsRes, publicationsRes] = await Promise.all([
-    lessonIds.length
-      ? db.from("lessons").select("id,title,subject,organization_id").in("id", lessonIds)
-      : Promise.resolve({ data: [], error: null }),
-    publicationIds.length
-      ? db.from("lesson_publications").select("id,manifest").in("id", publicationIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  const lessonsRes = lessonIds.length
+    ? await db
+        .from("lessons")
+        .select("id,title,subject,organization_id,current_publication_id")
+        .in("id", lessonIds)
+    : { data: [], error: null };
   if (lessonsRes.error) throw lessonsRes.error;
+  // Progress and resume use the lesson's current publication: an older
+  // run's objective may no longer exist after a republish.
+  const publicationIds = [
+    ...new Set(
+      (lessonsRes.data ?? [])
+        .map((l) => l.current_publication_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const publicationsRes = publicationIds.length
+    ? await db.from("lesson_publications").select("id,manifest").in("id", publicationIds)
+    : { data: [], error: null };
   if (publicationsRes.error) throw publicationsRes.error;
 
   const lessons = new Map(
@@ -175,15 +186,19 @@ export async function studentDashboard(
     const lesson = lessons.get(run.lesson_id);
     if (!lesson || seenLessons.has(run.lesson_id)) continue;
     seenLessons.add(run.lesson_id);
-    const objectives = publishedObjectives.get(run.publication_id) ?? [];
+    if (!lesson.current_publication_id) continue;
+    const objectives = publishedObjectives.get(lesson.current_publication_id) ?? [],
+      current =
+        run.publication_id === lesson.current_publication_id &&
+        objectives.some((o) => o.id === run.active_objective_id);
     continueLearning.push({
       runId: run.id,
       lessonId: run.lesson_id,
       lessonTitle: lesson.title,
       subject: lesson.subject,
       mode: run.mode === "companion" ? "companion" : "tutor",
-      objectiveId: run.active_objective_id,
-      objectiveText: run.active_objective_id
+      objectiveId: current ? run.active_objective_id : null,
+      objectiveText: current
         ? (objectiveText.get(run.active_objective_id) ?? null)
         : null,
       updatedAt: run.updated_at,
@@ -390,10 +405,19 @@ export async function teacherDashboard(
     .filter((o) => o.percentage < WEAK_OBJECTIVE_PERCENT)
     .slice(0, 5);
 
-  const { data: lessonRows, error: lessonError } = await db
-    .from("lessons")
-    .select("id,title,current_publication_id,organization_id")
-    .eq("teacher_id", userId);
+  // lessons.teacher_id points at teachers.id, not users.id.
+  const { data: teacher, error: teacherError } = await db
+    .from("teachers")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (teacherError) throw teacherError;
+  const { data: lessonRows, error: lessonError } = teacher
+    ? await db
+        .from("lessons")
+        .select("id,title,current_publication_id,organization_id")
+        .eq("teacher_id", teacher.id)
+    : { data: [], error: null };
   if (lessonError) throw lessonError;
   const lessons = (lessonRows ?? []).filter((l) =>
     inSameSchool(l.organization_id, schoolId),
@@ -401,13 +425,12 @@ export async function teacherDashboard(
   const lessonIds = lessons.map((l) => l.id);
   const toReview: TeacherDashboardData["lessons"]["toReview"] = [];
   if (lessonIds.length) {
-    const [drafts, objectives] = await Promise.all([
+    const [artifacts, objectives] = await Promise.all([
       readAll((from, to) =>
         db
           .from("lesson_artifacts")
-          .select("id,lesson_id,objective_id")
+          .select("id,lesson_id,objective_id,series_id,version,status")
           .in("lesson_id", lessonIds)
-          .eq("status", "draft")
           .order("id")
           .range(from, to),
       ),
@@ -421,11 +444,10 @@ export async function teacherDashboard(
           .range(from, to),
       ),
     ]);
-    const live = new Set(objectives.map((o) => o.id as string));
-    const counts = new Map<string, number>();
-    for (const d of drafts)
-      if (!d.objective_id || live.has(d.objective_id))
-        counts.set(d.lesson_id, (counts.get(d.lesson_id) ?? 0) + 1);
+    const counts = draftsToReview(
+      artifacts as ReviewArtifact[],
+      new Set(objectives.map((o) => o.id as string)),
+    );
     for (const l of lessons) {
       const n = counts.get(l.id);
       if (n) toReview.push({ lessonId: l.id, title: l.title, drafts: n });

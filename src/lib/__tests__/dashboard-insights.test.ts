@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  draftsToReview,
   lessonProgress,
   mergeActivity,
   studentsFallingBehind,
@@ -142,5 +143,25 @@ describe("weakestObjectives", () => {
       expect.objectContaining({ objectiveId: "o2", percentage: 50, submissions: 2 }),
       expect.objectContaining({ objectiveId: "o1", percentage: 75, submissions: 2 }),
     ]);
+  });
+});
+
+describe("draftsToReview", () => {
+  it("counts only the latest version of each series, on live objectives", () => {
+    const counts = draftsToReview(
+      [
+        // Regenerated: v1 draft is superseded by the v2 draft.
+        { lesson_id: "l1", objective_id: "o1", series_id: "s1", version: 1, status: "draft" },
+        { lesson_id: "l1", objective_id: "o1", series_id: "s1", version: 2, status: "draft" },
+        // Latest version approved: nothing to review.
+        { lesson_id: "l1", objective_id: "o1", series_id: "s2", version: 1, status: "draft" },
+        { lesson_id: "l1", objective_id: "o1", series_id: "s2", version: 2, status: "approved" },
+        // Archived objective: ignored.
+        { lesson_id: "l1", objective_id: "gone", series_id: "s3", version: 1, status: "draft" },
+        { lesson_id: "l2", objective_id: "o2", series_id: "s4", version: 1, status: "draft" },
+      ],
+      new Set(["o1", "o2"]),
+    );
+    expect(Object.fromEntries(counts)).toEqual({ l1: 1, l2: 1 });
   });
 });
