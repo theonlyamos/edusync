@@ -14,6 +14,7 @@ import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, C
 import { Badge } from '@/components/ui/badge';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { SchoolSetupChecklist } from '@/components/school/SchoolSetupChecklist';
+import { SchoolPeoplePanel } from '@/components/school/SchoolPeoplePanel';
 import OrgMembersTab from './components/OrgMembersTab';
 import OrgApiKeysTab from './components/OrgApiKeysTab';
 import OrgSettingsTab from './components/OrgSettingsTab';
@@ -208,7 +209,7 @@ export default function OrganizationDetailPage() {
           )}
           <TabsTrigger value="members">
             <Users className="w-4 h-4 mr-2" />
-            Members
+            {isSchool ? 'People' : 'Members'}
           </TabsTrigger>
           {showSetup && (
             <TabsTrigger value="billing">
@@ -228,21 +229,28 @@ export default function OrganizationDetailPage() {
 
         {showSetup && (
           <TabsContent value="setup">
-            <SchoolSetupChecklist onChanged={() => { setTab(activeTab); fetchOrganization(true); }} />
+            <SchoolSetupChecklist
+              onChanged={() => { setTab(activeTab); fetchOrganization(true); }}
+              onOpenPeople={() => setTab('members')}
+            />
           </TabsContent>
         )}
 
         <TabsContent value="members">
-          {isSchool && isOwnerOrAdmin && (
-            <p className="mb-3 text-sm text-muted-foreground">
-              Teachers and students will join your school by invite. Until invites are ready, members are view only here.
-            </p>
+          {isSchool && isOwnerOrAdmin ? (
+            <SchoolPeoplePanel
+              members={organization.organization_members}
+              currentUserId={session?.user?.id ?? null}
+              currentUserRole={currentUserMember?.role ?? null}
+              onMembersChanged={() => fetchOrganization(true)}
+            />
+          ) : (
+            <OrgMembersTab
+              organization={organization}
+              isOwnerOrAdmin={isOwnerOrAdmin && !isSchool}
+              onRefresh={fetchOrganization}
+            />
           )}
-          <OrgMembersTab 
-            organization={organization}
-            isOwnerOrAdmin={isOwnerOrAdmin && !isSchool}
-            onRefresh={fetchOrganization}
-          />
         </TabsContent>
 
         {showSetup && (

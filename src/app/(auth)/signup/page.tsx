@@ -19,10 +19,19 @@ export default function SignupPage() {
   const { user: appUser, loading: profileLoading, error: profileError } = useContext(AppUserContext);
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  // Where to go after signing up, e.g. back to a class-code join page.
+  const [redirectedFrom, setRedirectedFrom] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session?.user && appUser && !profileLoading) router.replace(getAppRedirect(appUser.role));
-  }, [session, appUser, profileLoading, router]);
+    setRedirectedFrom(new URLSearchParams(window.location.search).get('redirectedFrom'));
+  }, []);
+
+  useEffect(() => {
+    if (session?.user && appUser && !profileLoading) router.replace(getAppRedirect(appUser.role, redirectedFrom));
+  }, [session, appUser, profileLoading, router, redirectedFrom]);
+
+  const loginReturnUrl = () =>
+    `${window.location.origin}/login${redirectedFrom ? `?redirectedFrom=${encodeURIComponent(redirectedFrom)}` : ''}`;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -59,6 +68,7 @@ export default function SignupPage() {
         email,
         password,
         options: {
+          emailRedirectTo: loginReturnUrl(),
           data: {
             name: name,
             role: 'student' // Matches new app profiles; authorization uses the database role.
@@ -95,7 +105,7 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/login`,
+          redirectTo: loginReturnUrl(),
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -255,7 +265,7 @@ export default function SignupPage() {
 
               <div className="text-center text-sm">
                 <span className="text-muted-foreground">Already have an account? </span>
-                <Link href="/login" className="font-medium text-foreground hover:underline underline-offset-4">
+                <Link href={redirectedFrom ? `/login?redirectedFrom=${encodeURIComponent(redirectedFrom)}` : '/login'} className="font-medium text-foreground hover:underline underline-offset-4">
                   Sign in
                 </Link>
               </div>

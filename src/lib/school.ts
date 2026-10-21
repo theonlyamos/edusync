@@ -50,7 +50,7 @@ export function newAccountUserRole(role: MemberFormRole): 'teacher' | 'student' 
 }
 
 /** Shown when someone tries to add or edit school members from the organization screens. */
-export const SCHOOL_MEMBERS_BY_INVITE_ONLY = 'People join a school by invite. School invites are not available yet.'
+export const SCHOOL_MEMBERS_BY_INVITE_ONLY = 'People join a school by invite. Use the People tab on your school page to invite them.'
 
 export async function isSchoolOrganization(supabase: SupabaseClient, organizationId: string): Promise<boolean> {
   const { data, error } = await supabase.from('organizations').select('type').eq('id', organizationId).maybeSingle()

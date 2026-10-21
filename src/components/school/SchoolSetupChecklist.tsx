@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +27,8 @@ type CurrentSchool = {
 type Props = {
   /** Called after a save, so the page can refresh the school name and tabs. */
   onChanged?: () => void;
+  /** Opens the page's People tab. */
+  onOpenPeople?: () => void;
 };
 
 function StepIcon({ done }: { done: boolean }) {
@@ -40,7 +41,7 @@ function errorMessage(error: unknown, fallback: string) {
   return (error as any)?.response?.data?.error ?? fallback;
 }
 
-export function SchoolSetupChecklist({ onChanged }: Props) {
+export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
   const [data, setData] = useState<CurrentSchool | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -153,15 +154,13 @@ export function SchoolSetupChecklist({ onChanged }: Props) {
 
         <section className="flex gap-3">
           <StepIcon done={Boolean(byId.people?.done)} />
-          <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-medium">{byId.people?.title}</h3>
-              <Badge variant="secondary">Coming soon</Badge>
-            </div>
+          <div className="flex-1 space-y-2">
+            <h3 className="font-medium">{byId.people?.title}</h3>
             <p className="text-sm text-muted-foreground">
               {data.setup.teacherCount} teachers and {data.setup.studentCount} students so far.
-              Email invites, CSV import and class join codes are on the way.
+              Invite people by email, import a CSV, or give a class a join code.
             </p>
+            {onOpenPeople && <Button size="sm" variant="outline" onClick={onOpenPeople}>Invite people</Button>}
           </div>
         </section>
 
