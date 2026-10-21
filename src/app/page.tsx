@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
+import { Logo } from '@/components/brand/Logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Mic, Code2, Play, ArrowRight, MessageSquare, Sun, Moon } from 'lucide-react'
@@ -44,12 +44,7 @@ function HomeContent() {
     <main className="min-h-screen overflow-x-hidden bg-background bg-[radial-gradient(circle_at_20%_20%,rgba(92,74,46,0.08),transparent_55%),radial-gradient(circle_at_85%_10%,rgba(28,74,60,0.08),transparent_45%)]">
       <header className="sticky top-0 z-50 w-full border-b bg-background/90 backdrop-blur">
         <div className="container mx-auto flex items-center justify-between px-4 py-5">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md border bg-card flex items-center justify-center">
-              <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight">InsyteAI</span>
-          </div>
+          <Logo markClassName="h-9 w-9" />
 
           <nav className="hidden gap-8 lg:flex text-sm">
             <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -557,12 +552,7 @@ function HomeContent() {
         <div className="container mx-auto px-4 py-14">
           <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-md border bg-card flex items-center justify-center">
-                  <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
-                </div>
-                <span className="text-lg font-semibold tracking-tight">InsyteAI</span>
-              </div>
+              <Logo markClassName="h-9 w-9" />
               <p className="text-sm text-muted-foreground leading-relaxed">
                 A visual learning platform built for clarity, focus, and real student outcomes.
               </p>

@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { getAppRedirect } from '@/lib/app-user';
 import { Loader2 } from 'lucide-react';
-import Image from 'next/image';
+import { Logo } from '@/components/brand/Logo';
 
 function LoginContent() {
   const router = useRouter();
@@ -97,10 +97,7 @@ function LoginContent() {
       {/* Header with back to home link */}
       <header className="absolute top-0 left-0 right-0 z-20 p-6 flex justify-between items-center">
         <Link href="/" className="inline-flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg border bg-card flex items-center justify-center">
-            <Image src="/globe.svg" alt="InsyteAI logo" width={18} height={18} className="opacity-80" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight text-foreground">InsyteAI</span>
+          <Logo markClassName="h-8 w-8" />
         </Link>
       </header>
 
