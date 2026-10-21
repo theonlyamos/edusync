@@ -13,6 +13,7 @@ import {
   QuickLinkCard,
 } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
+import { useAllHomework } from '@/components/dashboard/useAllHomework';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
 import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window';
 import {
@@ -20,7 +21,6 @@ import {
   liveClassLessonTitle,
   teacherHomeworkSummary,
   upcomingLiveClasses,
-  type DashboardHomeworkItem,
   type DashboardLiveClass,
 } from '@/lib/dashboard';
 
@@ -32,14 +32,14 @@ function plural(n: number, word: string) {
 
 export default function TeacherDashboard() {
   const session = useContext(SupabaseSessionContext);
-  const homework = useHomeworkData<{ items: DashboardHomeworkItem[]; hasMore: boolean }>('/api/homework');
+  const homework = useAllHomework();
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
   const userId = session?.user?.id;
 
   const now = useMemo(() => new Date(), [joinTick, live.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const summary = useMemo(() => teacherHomeworkSummary(homework.data?.items ?? []), [homework.data]);
+  const summary = useMemo(() => teacherHomeworkSummary(homework.items ?? []), [homework.items]);
   const upcoming = useMemo(
     () => upcomingLiveClasses(live.data?.items ?? [], now, { organizerId: userId }),
     [live.data, now, userId]
@@ -61,7 +61,6 @@ export default function TeacherDashboard() {
   }
 
   const name = (session.user.user_metadata?.name as string | undefined)?.trim();
-  const counted = homework.data?.hasMore ? ' (latest 50 homework)' : '';
 
   return (
     <DashboardLayout>
@@ -75,19 +74,18 @@ export default function TeacherDashboard() {
           items={[
             {
               label: 'Submissions to mark',
-              value: homework.loading ? '…' : summary.needMarking,
-              detail: counted || undefined,
+              value: homework.loading ? '…' : homework.error ? '–' : summary.needMarking,
               href: '/teachers/homework',
             },
             {
               label: 'Marked, not yet released',
-              value: homework.loading ? '…' : summary.readyToRelease,
+              value: homework.loading ? '…' : homework.error ? '–' : summary.readyToRelease,
               detail: 'Students can’t see these marks yet',
               href: '/teachers/homework',
             },
             {
               label: 'Open homework',
-              value: homework.loading ? '…' : summary.open,
+              value: homework.loading ? '…' : homework.error ? '–' : summary.open,
               detail: summary.drafts ? plural(summary.drafts, 'draft') : undefined,
               href: '/teachers/homework',
             },

@@ -14,6 +14,7 @@ import {
   QuickLinkCard,
 } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
+import { useAllHomework } from '@/components/dashboard/useAllHomework';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
 import { resolveStudentDisplayName } from '@/lib/student-profile';
@@ -24,7 +25,6 @@ import {
   studentFeedbackReady,
   studentHomeworkTasks,
   upcomingLiveClasses,
-  type DashboardHomeworkItem,
   type DashboardLiveClass,
   type StudentHomeworkState,
 } from '@/lib/dashboard';
@@ -41,15 +41,15 @@ const STATE_LABEL: Record<StudentHomeworkState, string> = {
 export default function StudentDashboard() {
   const session = useContext(SupabaseSessionContext);
   const { data: profile } = useStudentProfile(session?.user?.id);
-  const homework = useHomeworkData<{ items: DashboardHomeworkItem[] }>('/api/homework');
+  const homework = useAllHomework();
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const practice = useHomeworkData<PracticeStats>('/api/students/practice/stats');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
 
   // joinTick re-runs time-based lists so "Join" turns on without a reload.
-  const now = useMemo(() => new Date(), [joinTick, homework.data, live.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const tasks = useMemo(() => studentHomeworkTasks(homework.data?.items ?? [], now), [homework.data, now]);
+  const now = useMemo(() => new Date(), [joinTick, homework.items, live.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tasks = useMemo(() => studentHomeworkTasks(homework.items ?? [], now), [homework.items, now]);
   const upcoming = useMemo(() => upcomingLiveClasses(live.data?.items ?? [], now), [live.data, now]);
   const joinById = useMemo(
     () => liveClassJoinStatesByEventId(upcoming, lobbyMinutes, now),
@@ -65,7 +65,7 @@ export default function StudentDashboard() {
     metadataName: session.user.user_metadata?.name,
     email: profile?.email ?? session.user.email,
   });
-  const feedbackReady = studentFeedbackReady(homework.data?.items ?? []);
+  const feedbackReady = studentFeedbackReady(homework.items ?? []);
   const overdue = tasks.filter((t) => t.overdue).length;
   const nextClass = upcoming[0];
   const laterClasses = upcoming.slice(1, 3);
@@ -82,13 +82,13 @@ export default function StudentDashboard() {
           items={[
             {
               label: 'Homework to do',
-              value: homework.loading ? '…' : tasks.length,
+              value: homework.loading ? '…' : homework.error ? '–' : tasks.length,
               detail: overdue ? `${overdue} past the due date` : undefined,
               href: '/students/homework',
             },
             {
               label: 'Feedback ready',
-              value: homework.loading ? '…' : feedbackReady,
+              value: homework.loading ? '…' : homework.error ? '–' : feedbackReady,
               href: '/students/homework/performance',
             },
             {
@@ -98,9 +98,13 @@ export default function StudentDashboard() {
                 : practice.data?.totalExercisesCompleted
                   ? `${practice.data.averageScore}%`
                   : '–',
-              detail: practice.data?.totalExercisesCompleted
-                ? `${practice.data.totalExercisesCompleted} exercise${practice.data.totalExercisesCompleted === 1 ? '' : 's'} completed`
-                : practice.loading ? undefined : 'No practice yet',
+              detail: practice.loading
+                ? undefined
+                : practice.error
+                  ? 'Couldn’t load practice stats'
+                  : practice.data?.totalExercisesCompleted
+                    ? `${practice.data.totalExercisesCompleted} exercise${practice.data.totalExercisesCompleted === 1 ? '' : 's'} completed`
+                    : 'No practice yet',
               href: '/students/practice',
             },
           ]}
