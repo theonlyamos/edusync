@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { nextPracticeStatsRow, practiceStatsFromRow } from '@/lib/practice-stats';
 
 interface Answer {
     questionId: string;
@@ -60,55 +61,37 @@ export async function POST(req: Request) {
             percentage: Math.round((earnedPoints / totalPoints) * 100)
         };
 
+        const completedAt = new Date().toISOString();
+
         // Save the practice session results
         const { error: insErr } = await supabase
             .from('practice_results')
             .insert({
-                studentId: user.id,
+                student_id: user.id,
                 subject,
                 topic,
                 score,
                 results,
-                completedAt: new Date().toISOString(),
+                completedat: completedAt,
             });
         if (insErr) throw insErr;
 
-        // First, get the current student stats
-        const { data: currentStatsRaw } = await supabase
+        const { data: currentRow, error: statsErr } = await supabase
             .from('student_stats')
-            .select('*')
-            .eq('studentId', user.id)
+            .select('studentid,totalexercisescompleted,totalpointsearned,recentscores,lastpracticedate')
+            .eq('studentid', user.id)
             .maybeSingle();
-        const currentStats = currentStatsRaw || {
-            studentId: user.id,
-            totalExercisesCompleted: 0,
-            totalPointsEarned: 0,
-            recentScores: [] as number[]
-        };
+        if (statsErr) throw statsErr;
 
-        // Update the recent scores array
-        const recentScores = [...currentStats.recentScores, score.percentage].slice(-10);
-
-        // Update student's practice statistics
-        const upsertPayload = {
-            studentId: user.id,
-            totalExercisesCompleted: (currentStats.totalExercisesCompleted ?? 0) + 1,
-            totalPointsEarned: (currentStats.totalPointsEarned ?? 0) + earnedPoints,
-            recentScores,
-            lastPracticeDate: new Date().toISOString()
-        } as any;
-        if (currentStatsRaw) {
-            const { error } = await supabase
-                .from('student_stats')
-                .update(upsertPayload)
-                .eq('studentId', user.id);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase
-                .from('student_stats')
-                .insert(upsertPayload);
-            if (error) throw error;
-        }
+        const nextRow = nextPracticeStatsRow(
+            practiceStatsFromRow(user.id, currentRow),
+            score,
+            completedAt,
+        );
+        const { error: saveErr } = currentRow
+            ? await supabase.from('student_stats').update(nextRow).eq('studentid', user.id)
+            : await supabase.from('student_stats').insert(nextRow);
+        if (saveErr) throw saveErr;
 
         return NextResponse.json({ score, results });
     } catch (error) {

@@ -1,25 +1,53 @@
 'use client';
 
-import { useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { useContext, useMemo } from 'react';
+import Link from 'next/link';
+import { BookOpen, CalendarClock, ClipboardCheck, FileText, Library, NotebookPen } from 'lucide-react';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Button } from '@/components/ui/button';
+import {
+  DashboardEmpty,
+  DashboardSection,
+  DashboardStats,
+  QuickLinkCard,
+} from '@/components/dashboard/DashboardParts';
+import { useHomeworkData } from '@/components/homework/shared';
+import { useAllHomework } from '@/components/dashboard/useAllHomework';
+import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
+import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window';
+import {
+  formatWhen,
+  liveClassLessonTitle,
+  teacherHomeworkSummary,
+  upcomingLiveClasses,
+  type DashboardLiveClass,
+} from '@/lib/dashboard';
 
 export const dynamic = 'force-dynamic';
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { BookOpen, FileText, Library, Sparkles } from "lucide-react";
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+
+function plural(n: number, word: string) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
 
 export default function TeacherDashboard() {
   const session = useContext(SupabaseSessionContext);
-  const router = useRouter();
+  const homework = useAllHomework();
+  const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
+  const joinTick = useLiveClassJoinTick();
+  const lobbyMinutes = getClientLiveClassLobbyMinutes();
+  const userId = session?.user?.id;
+
+  const now = useMemo(() => new Date(), [joinTick, live.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const summary = useMemo(() => teacherHomeworkSummary(homework.items ?? []), [homework.items]);
+  const upcoming = useMemo(
+    () => upcomingLiveClasses(live.data?.items ?? [], now, { organizerId: userId }),
+    [live.data, now, userId]
+  );
+  const joinById = useMemo(
+    () => liveClassJoinStatesByEventId(upcoming, lobbyMinutes, now),
+    [upcoming, lobbyMinutes, now]
+  );
 
   if (!session) {
     return (
@@ -32,70 +60,147 @@ export default function TeacherDashboard() {
     );
   }
 
+  const name = (session.user.user_metadata?.name as string | undefined)?.trim();
+
   return (
     <DashboardLayout>
       <div>
-        <h2 className="text-3xl font-bold text-foreground mb-2">Teacher Dashboard</h2>
-        <p className="text-muted-foreground mb-6">Manage your lessons and resources</p>
-        <Button className="mb-6" onClick={()=>router.push('/teachers/homework')}>Manage homework</Button>
+        <h2 className="text-3xl font-bold text-foreground mb-2 break-words">
+          {name ? `Welcome back, ${name}` : 'Teacher dashboard'}
+        </h2>
+        <p className="text-muted-foreground mb-6">Here&apos;s what needs your attention.</p>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Lesson Planning Card */}
-          <Card className="dashboard-card border-t-4 border-t-primary">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-primary">
-                <BookOpen className="h-5 w-5" />
-                Lesson Planning
-              </CardTitle>
-              <CardDescription>
-                Create and manage your lesson plans using AI assistance.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Button
-                className="w-full"
-                onClick={() => router.push('/teachers/lessons')}
-              >
-                View Lessons
-              </Button>
-            </CardFooter>
-          </Card>
+        <DashboardStats
+          items={[
+            {
+              label: 'Submissions to mark',
+              value: homework.loading ? '…' : homework.error ? '–' : summary.needMarking,
+              href: '/teachers/homework',
+            },
+            {
+              label: 'Marked, not yet released',
+              value: homework.loading ? '…' : homework.error ? '–' : summary.readyToRelease,
+              detail: 'Students can’t see these marks yet',
+              href: '/teachers/homework',
+            },
+            {
+              label: 'Open homework',
+              value: homework.loading ? '…' : homework.error ? '–' : summary.open,
+              detail: summary.drafts ? plural(summary.drafts, 'draft') : undefined,
+              href: '/teachers/homework',
+            },
+          ]}
+        />
 
-          {/* Content Generation Card */}
-          <Card className="dashboard-card border-t-4 border-t-secondary">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-secondary">
-                <FileText className="h-5 w-5" />
-                Content Generation
-              </CardTitle>
-              <CardDescription>
-                Generate educational content and resources with AI.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Button variant="secondary" className="w-full">
-                Generate Content
-              </Button>
-            </CardFooter>
-          </Card>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <DashboardSection
+            title="Needs your attention"
+            icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
+            href="/teachers/homework"
+            loading={homework.loading}
+            error={homework.error}
+            retry={homework.refresh}
+          >
+            {summary.attention.length === 0 ? (
+              <DashboardEmpty>
+                You&apos;re all caught up. Submitted homework that needs marking will show up here.
+              </DashboardEmpty>
+            ) : (
+              <ul className="divide-y">
+                {summary.attention.slice(0, 5).map(({ item, needMarking, readyToRelease }) => (
+                  <li key={item.homework.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium break-words">{item.homework.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {[
+                          needMarking ? `${needMarking} to mark` : null,
+                          readyToRelease ? `${readyToRelease} ready to release` : null,
+                          `${item.submitted}/${item.assigned} submitted`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" className="min-h-11 shrink-0 xl:min-h-0" asChild>
+                      <Link href={`/teachers/homework/${item.homework.id}${needMarking ? '/mark' : ''}`}>
+                        {needMarking ? 'Mark' : 'Review'}
+                      </Link>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </DashboardSection>
 
-          {/* Resource Management Card */}
-          <Card className="dashboard-card border-t-4 border-t-accent">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-accent">
-                <Library className="h-5 w-5" />
-                Resource Library
-              </CardTitle>
-              <CardDescription>
-                Organize and access your teaching resources.
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Button variant="outline" className="w-full">
-                View Resources
-              </Button>
-            </CardFooter>
-          </Card>
+          <DashboardSection
+            title="Your upcoming live classes"
+            icon={<CalendarClock className="h-5 w-5 text-primary" />}
+            href="/teachers/live"
+            loading={live.loading}
+            error={live.error}
+            retry={live.refresh}
+          >
+            {upcoming.length === 0 ? (
+              <DashboardEmpty>No live classes scheduled.</DashboardEmpty>
+            ) : (
+              <ul className="divide-y">
+                {upcoming.slice(0, 4).map((c) => {
+                  const lesson = liveClassLessonTitle(c.lessons);
+                  return (
+                    <li key={c.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium break-words">{c.title}</p>
+                        <p className="text-sm text-muted-foreground break-words">
+                          {c.status === 'live' ? 'Live now' : formatWhen(c.scheduled_start_at, now)}
+                          {lesson ? ` · ${lesson}` : ''}
+                        </p>
+                      </div>
+                      {joinById.get(c.id)?.joinAllowed && (
+                        <Button size="sm" className="min-h-11 shrink-0 xl:min-h-0" asChild>
+                          <Link href={`/teachers/live/${c.id}`}>Open room</Link>
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </DashboardSection>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <QuickLinkCard
+            title="Lessons"
+            description="Create and manage your lesson plans with AI assistance."
+            icon={<BookOpen className="h-5 w-5 text-primary" />}
+            href="/teachers/lessons"
+            action="View lessons"
+            accent="primary"
+          />
+          <QuickLinkCard
+            title="Homework"
+            description="Turn your lessons into practice, then mark and release feedback."
+            icon={<NotebookPen className="h-5 w-5 text-secondary" />}
+            href="/teachers/homework"
+            action="Manage homework"
+            accent="secondary"
+          />
+          <QuickLinkCard
+            title="Content"
+            description="Generate quizzes, worksheets, summaries and explanations."
+            icon={<FileText className="h-5 w-5 text-accent" />}
+            href="/teachers/content"
+            action="Generate content"
+            accent="accent"
+          />
+          <QuickLinkCard
+            title="Resources"
+            description="Organize and access your teaching resources."
+            icon={<Library className="h-5 w-5 text-muted-foreground" />}
+            href="/teachers/resources"
+            action="View resources"
+            accent="muted"
+          />
         </div>
       </div>
     </DashboardLayout>

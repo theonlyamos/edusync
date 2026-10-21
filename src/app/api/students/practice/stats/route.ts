@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { practiceStatsFromRow } from '@/lib/practice-stats';
 
 export async function GET() {
     try {
@@ -21,29 +22,14 @@ export async function GET() {
             return new NextResponse('Unauthorized - Student access required', { status: 403 });
         }
 
-        const { data: statsRaw } = await supabase
+        const { data: row, error } = await supabase
             .from('student_stats')
-            .select('*')
-            .eq('studentId', user.id)
+            .select('studentid,totalexercisescompleted,totalpointsearned,recentscores,lastpracticedate')
+            .eq('studentid', user.id)
             .maybeSingle();
-        const stats = statsRaw || {
-            studentId: user.id,
-            totalExercisesCompleted: 0,
-            totalPointsEarned: 0,
-            recentScores: [] as number[],
-            currentStreak: 0,
-            averageScore: 0
-        };
+        if (error) throw error;
 
-        // Calculate average score from recent scores
-        const averageScore = (stats.recentScores?.length ?? 0) > 0
-            ? Math.round((stats.recentScores as number[]).reduce((a: number, b: number) => a + b, 0) / (stats.recentScores as number[]).length)
-            : 0;
-
-        return NextResponse.json({
-            ...stats,
-            averageScore
-        });
+        return NextResponse.json(practiceStatsFromRow(user.id, row));
     } catch (error) {
         console.error('Error fetching practice stats:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
