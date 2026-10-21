@@ -34,6 +34,14 @@ export async function requireOwnedLearningRun(runId: string) {
     .maybeSingle();
   if (error) throw error;
   if (!run) throw new LessonArtifactHttpError(404, 'Learning run not found');
+  // An archived lesson closes every run on it, including runs started before archiving.
+  const { data: lesson, error: lessonError } = await supabase
+    .from('lessons')
+    .select('archived_at')
+    .eq('id', run.lesson_id)
+    .maybeSingle();
+  if (lessonError) throw lessonError;
+  if (!lesson || lesson.archived_at) throw new LessonArtifactHttpError(404, 'Learning run not found');
   return { session, supabase, run };
 }
 

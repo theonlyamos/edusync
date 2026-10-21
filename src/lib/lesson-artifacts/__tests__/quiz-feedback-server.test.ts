@@ -15,6 +15,7 @@ const submission = { id: 'event', run_id: 'run', student_id: 'student', lesson_i
 function harness(overrides: Record<string, Record<string, unknown>[]> = {}) {
   const rows: Record<string, Record<string, unknown>[]> = {
     learning_runs: [run],
+    lessons: [{ id: 'lesson', archived_at: null }],
     lesson_publications: [{ id: 'publication', lesson_id: 'lesson', manifest: { objectives: [{ id: 'objective', revision: 2 }] } }],
     learning_events: [submission, { ...submission, id: 'stale', objective_revision: 1 }, { ...submission, id: 'visual', event_type: 'visual_quiz_completed' }, { ...submission, id: 'other-student', student_id: 'other' }, { ...submission, id: 'other-run', run_id: 'other' }],
     ...overrides,
@@ -50,6 +51,12 @@ describe('quiz feedback access and scope', () => {
     expect(queries).toContainEqual(['learning_runs', 'student_id', 'student']);
     expect(queries).toContainEqual(['learning_events', 'limit', 3]);
     expect(queries).toContainEqual(['lesson_publications', 'id', 'publication']);
+  });
+
+  it('closes runs on a lesson that has since been archived', async () => {
+    harness({ lessons: [{ id: 'lesson', archived_at: '2026-10-21T00:00:00Z' }] });
+    const { getQuizTutorFeedback } = await import('../quiz-feedback-server');
+    await expect(getQuizTutorFeedback('run')).rejects.toMatchObject({ status: 404 });
   });
 
   it('returns no evidence for an empty current revision', async () => {
