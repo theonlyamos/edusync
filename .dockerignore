@@ -1,0 +1,10 @@
+# Only the co-teacher's files go to the LiveKit Cloud build (see Dockerfile).
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!packages/shared/**
+!agents/live-class-agent/**
+**/node_modules
+**/.env
+**/.env.*

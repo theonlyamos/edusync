@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/agent.ts dev",
+    "start": "tsx src/agent.ts start",
     "download-files": "tsx src/agent.ts download-files"
   },
   "dependencies": {
@@ -13,10 +14,10 @@
     "@livekit/agents-plugin-google": "^1.4.2",
     "@livekit/rtc-node": "^0.13.28",
     "dotenv": "^16.4.5",
+    "tsx": "^4.19.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
