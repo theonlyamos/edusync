@@ -147,3 +147,16 @@ describe('buildInviteEmail', () => {
     expect(email.text).toContain('28 October 2026')
   })
 })
+
+describe('linksCsvHref', () => {
+  it('lists only invites with a link, safely quoted', async () => {
+    const { linksCsvHref } = await import('@/components/school/CsvInviteDialog')
+    const href = linksCsvHref([
+      { email: 'a@example.com', outcome: 'invited', emailed: false, inviteUrl: 'https://app.test/join/x' },
+      { email: 'b@example.com', outcome: 'invited', emailed: true },
+      { email: '=cmd@example.com', outcome: 'invited', emailed: false, inviteUrl: 'https://app.test/join/y,z' },
+    ])
+    const csv = decodeURIComponent(href.split(',').slice(1).join(','))
+    expect(csv).toBe("email,invite_link\na@example.com,https://app.test/join/x\n'=cmd@example.com,\"https://app.test/join/y,z\"\n")
+  })
+})

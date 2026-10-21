@@ -91,7 +91,7 @@ describe('POST /api/invites/[token]/signup', () => {
     mocks.findInvite.mockResolvedValue(invite(true))
     expect((await call()).status).toBe(201)
     expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ email: 'kofi@example.com', email_confirm: true }))
-    expect(fake.tables.users[0]).toMatchObject({ id: 'new-user', role: 'teacher', credits: 0 })
+    expect(fake.tables.users[0]).toMatchObject({ id: 'new-user', role: 'learner', credits: 0 })
   })
 
   it('asks a hand-shared link to confirm the email instead', async () => {

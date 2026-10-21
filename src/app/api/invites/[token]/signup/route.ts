@@ -55,11 +55,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       throw createError ?? new Error('No user returned');
     }
 
-    // Invited people start with no personal credits; the school pays.
-    const role = invite.role === 'teacher' || invite.role === 'student' ? invite.role : 'learner';
+    // Invited people start with no personal credits; the school pays. The
+    // account starts as a normal one: accept_school_invite() gives the teacher
+    // or student role together with the membership, so an invite that is never
+    // accepted (or is revoked first) leaves no teacher or student access behind.
     const { error: profileError } = await supabase
       .from('users')
-      .upsert({ id: created.user.id, email: invite.email, name, role, credits: 0 }, { onConflict: 'id', ignoreDuplicates: true });
+      .upsert({ id: created.user.id, email: invite.email, name, role: 'learner', credits: 0 }, { onConflict: 'id', ignoreDuplicates: true });
     if (profileError) throw profileError;
 
     return NextResponse.json({ email: invite.email }, { status: 201 });
