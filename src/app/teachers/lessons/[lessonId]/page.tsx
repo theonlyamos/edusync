@@ -25,10 +25,12 @@ import type {
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
-import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon } from 'lucide-react';
+import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
-import { formatLessonDate } from '@/lib/lesson-record';
+import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
+import { LessonStatusBadge } from '@/components/lessons/LessonStatusBadge';
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 
 interface Resource {
     _id: string;
@@ -54,6 +56,8 @@ interface Lesson {
     teacherId: string;
     createdAt: string | null;
     updatedAt: string | null;
+    current_publication_id?: string | null;
+    archived_at?: string | null;
 }
 
 interface Content {
@@ -82,6 +86,9 @@ export default function LessonPage() {
     const [resources, setResources] = useState<Resource[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+    const [lessonLoadError, setLessonLoadError] = useState('');
+    const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content' | 'resource'; id: string } | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (searchParams.get('tab') === 'studio') setActiveTab('studio');
@@ -97,12 +104,14 @@ export default function LessonPage() {
 
     const fetchLesson = async () => {
         try {
+            setLessonLoadError('');
             const response = await fetch(`/api/lessons/${params.lessonId}`);
-            if (!response.ok) throw new Error('Failed to fetch lesson');
+            if (!response.ok) throw new Error(response.status === 404 ? 'This lesson no longer exists.' : 'The lesson could not be loaded.');
             const data = await response.json();
             setLesson(data);
         } catch (error) {
             console.error('Error:', error);
+            setLessonLoadError(error instanceof Error ? error.message : 'The lesson could not be loaded.');
             toast({
                 title: 'Error',
                 description: 'Failed to fetch lesson',
@@ -191,6 +200,33 @@ export default function LessonPage() {
         }
     };
 
+    const handleLessonDelete = async () => {
+        try {
+            const response = await fetch(`/api/lessons/${params.lessonId}`, { method: 'DELETE' });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.error || 'The lesson could not be deleted.');
+            toast(result.result === 'archived'
+                ? { title: 'Lesson archived', description: 'Students can no longer open it. Their results and homework are kept. You can restore it from Archived.' }
+                : { title: 'Lesson deleted', description: 'The draft and its generated materials were removed.' });
+            router.push('/teachers/lessons');
+        } catch (error) {
+            toast({ title: 'Could not delete lesson', description: (error as Error).message, variant: 'destructive' });
+        }
+    };
+
+    const confirmPendingDelete = async () => {
+        if (!pendingDelete) return;
+        setDeleting(true);
+        try {
+            if (pendingDelete.kind === 'lesson') await handleLessonDelete();
+            else if (pendingDelete.kind === 'content') await handleContentDelete(pendingDelete.id);
+            else await handleResourceDelete(pendingDelete.id);
+        } finally {
+            setDeleting(false);
+            setPendingDelete(null);
+        }
+    };
+
     const getContentIcon = (type: Content['type']) => {
         switch (type) {
             case 'quiz':
@@ -224,27 +260,52 @@ export default function LessonPage() {
     if (!lesson) {
         return (
             <DashboardLayout>
-                <div className="flex items-center justify-center min-h-screen">
-                    <p>Loading...</p>
+                <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-6 text-center">
+                    {lessonLoadError ? (
+                        <>
+                            <p role="alert" className="text-destructive">{lessonLoadError}</p>
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={() => void fetchLesson()}>Try again</Button>
+                                <Button asChild><Link href="/teachers/lessons">Back to lessons</Link></Button>
+                            </div>
+                        </>
+                    ) : <p role="status" className="text-muted-foreground">Loading lesson…</p>}
                 </div>
             </DashboardLayout>
         );
     }
 
+    const status = lessonStatus(lesson);
+    const deleteCopy = pendingDelete?.kind === 'lesson'
+        ? status === 'draft'
+            ? { title: 'Delete this draft?', description: 'This permanently removes the lesson, its objectives and every generated material. If you already set homework on it, it will be archived instead.' }
+            : { title: 'Archive this lesson?', description: 'Students will no longer see it or be able to start it. Their results and any homework stay. You can restore it later from Archived.' }
+        : pendingDelete?.kind === 'content'
+            ? { title: 'Delete this content?', description: 'Students will no longer see it. This cannot be undone.' }
+            : { title: 'Remove this resource?', description: 'Students will no longer see it. This cannot be undone.' };
+
     return (
         <DashboardLayout>
             <div className="p-3 sm:p-6">
+                <Link href="/teachers/lessons" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                    <ArrowLeft className="h-4 w-4" />Lessons
+                </Link>
                 <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
-                    <div>
-                        <h1 className="text-3xl font-bold">{lesson.title}</h1>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <h1 className="text-3xl font-bold break-words">{lesson.title}</h1>
+                            <LessonStatusBadge status={status} />
+                        </div>
                         <p className="text-muted-foreground">
-                            {lesson.subject} • Grade {lesson.gradeLevel}
+                            {lesson.subject} • {formatGradeLevel(lesson.gradeLevel)}
                         </p>
                     </div>
-                    <Button variant="outline" asChild><Link href={`/teachers/homework/new?lessonId=${params.lessonId}`}>Create homework</Link></Button>
-                    <Button onClick={() => router.push('/teachers/lessons')}>
-                        Back to Lessons
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {status === 'live' && <Button variant="outline" asChild><Link href={`/teachers/homework/new?lessonId=${params.lessonId}`}>Create homework</Link></Button>}
+                        <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDelete({ kind: 'lesson' })}>
+                            <Trash2 className="mr-2 h-4 w-4" />{status === 'draft' ? 'Delete lesson' : 'Archive lesson'}
+                        </Button>
+                    </div>
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -271,7 +332,7 @@ export default function LessonPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm text-muted-foreground">Grade Level</p>
-                                            <p className="font-medium">{lesson.gradeLevel?.toUpperCase()}</p>
+                                            <p className="font-medium">{formatGradeLevel(lesson.gradeLevel)}</p>
                                         </div>
                                         <div>
                                             <p className="text-sm text-muted-foreground">Created</p>
@@ -396,7 +457,7 @@ export default function LessonPage() {
                                             <Button
                                                 variant="destructive"
                                                 size="sm"
-                                                onClick={() => handleContentDelete(content._id)}
+                                                onClick={() => setPendingDelete({ kind: 'content', id: content._id })}
                                             >
                                                 Delete
                                             </Button>
@@ -483,7 +544,7 @@ export default function LessonPage() {
                                             <Button
                                                 variant="destructive"
                                                 size="sm"
-                                                onClick={() => handleResourceDelete(resource._id)}
+                                                onClick={() => setPendingDelete({ kind: 'resource', id: resource._id })}
                                             >
                                                 Delete
                                             </Button>
@@ -495,6 +556,15 @@ export default function LessonPage() {
                     </TabsContent>
                 </Tabs>
             </div>
+            <DeleteConfirmationDialog
+                open={!!pendingDelete}
+                onOpenChange={(open) => { if (!open && !deleting) setPendingDelete(null); }}
+                onConfirm={confirmPendingDelete}
+                title={deleteCopy.title}
+                description={deleteCopy.description}
+                isDeleting={deleting}
+                confirmLabel={pendingDelete?.kind === 'lesson' && status !== 'draft' ? 'Archive' : 'Delete'}
+            />
         </DashboardLayout>
     );
 }

@@ -24,13 +24,13 @@ export async function POST(request: Request) {
     const input = schema.parse(await request.json());
     const supabase = createServerSupabase();
     const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
-      supabase.from('lessons').select('id,title,subject,gradelevel,current_publication_id,organization_id').eq('id', input.lessonId).maybeSingle(),
+      supabase.from('lessons').select('id,title,subject,gradelevel,current_publication_id,organization_id,archived_at').eq('id', input.lessonId).maybeSingle(),
       supabase.from('students').select('grade').eq('user_id', session.user.id).maybeSingle(),
       getUserSchoolId(supabase, session.user.id),
     ]);
     if (lessonError) throw lessonError;
     if (studentError) throw studentError;
-    if (lesson && (!student || !inActiveSchool(schoolId, lesson.organization_id))) {
+    if (lesson && (lesson.archived_at || !student || !inActiveSchool(schoolId, lesson.organization_id))) {
       throw new LessonArtifactHttpError(404, 'Lesson not found');
     }
     if (!lesson?.current_publication_id) throw new LessonArtifactHttpError(409, 'This lesson has not been published yet');

@@ -30,6 +30,10 @@ export async function GET(request: Request) {
 
         if (grade) query = query.eq('gradelevel', grade);
         if (subject) query = query.eq('subject', subject);
+        // Archived lessons are hidden unless the teacher asks for them.
+        query = searchParams.get('archived') === 'only'
+            ? query.not('archived_at', 'is', null)
+            : query.is('archived_at', null);
 
         // For teachers, filter by their teacher record
         if (session.user.role === 'teacher') {

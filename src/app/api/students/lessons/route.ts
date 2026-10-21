@@ -36,6 +36,9 @@ export async function GET() {
             .from('lessons')
             .select('*')
             .eq('gradelevel', student.grade)
+            // Students only see lessons their teacher has published and not archived.
+            .not('current_publication_id', 'is', null)
+            .is('archived_at', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
         return NextResponse.json(lessons ?? []);

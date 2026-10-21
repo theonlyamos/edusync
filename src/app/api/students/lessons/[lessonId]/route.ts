@@ -23,7 +23,7 @@ export async function GET(
     const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
       supabase
         .from('lessons')
-        .select('id,gradelevel,current_publication_id,organization_id')
+        .select('id,gradelevel,current_publication_id,organization_id,archived_at')
         .eq('id', lessonId)
         .maybeSingle(),
       supabase
@@ -36,7 +36,7 @@ export async function GET(
 
     if (lessonError) throw lessonError;
     if (studentError) throw studentError;
-    if (!lesson) throw new LessonArtifactHttpError(404, 'Lesson not found');
+    if (!lesson || lesson.archived_at) throw new LessonArtifactHttpError(404, 'Lesson not found');
     if (!student || !inActiveSchool(schoolId, lesson.organization_id)) {
       throw new LessonArtifactHttpError(404, 'Lesson not found');
     }
