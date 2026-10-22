@@ -24,8 +24,8 @@ import {
   useHomeworkClock,
   command,
   homeworkRequest,
-  utcInput,
-  utcValue,
+  zonedDateInput,
+  zonedDateValue,
 } from "./shared";
 export function TeacherHomeworkDetail({ id }: { id: string }) {
   const now = useHomeworkClock();
@@ -324,13 +324,14 @@ export function TeacherHomeworkDetail({ id }: { id: string }) {
             <p className="font-medium">
               {data.recipients.find((r) => r.student_id === studentId)?.name}
             </p>
-            <Field label="New deadline · UTC">
+            <Field label={`New deadline · ${data.homework.timezone}`}>
               <input
                 type="datetime-local"
                 className={fieldClass}
-                value={utcInput(extension)}
+                value={zonedDateInput(extension, data.homework.timezone)}
                 onChange={(e) => {
-                  if (e.target.value) setExtension(utcValue(e.target.value));
+                  const next = e.target.value && zonedDateValue(e.target.value, data.homework.timezone);
+                  if (next) setExtension(next);
                 }}
               />
             </Field>

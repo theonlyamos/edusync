@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { validateMarks, type HomeworkDetail } from "@/lib/homework/domain";
 import {
+  questionInsights,
+  scoreBands,
+  SCORE_BANDS,
+  plural,
+  type MarkedSubmission,
+} from "@/lib/homework/insights";
+import {
   HomeworkHeader,
   HomeworkPanel,
   StatRow,
@@ -40,13 +47,22 @@ export function TeacherHomeworkInsights({ id }: { id: string }) {
       (n, g) => n + Object.values(g.marks).reduce((sum, m) => sum + m.score, 0),
       0,
     );
-  const distribution = [0, 0, 0, 0];
-  grades.forEach((g) => {
-    const p =
-      (100 * Object.values(g.marks).reduce((n, m) => n + m.score, 0)) /
-      possible;
-    distribution[p < 50 ? 0 : p < 70 ? 1 : p < 90 ? 2 : 3]++;
+  const submissions: MarkedSubmission[] = grades.flatMap((g) => {
+    const attempt = data.attempts.find((a) => a.id === g.attempt_id);
+    if (!attempt) return [];
+    return [
+      {
+        studentId: attempt.student_id,
+        name:
+          data.recipients.find((r) => r.student_id === attempt.student_id)
+            ?.name ?? "Student",
+        answers: attempt.answers,
+        marks: g.marks,
+      },
+    ];
   });
+  const bands = scoreBands(h.questions, submissions),
+    perQuestion = questionInsights(h.questions, submissions);
   return (
     <DashboardLayout>
       <HomeworkHeader
@@ -117,7 +133,8 @@ export function TeacherHomeworkInsights({ id }: { id: string }) {
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    {qs.length} questions · {grades.length} marked submissions
+                    {plural(qs.length, "question")} ·{" "}
+                    {plural(grades.length, "marked submission")}
                   </p>
                 </div>
               );
@@ -128,20 +145,25 @@ export function TeacherHomeworkInsights({ id }: { id: string }) {
           </HomeworkPanel>
           <HomeworkPanel>
             <h2 className="text-2xl mb-5">Score distribution</h2>
-            {["Below 50%", "50–69%", "70–89%", "90–100%"].map((label, i) => (
+            {SCORE_BANDS.map((label, i) => (
               <div key={label} className="py-3">
                 <div className="flex justify-between mb-2 text-sm">
                   <span>{label}</span>
-                  <span>{distribution[i]} students</span>
+                  <span>{plural(bands[i].length, "student")}</span>
                 </div>
                 <div className="h-3 bg-muted rounded overflow-hidden">
                   <div
                     className="h-full bg-primary"
                     style={{
-                      width: (100 * distribution[i]) / grades.length + "%",
+                      width: (100 * bands[i].length) / grades.length + "%",
                     }}
                   />
                 </div>
+                {bands[i].length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground break-words">
+                    {bands[i].map((s) => `${s.name} (${s.percent}%)`).join(", ")}
+                  </p>
+                )}
               </div>
             ))}
             <Notice>
@@ -153,6 +175,47 @@ export function TeacherHomeworkInsights({ id }: { id: string }) {
                 Review student work
               </Link>
             </Button>
+          </HomeworkPanel>
+          <HomeworkPanel className="lg:col-span-2">
+            <h2 className="text-2xl mb-1">By question</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Lowest scores first, so the questions to reteach are at the top.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Question</th>
+                    <th className="py-2 pr-3 font-medium whitespace-nowrap">Marks earned</th>
+                    <th className="py-2 pr-3 font-medium whitespace-nowrap">Full marks</th>
+                    <th className="py-2 font-medium">Most common wrong answer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...perQuestion]
+                    .sort((a, b) => a.percent - b.percent || a.number - b.number)
+                    .map((row) => (
+                      <tr key={row.questionId} className="border-b align-top">
+                        <td className="py-3 pr-3 min-w-48">
+                          <span className="font-medium">Q{row.number}.</span>{" "}
+                          <span className="break-words">{row.prompt}</span>
+                        </td>
+                        <td className={`py-3 pr-3 tabular-nums ${row.percent < 50 ? "text-destructive font-medium" : ""}`}>
+                          {row.percent}%
+                        </td>
+                        <td className="py-3 pr-3 tabular-nums whitespace-nowrap">
+                          {row.fullMarks} of {submissions.length}
+                        </td>
+                        <td className="py-3 break-words">
+                          {row.commonWrongAnswer
+                            ? `${row.commonWrongAnswer.answer} (${plural(row.commonWrongAnswer.count, "student")})`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </HomeworkPanel>
         </div>
       )}

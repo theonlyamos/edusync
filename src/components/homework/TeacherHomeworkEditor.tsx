@@ -12,6 +12,7 @@ import {
   type HomeworkDetail,
 } from "@/lib/homework/domain";
 import type { HomeworkSource } from "@/lib/homework/sources";
+import { deviceTimezone, pickTimezone } from "@/lib/timezone";
 import {
   HomeworkHeader,
   HomeworkPanel,
@@ -22,8 +23,9 @@ import {
   QuestionResponse,
   homeworkRequest,
   command,
-  utcInput,
-  utcValue,
+  zonedDateInput,
+  zonedDateValue,
+  HomeworkRequestError,
   formatHomeworkDate,
   useHomeworkLeaveWarning,
 } from "./shared";
@@ -134,7 +136,7 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
         questions: [newQuestion(s.objectives[0]?.id ?? "")],
         dueAt: new Date(Date.now() + 3 * 86400000).toISOString(),
         closeAt: null,
-        timezone: "UTC",
+        timezone: pickTimezone(s.schoolTimezone, deviceTimezone()),
         acceptLate: true,
         allowHints: false,
         allowReferences: true,
@@ -152,6 +154,7 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
     setForm((f) => (f ? { ...f, ...partial } : null));
     setDirty(true);
     setMessage("");
+    setError("");
   }
   function changeQuestion(index: number, partial: Partial<DraftQuestion>) {
     if (form)
@@ -193,6 +196,7 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
     }
   }
   const questionTotal = form?.questions.reduce((n, q) => n + q.points, 0) ?? 0;
+  const timezone = pickTimezone(form?.timezone);
   return (
     <DashboardLayout>
       <HomeworkHeader
@@ -746,22 +750,18 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
             </HomeworkPanel>
             <HomeworkPanel>
               <h2 className="text-2xl mb-4">Deadline & support</h2>
-              <Field label="School display timezone">
-                <input
-                  className={fieldClass}
-                  value={form.timezone}
-                  onChange={(e) => update({ timezone: e.target.value })}
-                  placeholder="UTC or Africa/Accra"
-                />
-              </Field>
-              <Field label="Due date and time · enter in UTC">
+              <p className="text-sm text-muted-foreground mb-4">
+                Times are in {timezone}
+                {timezone === source?.schoolTimezone ? ", your school’s timezone." : "."}
+              </p>
+              <Field label="Due date and time">
                 <input
                   className={fieldClass}
                   type="datetime-local"
-                  value={utcInput(form.dueAt)}
+                  value={zonedDateInput(form.dueAt, timezone)}
                   onChange={(e) => {
-                    if (e.target.value)
-                      update({ dueAt: utcValue(e.target.value) });
+                    const next = e.target.value && zonedDateValue(e.target.value, timezone);
+                    if (next) update({ dueAt: next });
                   }}
                 />
               </Field>
@@ -800,14 +800,14 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                 Set a hard closing date
               </label>
               {form.closeAt && (
-                <Field label="Hard closing date · UTC">
+                <Field label="Hard closing date">
                   <input
                     className={fieldClass}
                     type="datetime-local"
-                    value={utcInput(form.closeAt)}
+                    value={zonedDateInput(form.closeAt, timezone)}
                     onChange={(e) => {
-                      if (e.target.value)
-                        update({ closeAt: utcValue(e.target.value) });
+                      const next = e.target.value && zonedDateValue(e.target.value, timezone);
+                      if (next) update({ closeAt: next });
                     }}
                   />
                 </Field>
@@ -853,7 +853,7 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                 Due{" "}
                 {(() => {
                   try {
-                    return formatHomeworkDate(form.dueAt, form.timezone);
+                    return formatHomeworkDate(form.dueAt, timezone);
                   } catch {
                     return "Check the school timezone";
                   }
@@ -951,6 +951,12 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                 count: 5,
                 brief: aiBrief,
               }),
+            }).catch((e: unknown) => {
+              // Server failures come back with a generic message; say what failed.
+              if (e instanceof HomeworkRequestError && e.status < 500) throw e;
+              throw new Error(
+                "Couldn’t draft questions. Try again or write your own.",
+              );
             });
             update({
               questions: [
