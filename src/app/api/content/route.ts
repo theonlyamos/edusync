@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
 import { requireLessonViewer } from '@/lib/lesson-artifacts/lesson-read-server';
-import { lessonArtifactErrorResponse, LessonArtifactHttpError } from '@/lib/lesson-artifacts/server';
-import { createServerSupabase } from '@/lib/supabase.server';
+import { lessonArtifactErrorResponse, LessonArtifactHttpError, requireLessonManager } from '@/lib/lesson-artifacts/server';
+import { LESSON_CONTENT_TYPES } from '@/lib/lesson-content-server';
 
 export async function GET(req: Request) {
     try {
@@ -26,31 +25,23 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession();
-        if (!session || !['admin', 'teacher'].includes(session.user?.role as string)) {
-            return new NextResponse('Unauthorized', { status: 401 });
+        const payload = await req.json().catch(() => null) as { lessonId?: unknown; type?: unknown; content?: unknown } | null;
+        const lessonId = typeof payload?.lessonId === 'string' ? payload.lessonId : '';
+        const type = typeof payload?.type === 'string' ? payload.type : '';
+        if (!lessonId) throw new LessonArtifactHttpError(400, 'lessonId is required');
+        if (!(LESSON_CONTENT_TYPES as readonly string[]).includes(type)) {
+            throw new LessonArtifactHttpError(400, `type must be one of ${LESSON_CONTENT_TYPES.join(', ')}`);
         }
-
-        const supabase = createServerSupabase();
-        const payload = await req.json();
-        const { lessonId, type, content } = payload as { lessonId: string; type: string; content: any };
-
-        const insert = {
-            lesson_id: lessonId,
-            type,
-            content,
-            created_at: new Date().toISOString()
-        };
-
+        // Only the lesson's teacher (or an admin) may add content; the insert below bypasses RLS.
+        const { supabase } = await requireLessonManager(lessonId);
         const { data, error } = await supabase
             .from('lesson_content')
-            .insert(insert)
+            .insert({ lesson_id: lessonId, type, content: payload?.content ?? {}, created_at: new Date().toISOString() })
             .select('*')
             .single();
         if (error) throw error;
         return NextResponse.json(data);
     } catch (error) {
-        console.error('Error creating content:', error);
-        return new NextResponse('Internal Server Error', { status: 500 });
+        return lessonArtifactErrorResponse(error);
     }
 }

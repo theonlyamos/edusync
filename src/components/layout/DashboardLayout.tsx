@@ -55,29 +55,30 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
   const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
     ? userRole
     : null;
+  const portalName = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
 
   return (
-    <div className={cn('flex h-dvh min-h-0 bg-background', role === 'student' && 'flex-col lg:flex-row')}>
-      {role === 'student' ? (
+    <div className={cn('flex h-dvh min-h-0 bg-background', role && 'flex-col lg:flex-row')}>
+      {role && (
         <>
           <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3 lg:hidden">
             <Dialog open={navigationOpen} onOpenChange={setNavigationOpen}>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Open student navigation">
+                <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Open ${portalName} navigation`}>
                   <Menu className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
               <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none p-0 sm:rounded-none [&>button]:h-11 [&>button]:w-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center">
-                <DialogTitle className="sr-only">Student navigation</DialogTitle>
-                <DialogDescription className="sr-only">Choose a page in your student portal.</DialogDescription>
+                <DialogTitle className="sr-only">{portalName} navigation</DialogTitle>
+                <DialogDescription className="sr-only">Choose a page in your {portalName.toLowerCase()} portal.</DialogDescription>
                 <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} />
               </DialogContent>
             </Dialog>
-            <span className="text-sm font-semibold">Student Portal</span>
+            <span className="text-sm font-semibold">{portalName} Portal</span>
           </header>
           <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>
         </>
-      ) : role && <Sidebar role={role} />}
+      )}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {fullBleed ? (
           children
