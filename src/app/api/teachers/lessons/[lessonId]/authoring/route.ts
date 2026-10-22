@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { authoringUpdateSchema } from '@/lib/lesson-artifacts/authoring';
 import { acceptedCreativeConcepts } from '@/lib/lesson-artifacts/creative-concept';
 import { lessonArtifactErrorResponse, requireLessonManager } from '@/lib/lesson-artifacts/server';
+import { lessonAudience } from '@/lib/lesson-artifacts/audience.server';
 
 export async function GET(
   _request: Request,
@@ -47,8 +48,14 @@ export async function GET(
       currentPublication = data;
     }
 
+    const audience = await lessonAudience(lesson).catch((error) => {
+      console.error('Could not count the lesson audience', error);
+      return null;
+    });
+
     return NextResponse.json({
       viewerId: session.user.id,
+      audience,
       activeBatchId: activeJobs?.[0]?.batch_id,
       creativeConcepts: acceptedCreativeConcepts(objectives ?? [], conceptJobs ?? []),
       lesson: {

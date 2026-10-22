@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { directionEditImpact, getStudioMaterials, nextReviewStep, unpreparedObjectives, type StudioArtifact } from '../studio-state';
+import { directionEditImpact, getStudioMaterials, nextReviewStep, unpreparedObjectives, type StudioArtifact, audienceSummary } from '../studio-state';
 
 function artifact(overrides: Partial<StudioArtifact> = {}): StudioArtifact {
   return { id: 'intro', objective_id: 'objective', objective_revision: 2, series_id: 'intro', version: 1, position: 0,
@@ -110,5 +110,18 @@ describe('next review step', () => {
     const generateOnly = order.map(step => ({ ...step, hasMaterial: false }));
     expect(nextReviewStep(generateOnly, { objectiveId: 'a', key: 'introduction' })).toMatchObject({ objectiveId: 'a', key: 'exploration' });
     expect(nextReviewStep(order.map(step => ({ ...step, approved: true })), { objectiveId: null, key: 'lesson' })).toBeNull();
+  });
+});
+
+describe('audienceSummary', () => {
+  const fmt = (grade: string) => grade.toUpperCase();
+  it('names the count, grade and school', () => {
+    expect(audienceSummary({ schoolName: 'Hillside', gradeLevel: 'jhs 1', students: 42 }, fmt)).toBe('All 42 JHS 1 students at Hillside');
+    expect(audienceSummary({ schoolName: 'Hillside', gradeLevel: 'jhs 1', students: 1 }, fmt)).toBe('The 1 JHS 1 student at Hillside');
+  });
+  it('explains an empty grade and an unknown count', () => {
+    expect(audienceSummary({ schoolName: null, gradeLevel: 'jhs 1', students: 0 }, fmt)).toContain('None have joined yet');
+    expect(audienceSummary({ schoolName: null, gradeLevel: 'jhs 1', students: null }, fmt)).toBe('Every JHS 1 student');
+    expect(audienceSummary(null, fmt)).toBeNull();
   });
 });

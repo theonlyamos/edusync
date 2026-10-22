@@ -122,3 +122,13 @@ export function nextReviewStep(order: ReviewStep[], current: { objectiveId: stri
   const rotated = [...order.slice(index + 1), ...order.slice(0, Math.max(index, 0))];
   return rotated.find(step => !step.approved && step.hasMaterial) ?? rotated.find(step => !step.approved) ?? null;
 }
+
+/** "All 42 JHS 1 students at Hillside School", for the publish step. */
+export function audienceSummary(audience: { schoolName: string | null; gradeLevel: string; students: number | null } | null | undefined, formatGrade: (grade: string) => string) {
+  if (!audience?.gradeLevel) return null;
+  const grade = formatGrade(audience.gradeLevel);
+  const where = audience.schoolName ? ` at ${audience.schoolName}` : '';
+  if (audience.students === null) return `Every ${grade} student${where}`;
+  if (audience.students === 0) return `${grade} students${where}. None have joined yet, so new ${grade} students will see it when they join`;
+  return `${audience.students === 1 ? 'The 1' : `All ${audience.students}`} ${grade} student${audience.students === 1 ? '' : 's'}${where}`;
+}
