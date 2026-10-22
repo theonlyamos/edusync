@@ -113,8 +113,8 @@ export async function POST(req: Request) {
         const body = await req.json().catch(() => ({}));
         const type = typeof body.type === 'string' ? body.type : 'standard';
         const difficulty = typeof body.difficulty === 'string' ? body.difficulty : 'medium';
-        let subject = typeof body.subject === 'string' ? body.subject.trim() : '';
-        let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+        let subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 60) : '';
+        let topic = typeof body.topic === 'string' ? body.topic.trim().slice(0, 100) : '';
         let gradeLevel = '';
         let objectives: string[] = [];
 
