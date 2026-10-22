@@ -14,42 +14,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { PracticeExercise } from '@/components/practice/PracticeExercise';
-import { ContentDisplay } from '@/components/content/ContentDisplay';
-import { CircleHelp, ExternalLink, FileText, Link as LinkIcon, Loader2, Play, Presentation, Sparkles, Target } from 'lucide-react';
+import { ArrowLeft, Check, CircleHelp, FileCheck, Loader2, PenLine, Play, Presentation, Sparkles, Target } from 'lucide-react';
+import { formatGrade } from '@/lib/grade';
 import Link from 'next/link';
-import { MarkdownContent } from '@/components/content/MarkdownContent';
-import { FloatingActionButton } from '@/components/ui/floating-action-button';
-import type { 
-  QuizContentType, 
-  WorksheetContentType, 
-  ExplanationContentType, 
-  SummaryContentType 
-} from '@/components/content/types';
 import type { StudentLessonDetail } from '@/lib/lesson-artifacts/student-learning';
-
-interface Resource {
-  _id: string;
-  title: string;
-  description: string;
-  type: 'file' | 'url';
-  fileUrl?: string;
-  filename?: string;
-  url?: string;
-  originalUrl?: string;
-  lessonId: string;
-  createdAt: string;
-}
-
-interface LessonContent {
-  _id: string;
-  type: 'quiz' | 'worksheet' | 'explanation' | 'summary';
-  content: QuizContentType | WorksheetContentType | ExplanationContentType | SummaryContentType;
-  createdAt: string;
-  lessonId: string;
-}
 
 export default function LessonPage({ params }: { params: Promise<{ lessonId: string }> }) {
   const resolvedParams = use(params);
@@ -58,12 +28,12 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   const { toast } = useToast();
   const [lessonDetail, setLessonDetail] = useState<StudentLessonDetail | null>(null);
   const [lessonError, setLessonError] = useState<string | null>(null);
-  const [contents, setContents] = useState<LessonContent[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [practicing, setPracticing] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
-  const [generatingPractice, setGeneratingPractice] = useState(false);
+  // Which practice is being made: 'lesson', an objective id, or nothing.
+  const [generatingPractice, setGeneratingPractice] = useState<string | null>(null);
+  const [practiceFocus, setPracticeFocus] = useState<string | null>(null);
   const lesson = lessonDetail?.lesson ?? null;
 
   const fetchLesson = useCallback(async () => {
@@ -84,90 +54,43 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
     }
   }, [resolvedParams.lessonId]);
 
-  const fetchContent = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/content?lessonId=${resolvedParams.lessonId}`);
-      if (!response.ok) throw new Error('Failed to fetch content');
-      const data = await response.json();
-      setContents(data);
-    } catch (error) {
-      console.error('Error fetching content:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load lesson content',
-        variant: 'destructive',
-      });
-    }
-  }, [resolvedParams.lessonId, toast]);
-
-  const fetchResources = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/resources?lessonId=${resolvedParams.lessonId}`);
-      if (!response.ok) throw new Error('Failed to fetch resources');
-      const data = await response.json();
-      setResources(data);
-    } catch (error) {
-      console.error('Error fetching resources:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load lesson resources',
-        variant: 'destructive',
-      });
-    }
-  }, [resolvedParams.lessonId, toast]);
-
   useEffect(() => {
-    if (resolvedParams.lessonId) {
-      void (async () => {
-        const authorized = await fetchLesson();
-        if (authorized) await Promise.all([fetchContent(), fetchResources()]);
-      })();
-    }
-  }, [fetchContent, fetchLesson, fetchResources, resolvedParams.lessonId]);
+    if (resolvedParams.lessonId) void fetchLesson();
+  }, [fetchLesson, resolvedParams.lessonId]);
 
-  const handleStartPractice = async (isRetry = false) => {
+  // objectiveId: practise one objective; undefined: the whole lesson.
+  const handleStartPractice = async (objectiveId?: string) => {
     if (!lesson) return;
-
-    if (!isRetry) {
-      setGeneratingPractice(true);
-    }
-    
+    setPracticeFocus(objectiveId ?? null);
+    setGeneratingPractice(objectiveId ?? 'lesson');
     setPracticing(false);
     setQuestions([]);
 
     try {
       const response = await fetch('/api/students/practice/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          lessonId: lesson.id,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lessonId: lesson.id, objectiveId, type: 'standard' }),
       });
-
-      if (!response.ok) throw new Error('Failed to generate practice');
-
-      const data = await response.json();
-      
-      if (data.questions && data.questions.length > 0) {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || data.message || 'Practice questions could not be made. Please try again.');
+      }
+      if (data.questions?.length) {
         setQuestions(data.questions);
         setPracticing(true);
       } else {
-        toast({ title: 'No questions generated', description: 'Could not generate practice questions.', variant: 'destructive' })
+        throw new Error('No practice questions came back. Please try again.');
       }
-      
     } catch (error) {
       console.error('Error generating practice:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to generate practice exercises',
+        title: 'Practice not ready',
+        description: error instanceof Error ? error.message : 'Practice questions could not be made. Please try again.',
         variant: 'destructive',
       });
     } finally {
-       if (!isRetry) {
-         setGeneratingPractice(false);
-       }
+      setGeneratingPractice(null);
     }
   };
 
@@ -177,7 +100,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   };
 
   const handleGenerateNew = () => {
-    handleStartPractice();
+    void handleStartPractice(practiceFocus ?? undefined);
   };
 
   const handleLearnWithAI = (objectiveId?: string) => {
@@ -254,203 +177,96 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
     );
   }
 
+  const objectives = lessonDetail?.objectives ?? [];
+  const mastered = new Set(lessonDetail?.masteredObjectiveIds ?? []);
+  const masteredCount = objectives.filter((objective) => mastered.has(objective.id)).length;
+  const nextObjective = objectives.find((objective) => !mastered.has(objective.id)) ?? objectives[0];
+
   return (
     <DashboardLayout>
-      <div className="p-3 sm:p-6">
-        <Card>
-          <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="break-words">{lesson.title}</CardTitle>
-            <Button variant="outline" className="min-h-11 xl:min-h-0 whitespace-normal" onClick={()=>router.push(`/students/homework?lessonId=${resolvedParams.lessonId}`)}>View lesson homework</Button>
-            <CardDescription>
-              {lesson.subject} • Grade {lesson.gradeLevel}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-3 sm:px-6">
-            <Tabs defaultValue="overview" className="space-y-4">
-              <TabsList className="grid h-auto xl:h-10 w-full grid-cols-2 sm:inline-flex sm:w-auto">
-                <TabsTrigger value="overview" className="min-h-11 xl:min-h-0">Overview</TabsTrigger>
-                <TabsTrigger value="content" className="min-h-11 xl:min-h-0">Content</TabsTrigger>
-                <TabsTrigger value="resources" className="min-h-11 xl:min-h-0">Resources</TabsTrigger>
-                <TabsTrigger value="practice" className="min-h-11 xl:min-h-0">Practice</TabsTrigger>
-              </TabsList>
+      <div className="mx-auto max-w-4xl space-y-6 p-3 sm:p-6">
+        <header className="space-y-3">
+          <Link href="/students/lessons" className="inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground xl:min-h-0">
+            <ArrowLeft className="h-4 w-4" /> Lessons
+          </Link>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">{lesson.title}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {lesson.subject} · {formatGrade(lesson.gradeLevel)}
+                {objectives.length > 0 && ` · ${masteredCount} of ${objectives.length} objectives done`}
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm" className="min-h-11 xl:min-h-0">
+              <Link href={`/students/homework?lessonId=${resolvedParams.lessonId}`}>
+                <FileCheck className="mr-2 h-4 w-4" /> Homework
+              </Link>
+            </Button>
+          </div>
+        </header>
 
-              <TabsContent value="overview" className="space-y-6">
-                <LessonIntroduction lessonId={resolvedParams.lessonId} />
-                <section className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white shadow-sm">
-                  <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                    <div className="min-w-0">
-                      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-lime-300">
-                        <Target className="h-4 w-4 shrink-0" /> Objective roadmap
-                      </div>
-                      <h3 className="max-w-2xl text-2xl font-semibold leading-tight">Learn one clear outcome at a time.</h3>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Each tutor session stays focused on one objective and uses your teacher&apos;s reviewed activities before creating anything new.</p>
+        <LessonIntroduction lessonId={resolvedParams.lessonId} />
+
+        <section className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white shadow-sm">
+          <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="min-w-0">
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-lime-300 sm:tracking-[0.22em]">
+                <Target className="h-4 w-4 shrink-0" /> Objective roadmap
+              </div>
+              <h2 className="max-w-2xl text-2xl font-semibold leading-tight">Learn one clear outcome at a time.</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                {nextObjective && masteredCount > 0 && masteredCount < objectives.length
+                  ? `Up next: ${nextObjective.text}`
+                  : "The AI tutor works through each objective with your teacher's reviewed activities."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
+              <Button className="min-h-11 bg-lime-300 text-slate-950 hover:bg-lime-200 xl:min-h-0" onClick={() => handleLearnWithAI(nextObjective?.id)} disabled={!objectives.length}>
+                <Play className="mr-2 h-4 w-4 fill-current" /> {masteredCount > 0 ? 'Continue with AI tutor' : 'Start with AI tutor'}
+              </Button>
+              <Button variant="outline" className="min-h-11 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white xl:min-h-0" onClick={() => void handleStartPractice()} disabled={generatingPractice !== null}>
+                {generatingPractice === 'lesson' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PenLine className="mr-2 h-4 w-4" />}
+                {generatingPractice === 'lesson' ? 'Making practice…' : 'Practise this lesson'}
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <ol className="space-y-3" aria-label="Lesson objectives">
+          {objectives.map((objective, index) => {
+            const done = mastered.has(objective.id);
+            return (
+              <li key={objective.id}>
+                <Card className={done ? 'border-emerald-300/70 dark:border-emerald-800' : undefined}>
+                  <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold shadow-sm ${done ? 'bg-emerald-600 text-white' : 'bg-slate-950 text-lime-300 dark:bg-lime-300 dark:text-slate-950'}`}>
+                      {done ? <Check className="h-5 w-5" aria-label="Done" /> : String(index + 1).padStart(2, '0')}
                     </div>
-                    <Button className="min-h-11 xl:min-h-0 bg-lime-300 text-slate-950 hover:bg-lime-200" onClick={() => handleLearnWithAI()} disabled={!lessonDetail?.objectives.length}>
-                      <Play className="mr-2 h-4 w-4 fill-current" /> Start lesson with AI
-                    </Button>
-                  </div>
-                </section>
-
-                <div className="space-y-3">
-                  {lessonDetail?.objectives.map((objective, index) => (
-                    <Card key={objective.id} className="group overflow-hidden transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md dark:hover:border-emerald-700">
-                      <CardContent className="grid gap-4 p-4 sm:p-5 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-lime-300 shadow-sm dark:bg-lime-300 dark:text-slate-950">{String(index + 1).padStart(2, '0')}</div>
-                        <div className="min-w-0">
-                          <p className="font-medium leading-6 text-foreground break-words">{objective.text}</p>
-                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><Presentation className="h-3.5 w-3.5" />{objective.artifactCounts.visualizations} visual{objective.artifactCounts.visualizations === 1 ? '' : 's'}</span>
-                            <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><CircleHelp className="h-3.5 w-3.5" />{objective.artifactCounts.quizzes} quiz{objective.artifactCounts.quizzes === 1 ? '' : 'zes'}</span>
-                          </div>
-                        </div>
-                        <Button variant="outline" className="min-h-11 xl:min-h-0 w-full md:w-auto" onClick={() => handleLearnWithAI(objective.id)}>
-                          <Sparkles className="mr-2 h-4 w-4" /> Start AI tutor
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {!lessonDetail?.objectives.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No published objectives are available for this lesson.</p>}
-                </div>
-                {lesson.content && (
-                  <div>
-                    <h3 className="font-semibold mb-2">Content</h3>
-                    <MarkdownContent>{typeof lesson.content === 'string' ? lesson.content : JSON.stringify(lesson.content)}</MarkdownContent>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="content" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {['quiz', 'worksheet', 'explanation', 'summary'].map((type) => {
-                    const typeContents = contents.filter(c => c.type === type);
-                    return (
-                      <Card 
-                        key={type}
-                        className="cursor-pointer hover:shadow-lg transition-all duration-300"
-                        onClick={() => {
-                          if (typeContents.length > 0) {
-                            router.push(`/students/lessons/${resolvedParams.lessonId}/content/${type}`);
-                          }
-                        }}
-                      >
-                        <CardHeader>
-                          <CardTitle className="capitalize flex items-center gap-2">
-                            {type === 'quiz' && <FileText className="h-5 w-5 text-blue-500" />}
-                            {type === 'worksheet' && <FileText className="h-5 w-5 text-green-500" />}
-                            {type === 'explanation' && <FileText className="h-5 w-5 text-purple-500" />}
-                            {type === 'summary' && <FileText className="h-5 w-5 text-orange-500" />}
-                            {type}
-                          </CardTitle>
-                          <CardDescription>
-                            {typeContents.length} {type}{typeContents.length !== 1 ? 's' : ''}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-muted-foreground">
-                            {typeContents.length === 0 ? (
-                              'No content available'
-                            ) : (
-                              `Click to view ${typeContents.length} ${type}${typeContents.length !== 1 ? 's' : ''}`
-                            )}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="resources" className="space-y-4">
-                {resources.map((resource) => (
-                  <Card key={resource._id}>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start min-w-0">
-                        <div className="min-w-0 w-full">
-                          <h3 className="text-lg font-semibold mb-2 break-words">{resource.title}</h3>
-                          <p className="text-muted-foreground mb-4 break-words">{resource.description}</p>
-                          {resource.type === 'file' && resource.fileUrl && (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <FileText className="h-4 w-4 shrink-0" />
-                              <Link 
-                                href={resource.fileUrl} 
-                                target="_blank"
-                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
-                              >
-                                {resource.filename}
-                                <ExternalLink className="h-3 w-3 inline ml-1" />
-                              </Link>
-                            </div>
-                          )}
-                          {resource.type === 'url' && resource.url && (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <LinkIcon className="h-4 w-4 shrink-0" />
-                              <Link 
-                                href={resource.url} 
-                                target="_blank"
-                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
-                              >
-                                {resource.originalUrl || 'View Resource'}
-                                <ExternalLink className="h-3 w-3 inline ml-1" />
-                              </Link>
-                            </div>
-                          )}
-                          <p className="text-sm text-muted-foreground mt-4">
-                            Added {new Date(resource.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
+                    <div className="min-w-0">
+                      <p className="break-words font-medium leading-6 text-foreground">{objective.text}</p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {done && <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">Mastered</span>}
+                        <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><Presentation className="h-3.5 w-3.5" />{objective.artifactCounts.visualizations} visual{objective.artifactCounts.visualizations === 1 ? '' : 's'}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1"><CircleHelp className="h-3.5 w-3.5" />{objective.artifactCounts.quizzes} quiz{objective.artifactCounts.quizzes === 1 ? '' : 'zes'}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {resources.length === 0 && (
-                  <div className="text-center py-12">
-                    <h3 className="text-lg font-semibold mb-2">No Resources Available</h3>
-                    <p className="text-muted-foreground">
-                      This lesson doesn't have any resources yet.
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="practice" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Practice Exercises</CardTitle>
-                    <CardDescription>
-                      Test your understanding of the lesson material
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button 
-                      className="h-auto min-h-11 xl:min-h-0 max-w-full whitespace-normal"
-                      onClick={() => handleStartPractice()}
-                      disabled={generatingPractice}
-                    >
-                      {generatingPractice ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Generating Practice...
-                        </>
-                      ) : (
-                        'Start Practice'
-                      )}
-                    </Button>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
+                      <Button variant={done ? 'outline' : 'default'} className="min-h-11 w-full md:w-auto xl:min-h-0" onClick={() => handleLearnWithAI(objective.id)}>
+                        <Sparkles className="mr-2 h-4 w-4" /> {done ? 'Review with AI' : 'Learn with AI'}
+                      </Button>
+                      <Button variant="ghost" className="min-h-11 w-full md:w-auto xl:min-h-0" onClick={() => void handleStartPractice(objective.id)} disabled={generatingPractice !== null}>
+                        {generatingPractice === objective.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PenLine className="mr-2 h-4 w-4" />}
+                        Practise
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+              </li>
+            );
+          })}
+        </ol>
+        {!objectives.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Your teacher hasn&apos;t published objectives for this lesson yet.</p>}
       </div>
-      
-      {/* Learn with AI FAB */}
-      {lesson && (
-        <FloatingActionButton
-          icon={<Sparkles className="w-5 h-5" />}
-          label="Learn with AI"
-          onClick={() => handleLearnWithAI()}
-        />
-      )}
     </DashboardLayout>
   );
 }

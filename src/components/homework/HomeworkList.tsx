@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import type { Homework, Attempt } from "@/lib/homework/domain";
+import { formatGrade } from "@/lib/grade";
 import {
   HomeworkHeader,
   EmptyHomework,
@@ -24,6 +25,12 @@ interface ListItem {
   score: number | null;
   releasedAt: string | null;
   extensionAt: string | null;
+}
+/** Published, not yet submitted, and past the student's own due date. */
+function isOverdue(i: ListItem, now = Date.now()) {
+  if (i.homework.status !== "published" || i.myAttempt?.submitted_at) return false;
+  const due = Date.parse(homeworkDue(i.homework, i.myAttempt, i.extensionAt));
+  return Number.isFinite(due) && due < now;
 }
 export function HomeworkList({
   teacher = false,
@@ -150,7 +157,7 @@ export function HomeworkList({
                   <div className="min-w-0 flex-1">
                     <div className="flex gap-2 flex-wrap mb-3">
                       <Badge variant="secondary">
-                        {i.homework.subject} · {i.homework.grade_level}
+                        {i.homework.subject} · {formatGrade(i.homework.grade_level)}
                       </Badge>
                       <Badge variant="outline">
                         {teacher
@@ -168,6 +175,9 @@ export function HomeworkList({
                                     ? "In progress"
                                     : "Not started"}
                       </Badge>
+                      {!teacher && isOverdue(i) && (
+                        <Badge variant="destructive">Overdue</Badge>
+                      )}
                     </div>
                     <h2 className="text-2xl mb-2 break-words">
                       {i.homework.title}
@@ -215,6 +225,7 @@ export function HomeworkList({
               ))}
             </div>
           )}
+          {(page > 0 || data.hasMore) && (
           <div className="flex flex-wrap justify-between gap-2 mt-6 [&>button]:min-h-11 xl:[&>button]:min-h-0">
             <Button
               variant="ghost"
@@ -231,6 +242,7 @@ export function HomeworkList({
               Next page
             </Button>
           </div>
+          )}
         </>
       )}
     </DashboardLayout>

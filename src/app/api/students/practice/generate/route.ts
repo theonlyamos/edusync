@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
 import { getUserSchoolId, inActiveSchool } from '@/lib/school';
+import { enforceDailyCap } from '@/lib/daily-caps';
 
 async function publishedLessonForStudent(userId: string, lessonId: string, studentGrade: string | null) {
     const db = createServerSupabase();
@@ -36,7 +37,7 @@ async function publishedLessonForStudent(userId: string, lessonId: string, stude
         title: String(snapshot.title),
         subject: String(snapshot.subject),
         gradeLevel: String(snapshot.gradeLevel ?? lesson.gradelevel ?? ''),
-        objectives: objectives.map((objective) => objective.text).filter(Boolean),
+        objectives: objectives.filter((objective) => objective.text).map((objective) => ({ id: objective.id, text: objective.text })),
     };
 }
 
@@ -113,8 +114,8 @@ export async function POST(req: Request) {
         const body = await req.json().catch(() => ({}));
         const type = typeof body.type === 'string' ? body.type : 'standard';
         const difficulty = typeof body.difficulty === 'string' ? body.difficulty : 'medium';
-        let subject = typeof body.subject === 'string' ? body.subject.trim() : '';
-        let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+        let subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 60) : '';
+        let topic = typeof body.topic === 'string' ? body.topic.trim().slice(0, 100) : '';
         let gradeLevel = '';
         let objectives: string[] = [];
 
@@ -136,12 +137,19 @@ export async function POST(req: Request) {
             subject = published.subject;
             topic = published.title;
             gradeLevel = published.gradeLevel || gradeLevel;
-            objectives = published.objectives;
+            // "Practise this objective" narrows the set to one objective.
+            const focus = typeof body.objectiveId === 'string'
+                ? published.objectives.filter((objective) => objective.id === body.objectiveId)
+                : [];
+            objectives = (focus.length ? focus : published.objectives).map((objective) => objective.text);
         }
 
         if (!subject || !topic) {
             return NextResponse.json({ message: 'Choose a subject and topic to practise.' }, { status: 400 });
         }
+
+        const capResponse = await enforceDailyCap('practice', user.id);
+        if (capResponse) return capResponse;
 
         const lessonContent = [
             `Topic: ${topic}`,

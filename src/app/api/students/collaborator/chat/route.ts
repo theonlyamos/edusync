@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Modality } from '@google/genai';
+import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server';
+import { getUserSchoolId } from '@/lib/school';
+import { enforceDailyCap } from '@/lib/daily-caps';
+
+const MAX_MESSAGE_LENGTH = 2000;
+// A drawn canvas as PNG is well under this; it stops oversized uploads reaching the model.
+const MAX_CANVAS_LENGTH = 8 * 1024 * 1024;
 
 // Ensure the API key is set in environment variables
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -10,13 +17,25 @@ if (!API_KEY) {
 
 export async function POST(request: NextRequest) {
     try {
-        const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
+        // Signed-in school members only.
+        const supabase = await createSSRUserSupabase();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            return NextResponse.json({ error: 'Please sign in to use the collaborator.' }, { status: 401 });
+        }
+        const schoolId = await getUserSchoolId(createServerSupabase(), user.id);
+        if (!schoolId) {
+            return NextResponse.json({ error: 'The collaborator is available to school members.' }, { status: 403 });
+        }
 
-        const body = await request.json();
-        const { message, canvasData }: { message: string; canvasData: string } = body;
+        const body = await request.json().catch(() => ({}));
+        const { message, canvasData }: { message: unknown; canvasData: unknown } = body;
 
-        if (!message || !canvasData) {
+        if (typeof message !== 'string' || !message.trim() || typeof canvasData !== 'string' || !canvasData) {
             return NextResponse.json({ error: 'Missing message or canvasData' }, { status: 400 });
+        }
+        if (message.length > MAX_MESSAGE_LENGTH || canvasData.length > MAX_CANVAS_LENGTH) {
+            return NextResponse.json({ error: 'That message or drawing is too large. Try something shorter.' }, { status: 413 });
         }
 
         const base64Match = canvasData.match(/^data:image\/png;base64,(.+)$/);
@@ -24,6 +43,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid canvasData format. Expected data:image/png;base64,...' }, { status: 400 });
         }
         const base64Image = base64Match[1];
+
+        const capResponse = await enforceDailyCap('collaborator', user.id);
+        if (capResponse) return capResponse;
+
+        const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
 
         const contents = [
             { text: message },
@@ -74,7 +98,6 @@ export async function POST(request: NextRequest) {
 
     } catch (error) {
         console.error('API Route Error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-        return NextResponse.json({ error: 'Internal Server Error', details: errorMessage }, { status: 500 });
+        return NextResponse.json({ error: 'The collaborator could not answer. Please try again.' }, { status: 500 });
     }
 }

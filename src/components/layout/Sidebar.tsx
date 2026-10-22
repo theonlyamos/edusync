@@ -26,7 +26,6 @@ import {
   Building2,
   KeyRound,
   Users2,
-  Sparkles,
   Video,
 } from "lucide-react";
 
@@ -117,47 +116,16 @@ const teacherLinks: SidebarLink[] = [
 ];
 
 const studentLinks: SidebarLink[] = [
-  {
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />,
-    href: '/students/dashboard'
-  },
-  {
-    label: 'Lessons',
-    icon: <Book className="h-5 w-5" />,
-    href: '/students/lessons'
-  },
-  {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/students/homework'},
-  {
-    label: 'Practice',
-    icon: <FileText className="h-5 w-5" />,
-    href: '/students/practice'
-  },
-  {
-    label: 'Time Table',
-    icon: <Calendar className="h-5 w-5" />,
-    href: '/students/timetable'
-  },
-  {
-    label: 'Study Companion',
-    icon: <MessagesSquare className="h-5 w-5" />,
-    href: '/students/tutor'
-  },
-  {
-    label: 'Learn with AI',
-    icon: <Sparkles className="h-5 w-5" />,
-    href: '/students/learn'
-  },
-  {
-    label: 'Live classes',
-    icon: <Video className="h-5 w-5" />,
-    href: '/students/live'
-  },
-  {
-    label: 'Collaborator',
-    icon: <Users className="h-5 w-5" />,
-    href: '/students/collaborator'
-  }
+  { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, href: '/students/dashboard' },
+  // Learn with AI starts from a lesson, so it lives under Lessons.
+  { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/students/lessons' },
+  { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/students/homework' },
+  { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/students/live' },
+  { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/students/timetable' },
+  { label: 'Practice', icon: <FileText className="h-5 w-5" />, href: '/students/practice' },
+  { label: 'Study companion', icon: <MessagesSquare className="h-5 w-5" />, href: '/students/tutor' },
+  { label: 'Collaborator', icon: <Users className="h-5 w-5" />, href: '/students/collaborator' },
+  { label: 'My performance', icon: <BarChart2 className="h-5 w-5" />, href: '/students/homework/performance' },
 ];
 
 interface SidebarProps {
@@ -219,9 +187,14 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
       links = studentLinks;
   }
 
-  const isActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href + '/');
-  };
+  // Highlight only the most specific matching link, so My performance and
+  // Homework aren't both active. The AI tutor counts as part of Lessons.
+  const currentPath = pathname.startsWith('/students/learn') ? '/students/lessons' : pathname;
+  const allHrefs = links.flatMap((link) => [link.href, ...(link.submenu ?? []).map((sub) => sub.href)]);
+  const activeHref = allHrefs
+    .filter((href) => currentPath === href || currentPath.startsWith(href + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+  const isActive = (href: string) => href === activeHref;
   const isCollapsed = !mobile && collapsed;
 
   return (
@@ -258,7 +231,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
                       'mb-1': link.submenu
                     })}
                   >
-                    <Link href={link.href} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
+                    <Link href={link.href} prefetch={false} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
                       <Icon className={isCollapsed ? 'h-8 w-8 p-1' : 'h-5 w-5 mr-3'} />
                       {!isCollapsed && <span className="ml-3">{link.label}</span>}
                     </Link>
@@ -275,7 +248,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
                             asChild
                             className="w-full justify-start"
                           >
-                            <Link href={sublink.href} onClick={onNavigate} className="flex items-center w-full">
+                            <Link href={sublink.href} prefetch={false} onClick={onNavigate} className="flex items-center w-full">
                               <SubIcon className="h-5 w-5 mr-3" />
                               <span>{sublink.label}</span>
                             </Link>

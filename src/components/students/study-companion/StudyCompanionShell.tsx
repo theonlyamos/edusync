@@ -163,7 +163,7 @@ export function StudyCompanionShell() {
 
   useEffect(() => {
     const fetchStudentContext = async () => {
-      const lessonsResult = await fetch('/api/students/lessons').then(
+      const lessonsResult = await fetch('/api/students/lessons?withContent=1').then(
         (value) => ({ status: 'fulfilled' as const, value }),
         (reason) => ({ status: 'rejected' as const, reason }),
       );
@@ -490,7 +490,7 @@ export function StudyCompanionShell() {
           throw new Error('Grade level not found. Please contact your teacher.');
         }
         const body = await response.json().catch(() => null);
-        if (body?.code === 'homework_ai_lock' && typeof body.error === 'string') {
+        if ((body?.code === 'homework_ai_lock' || body?.code === 'daily_cap_reached') && typeof body.error === 'string') {
           throw new Error(body.error);
         }
         if (response.status === 402 && typeof body?.error === 'string') {

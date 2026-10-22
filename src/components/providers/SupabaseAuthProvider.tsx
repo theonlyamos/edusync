@@ -86,6 +86,10 @@ export function SupabaseAuthProvider({ children }: Props) {
 
   const authUser = session?.user;
   const userId = authUser?.id;
+  // Token refreshes hand us a new user object for the same person. Keep the
+  // latest one in a ref so the profile is fetched once per user, not per refresh.
+  const authUserRef = useRef(authUser);
+  useEffect(() => { authUserRef.current = authUser; });
   useEffect(() => {
     let active = true;
     if (!userId) return;
@@ -97,6 +101,8 @@ export function SupabaseAuthProvider({ children }: Props) {
         if (!active) return;
         let user: AppUser | null = existing;
         if (!user) {
+          const authUser = authUserRef.current;
+          if (!authUser || authUser.id !== userId) return;
           const { data } = await axios.post<{ user: AppUser }>('/api/auth/provision', {
             id: authUser.id,
             email: authUser.email,
@@ -113,7 +119,7 @@ export function SupabaseAuthProvider({ children }: Props) {
     };
     provision();
     return () => { active = false; };
-  }, [userId, authUser, supabase]);
+  }, [userId, supabase]);
 
   const currentProfile = profile?.userId === userId ? profile : null;
 
