@@ -10,6 +10,25 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } 
 import { cn } from '@/lib/utils';
 import { HomeworkAiLockBanner, isStudentAiPage } from '@/components/students/HomeworkAiLockBanner';
 
+const STUDENT_PAGE_TITLES: [string, string][] = [
+  ['/students/homework/performance', 'My performance'],
+  ['/students/dashboard', 'Dashboard'],
+  ['/students/lessons', 'Lessons'],
+  ['/students/learn', 'Learn with AI'],
+  ['/students/homework', 'Homework'],
+  ['/students/live', 'Live classes'],
+  ['/students/timetable', 'Timetable'],
+  ['/students/practice', 'Practice'],
+  ['/students/tutor', 'Study companion'],
+  ['/students/collaborator', 'Collaborator'],
+];
+
+/** The page name shown in the phone header. */
+function studentPageTitle(pathname: string | null) {
+  const match = STUDENT_PAGE_TITLES.find(([path]) => pathname === path || pathname?.startsWith(path + '/'));
+  return match?.[1] ?? 'Student Portal';
+}
+
 export interface DashboardLayoutProps {
   children: React.ReactNode;
   role?: string;
@@ -75,7 +94,9 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
                 <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} />
               </DialogContent>
             </Dialog>
-            <span className="text-sm font-semibold">{portalName} Portal</span>
+<span className="truncate text-sm font-semibold">
+              {role === 'student' ? studentPageTitle(pathname) : `${portalName} Portal`}
+            </span>
           </header>
           <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>
         </>

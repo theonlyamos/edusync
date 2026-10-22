@@ -80,14 +80,39 @@ export async function GET(
       : { data: [], error: null };
     if (artifactResult.error) throw artifactResult.error;
 
-    return NextResponse.json(buildStudentLessonDetail({
-      publicationVersion: publication.version,
-      manifest: {
-        lesson: publication.manifest.lesson,
-        objectives,
-      },
-      artifacts: artifactResult.data ?? [],
-    }));
+    // Objectives the student has already mastered in a tutor session.
+    const { data: mastered, error: masteredError } = await supabase
+      .from('learning_events')
+      .select('objective_id,objective_revision')
+      .eq('student_id', session.user.id)
+      .eq('lesson_id', lessonId)
+      .eq('event_type', 'objective_mastered')
+      .limit(500);
+    if (masteredError) throw masteredError;
+    // Mastery counts only for the objective as currently published: a rewrite
+    // bumps its revision, so earlier mastery no longer marks it done. Events
+    // without a revision predate revision tracking and still count.
+    const publishedRevisions = new Map(objectives.map((objective) => [objective.id, objective.revision]));
+    const masteredObjectiveIds = [...new Set((mastered ?? [])
+      .filter((row) => {
+        const id = row.objective_id as string | null;
+        if (!id || !publishedRevisions.has(id)) return false;
+        const revision = row.objective_revision as number | null;
+        return revision == null || revision === publishedRevisions.get(id);
+      })
+      .map((row) => row.objective_id as string))];
+
+    return NextResponse.json({
+      ...buildStudentLessonDetail({
+        publicationVersion: publication.version,
+        manifest: {
+          lesson: publication.manifest.lesson,
+          objectives,
+        },
+        artifacts: artifactResult.data ?? [],
+      }),
+      masteredObjectiveIds,
+    });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }

@@ -29,59 +29,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
-const subjects = [
-  'Mathematics',
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'Computer Science',
-];
+interface PracticeLesson {
+  id: string;
+  title: string;
+  subject: string;
+  objectives: string[];
+}
 
-const topics = {
-  Mathematics: [
-    'Algebra',
-    'Geometry',
-    'Calculus',
-    'Statistics',
-    'Trigonometry',
-  ],
-  Physics: [
-    'Mechanics',
-    'Thermodynamics',
-    'Electricity',
-    'Magnetism',
-    'Optics',
-  ],
-  Chemistry: [
-    'Organic Chemistry',
-    'Inorganic Chemistry',
-    'Physical Chemistry',
-    'Analytical Chemistry',
-  ],
-  Biology: [
-    'Cell Biology',
-    'Genetics',
-    'Ecology',
-    'Evolution',
-    'Physiology',
-  ],
-  'Computer Science': [
-    'Programming',
-    'Data Structures',
-    'Algorithms',
-    'Databases',
-    'Web Development',
-  ],
-};
+const OTHER_TOPIC = '__other__';
 
 const practiceCategories = [
   {
     title: 'Quick Practice',
-    description: 'Short exercises based on recent lessons',
+    description: 'Short exercises on your most recent lesson',
     icon: Target,
     color: 'text-blue-500',
-    bgColor: 'bg-blue-50',
+    bgColor: 'bg-blue-50 dark:bg-blue-950/40',
     type: 'quick',
     difficulty: 'adaptive',
   },
@@ -90,7 +55,7 @@ const practiceCategories = [
     description: 'Complex problems that test your understanding',
     icon: Brain,
     color: 'text-purple-500',
-    bgColor: 'bg-purple-50',
+    bgColor: 'bg-purple-50 dark:bg-purple-950/40',
     type: 'problem_solving',
     difficulty: 'hard',
   },
@@ -99,7 +64,7 @@ const practiceCategories = [
     description: 'Test your knowledge in specific areas',
     icon: Calculator,
     color: 'text-green-500',
-    bgColor: 'bg-green-50',
+    bgColor: 'bg-green-50 dark:bg-green-950/40',
     type: 'assessment',
     difficulty: 'medium',
   },
@@ -108,7 +73,7 @@ const practiceCategories = [
     description: 'Advanced problems for extra practice',
     icon: Lightbulb,
     color: 'text-orange-500',
-    bgColor: 'bg-orange-50',
+    bgColor: 'bg-orange-50 dark:bg-orange-950/40',
     type: 'challenge',
     difficulty: 'expert',
   },
@@ -117,6 +82,9 @@ const practiceCategories = [
 export default function PracticePage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showSetup, setShowSetup] = useState(false);
+  const [lessons, setLessons] = useState<PracticeLesson[]>([]);
+  const [lessonsLoaded, setLessonsLoaded] = useState(false);
+  const [lessonChoice, setLessonChoice] = useState<string>('');
   const [subject, setSubject] = useState<string>('');
   const [topic, setTopic] = useState<string>('');
   const [questions, setQuestions] = useState<any[]>([]);
@@ -128,12 +96,29 @@ export default function PracticePage() {
     averageScore: 0,
     exercisesCompleted: 0,
     streak: 0,
+    recentScores: [] as number[],
   });
   const { toast } = useToast();
 
   useEffect(() => {
     fetchStats();
+    fetchLessons();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchLessons = async () => {
+    try {
+      const response = await fetch('/api/students/lessons');
+      if (!response.ok) throw new Error('Failed to fetch lessons');
+      const data: PracticeLesson[] = await response.json();
+      setLessons(Array.isArray(data) ? data : []);
+    } catch (error) {
+      // Practice still works with a typed topic.
+      console.error('Error fetching lessons for practice:', error);
+    } finally {
+      setLessonsLoaded(true);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -144,6 +129,7 @@ export default function PracticePage() {
         averageScore: data.averageScore || 0,
         exercisesCompleted: data.totalExercisesCompleted || 0,
         streak: data.currentStreak || 0,
+        recentScores: Array.isArray(data.recentScores) ? data.recentScores : [],
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -159,14 +145,19 @@ export default function PracticePage() {
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
+    // Start on the most recent lesson; the student can change it.
+    if (!lessonChoice) setLessonChoice(lessons[0]?.id ?? OTHER_TOPIC);
     setShowSetup(true);
   };
 
+  const chosenLesson = lessons.find((lesson) => lesson.id === lessonChoice) ?? null;
+
   const handleStartPractice = async () => {
-    if (!subject || !topic) {
+    const useLesson = chosenLesson !== null;
+    if (!useLesson && (!subject.trim() || !topic.trim())) {
       toast({
-        title: 'Missing Information',
-        description: 'Please select both a subject and topic.',
+        title: 'Missing information',
+        description: 'Pick one of your lessons, or type a subject and topic.',
         variant: 'destructive',
       });
       return;
@@ -181,24 +172,27 @@ export default function PracticePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subject,
-          topic,
+          ...(useLesson ? { lessonId: chosenLesson.id } : { subject: subject.trim(), topic: topic.trim() }),
           difficulty: category?.difficulty || 'medium',
           type: selectedCategory,
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to generate exercises');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || 'Failed to generate exercises. Please try again.');
 
-      const data = await response.json();
+      if (useLesson) {
+        setSubject(chosenLesson.subject);
+        setTopic(chosenLesson.title);
+      }
       setQuestions(data.questions);
       setShowSetup(false);
       setPracticing(true);
     } catch (error) {
       console.error('Error generating exercises:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to generate exercises. Please try again.',
+        title: 'Could not start practice',
+        description: error instanceof Error ? error.message : 'Failed to generate exercises. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -242,9 +236,9 @@ export default function PracticePage() {
     <DashboardLayout>
       <div className="p-3 sm:p-6">
         <div className="mb-6">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Practice Exercises</h2>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Practice</h1>
           <p className="text-muted-foreground">
-            Choose a category to start practicing
+            Pick a style, then a lesson to practise
           </p>
         </div>
 
@@ -280,7 +274,7 @@ export default function PracticePage() {
 
         {/* Progress Section */}
         <div className="mt-8">
-          <h3 className="text-xl font-semibold mb-4">Your Progress</h3>
+          <h2 className="text-xl font-semibold mb-4">Your progress</h2>
           <Card>
             <CardContent className="pt-6">
               {loadingStats ? (
@@ -293,22 +287,37 @@ export default function PracticePage() {
                     <div className="text-3xl font-bold text-primary mb-2">
                       {stats.averageScore}%
                     </div>
-                    <p className="text-sm text-muted-foreground">Average Score</p>
+                    <p className="text-sm text-muted-foreground">Average score</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-secondary mb-2">
+                    <div className="text-3xl font-bold text-foreground mb-2">
                       {stats.exercisesCompleted}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Exercises Completed
+                      Exercises completed
                     </p>
                   </div>
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-accent mb-2">
+                    <div className="text-3xl font-bold text-foreground mb-2">
                       {stats.streak}
                     </div>
-                    <p className="text-sm text-muted-foreground">Practice Streak</p>
+                    <p className="text-sm text-muted-foreground">Day streak</p>
                   </div>
+                  {stats.recentScores.length > 0 && (
+                    <div className="md:col-span-3">
+                      <p className="mb-2 text-sm font-medium">Recent scores</p>
+                      <div className="flex flex-wrap gap-2">
+                        {stats.recentScores.slice(-10).reverse().map((score, index) => (
+                          <span
+                            key={index}
+                            className="rounded-md border px-2 py-1 text-sm tabular-nums"
+                          >
+                            {Math.round(score)}%
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -319,48 +328,60 @@ export default function PracticePage() {
         <Dialog open={showSetup} onOpenChange={setShowSetup}>
           <DialogContent className="w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Practice Setup</DialogTitle>
+              <DialogTitle>Set up practice</DialogTitle>
               <DialogDescription>
-                Choose a subject and topic to begin practicing
+                Questions are built from the lesson you pick.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Subject</Label>
-                <Select value={subject} onValueChange={setSubject}>
-                  <SelectTrigger className="min-h-11">
-                    <SelectValue placeholder="Select a subject" />
+                <Label htmlFor="practice-lesson">Lesson</Label>
+                <Select value={lessonChoice} onValueChange={setLessonChoice} disabled={!lessonsLoaded}>
+                  <SelectTrigger id="practice-lesson" className="min-h-11">
+                    <SelectValue placeholder={lessonsLoaded ? 'Choose a lesson' : 'Loading your lessons…'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {subjects.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
+                    {lessons.map((lesson) => (
+                      <SelectItem key={lesson.id} value={lesson.id}>
+                        {lesson.title} · {lesson.subject}
                       </SelectItem>
                     ))}
+                    <SelectItem value={OTHER_TOPIC}>Something else…</SelectItem>
                   </SelectContent>
                 </Select>
+                {chosenLesson && chosenLesson.objectives.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Covers {chosenLesson.objectives.length} objective{chosenLesson.objectives.length === 1 ? '' : 's'} from this lesson.
+                  </p>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label>Topic</Label>
-                <Select
-                  value={topic}
-                  onValueChange={setTopic}
-                  disabled={!subject}
-                >
-                  <SelectTrigger className="min-h-11">
-                    <SelectValue placeholder="Select a topic" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subject &&
-                      topics[subject as keyof typeof topics].map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!chosenLesson && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="practice-subject">Subject</Label>
+                    <Input
+                      id="practice-subject"
+                      className="min-h-11"
+                      placeholder="e.g. Mathematics"
+                      value={subject}
+                      maxLength={60}
+                      onChange={(event) => setSubject(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="practice-topic">Topic</Label>
+                    <Input
+                      id="practice-topic"
+                      className="min-h-11"
+                      placeholder="e.g. Fractions"
+                      value={topic}
+                      maxLength={100}
+                      onChange={(event) => setTopic(event.target.value)}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 [&>button]:min-h-11 xl:[&>button]:min-h-0">
               <Button variant="outline" onClick={() => setShowSetup(false)}>
@@ -376,7 +397,7 @@ export default function PracticePage() {
                     Generating...
                   </>
                 ) : (
-                  'Start Practice'
+                  'Start practice'
                 )}
               </Button>
             </div>

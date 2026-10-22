@@ -32,6 +32,7 @@ import {
   type DashboardLiveClass,
   type StudentHomeworkState,
 } from '@/lib/dashboard';
+import { liveClassPhase } from '@/lib/live-class-phase';
 import type { PracticeStats } from '@/lib/practice-stats';
 
 export const dynamic = 'force-dynamic';
@@ -170,7 +171,7 @@ export default function StudentDashboard() {
               <div className="space-y-4">
                 <div className="rounded-lg border p-4">
                   <p className="text-xs text-muted-foreground">
-                    {nextClass.status === 'live' ? 'Happening now' : 'Next class'}
+                    {liveClassPhase(nextClass, now) === 'now' ? 'Happening now' : 'Next class'}
                   </p>
                   <p className="font-medium break-words">{nextClass.title}</p>
                   <p className="text-sm text-muted-foreground break-words">
@@ -179,7 +180,7 @@ export default function StudentDashboard() {
                   </p>
                   {joinById.get(nextClass.id)?.joinAllowed ? (
                     <Button size="sm" className="mt-3 min-h-11 xl:min-h-0" asChild>
-                      <Link href={`/students/live/${nextClass.id}`}>Join live session</Link>
+                      <Link href={(nextClass as { enrolled?: boolean }).enrolled === false ? '/students/live' : `/students/live/${nextClass.id}`}>Join live session</Link>
                     </Button>
                   ) : (
                     <p className="mt-2 text-xs text-muted-foreground">{joinById.get(nextClass.id)?.joinHint}</p>

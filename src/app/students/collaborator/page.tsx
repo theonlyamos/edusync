@@ -203,8 +203,13 @@ export default function CollaboratorPage() {
         }
       }
     },
-    onError() {
-      toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
+    onError(error) {
+      const serverMessage = axios.isAxiosError(error) ? error.response?.data?.error : null;
+      toast({
+        title: 'Message not sent',
+        description: typeof serverMessage === 'string' ? serverMessage : 'Failed to send message',
+        variant: 'destructive',
+      });
     }
   });
 
