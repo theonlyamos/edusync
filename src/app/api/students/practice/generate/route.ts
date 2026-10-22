@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
 import { getUserSchoolId, inActiveSchool } from '@/lib/school';
+import { enforceDailyCap } from '@/lib/daily-caps';
 
 async function publishedLessonForStudent(userId: string, lessonId: string, studentGrade: string | null) {
     const db = createServerSupabase();
@@ -146,6 +147,9 @@ export async function POST(req: Request) {
         if (!subject || !topic) {
             return NextResponse.json({ message: 'Choose a subject and topic to practise.' }, { status: 400 });
         }
+
+        const capResponse = await enforceDailyCap('practice', user.id);
+        if (capResponse) return capResponse;
 
         const lessonContent = [
             `Topic: ${topic}`,

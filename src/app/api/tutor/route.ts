@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { generateAICompletion } from '@/lib/ai';
 import { rateLimit } from '@/lib/rate-limiter';
+import { enforceDailyCap } from '@/lib/daily-caps';
 import {
     LessonAccessError,
     MAX_STORED_MESSAGES,
@@ -129,6 +130,9 @@ export async function POST(req: NextRequest) {
                 { status: 400 }
             );
         }
+
+        const capResponse = await enforceDailyCap('companion', user.id);
+        if (capResponse) return capResponse;
 
         const { chatId, content, mode, intent, panelDimensions } = parsedBody.data;
         const gradeLevel = student?.grade ?? "the student's current level";
