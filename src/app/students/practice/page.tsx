@@ -121,6 +121,7 @@ export default function PracticePage() {
   const [topic, setTopic] = useState<string>('');
   const [questions, setQuestions] = useState<any[]>([]);
   const [practicing, setPracticing] = useState(false);
+  const [attemptKey, setAttemptKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingStats, setLoadingStats] = useState(true);
   const [stats, setStats] = useState({
@@ -205,30 +206,32 @@ export default function PracticePage() {
     }
   };
 
-  const handlePracticeComplete = async (score: number) => {
-    setLoadingStats(true);
-    try {
-      await fetchStats();
-      setPracticing(false);
-      setSelectedCategory(null);
-      toast({
-        title: 'Practice Complete!',
-        description: `You scored ${score}%. Keep up the good work!`,
-      });
-    } finally {
-      setLoadingStats(false);
-    }
+  // Keep the results on screen; only refresh the stats behind them.
+  const handlePracticeComplete = async () => {
+    await fetchStats();
+  };
+
+  const handleBackToPractice = () => {
+    setPracticing(false);
+    setSelectedCategory(null);
+    setQuestions([]);
   };
 
   if (practicing) {
     return (
       <DashboardLayout>
         <div className="p-3 sm:p-6 max-w-4xl mx-auto">
+          <Button variant="outline" onClick={handleBackToPractice} className="mb-4 min-h-11 xl:min-h-0">
+            Back to practice
+          </Button>
           <PracticeExercise
+            key={attemptKey}
             subject={subject}
             topic={topic}
             questions={questions}
             onComplete={handlePracticeComplete}
+            onRetry={() => setAttemptKey((key) => key + 1)}
+            onGenerateNew={handleBackToPractice}
           />
         </div>
       </DashboardLayout>

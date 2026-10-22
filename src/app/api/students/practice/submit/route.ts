@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
-import { nextPracticeStatsRow, practiceStatsFromRow } from '@/lib/practice-stats';
+import { nextPracticeStatsRow, practiceAnswerIsCorrect, practiceStatsFromRow } from '@/lib/practice-stats';
 
 interface Answer {
     questionId: string;
-    answer: string;
+    answer: string | string[];
 }
 
 interface Question {
     id: string;
-    correctAnswer: string;
+    type?: string;
+    correctAnswer: string | string[];
     points: number;
     explanation: string;
 }
@@ -35,22 +36,26 @@ export async function POST(req: Request) {
         }
 
         const { answers, questions, subject, topic } = await req.json();
+        if (!Array.isArray(answers) || !Array.isArray(questions) || !questions.length || !subject || !topic) {
+            return NextResponse.json({ message: 'Missing practice answers' }, { status: 400 });
+        }
         const studentAnswers = answers as Answer[];
-        const exerciseQuestions = questions as Question[];
+        const exerciseQuestions = (questions as Question[]).slice(0, 20);
 
         // Calculate score
         let totalPoints = 0;
         let earnedPoints = 0;
         const results = exerciseQuestions.map(question => {
+            const points = Math.min(Math.max(Number(question.points) || 1, 1), 5);
             const studentAnswer = studentAnswers.find(a => a.questionId === question.id);
-            const isCorrect = studentAnswer?.answer.toLowerCase() === question.correctAnswer.toLowerCase();
-            totalPoints += question.points;
-            if (isCorrect) earnedPoints += question.points;
+            const isCorrect = practiceAnswerIsCorrect(studentAnswer?.answer, question.correctAnswer);
+            totalPoints += points;
+            if (isCorrect) earnedPoints += points;
 
             return {
                 questionId: question.id,
                 isCorrect,
-                points: isCorrect ? question.points : 0,
+                points: isCorrect ? points : 0,
                 explanation: question.explanation
             };
         });
@@ -58,7 +63,7 @@ export async function POST(req: Request) {
         const score = {
             earnedPoints,
             totalPoints,
-            percentage: Math.round((earnedPoints / totalPoints) * 100)
+            percentage: totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0
         };
 
         const completedAt = new Date().toISOString();
@@ -68,8 +73,8 @@ export async function POST(req: Request) {
             .from('practice_results')
             .insert({
                 student_id: user.id,
-                subject,
-                topic,
+                subject: String(subject).slice(0, 200),
+                topic: String(topic).slice(0, 200),
                 score,
                 results,
                 completedat: completedAt,

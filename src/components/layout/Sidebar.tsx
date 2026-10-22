@@ -16,7 +16,6 @@ import {
   MessagesSquare,
   Users,
   Calendar,
-  BarChart,
   FileCheck,
   ListChecks,
   FilePlus,
@@ -187,16 +186,6 @@ const studentLinks: SidebarLink[] = [
     label: 'Collaborator',
     icon: <Users className="h-5 w-5" />,
     href: '/students/collaborator'
-  },
-  {
-    label: 'Assessments',
-    icon: <FileCheck className="h-5 w-5" />,
-    href: '/assessments'
-  },
-  {
-    label: 'Illustrator',
-    icon: <BarChart className="h-5 w-5" />,
-    href: '/students/illustrator'
   }
 ];
 

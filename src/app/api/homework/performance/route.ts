@@ -24,21 +24,35 @@ export async function GET() {
     if (memberError) throw memberError;
     if (!members?.length)
       return NextResponse.json({ ...aggregatePerformance([]), objectives: [] });
-    const attempts = await readAll(
+    const organizationIds = new Set(members.map((m) => m.organization_id));
+    // homework_attempts has no direct foreign key to homeworks (it goes through
+    // homework_recipients), so attempts and homeworks are read separately.
+    const submitted = await readAll(
       (from, to) =>
         db
           .from("homework_attempts")
-          .select("*,homeworks!inner(*)")
+          .select("*")
           .eq("student_id", user.id)
           .not("submitted_at", "is", null)
-          .in(
-            "homeworks.organization_id",
-            members.map((m) => m.organization_id),
-          )
           .order("id")
           .range(from, to),
       5000,
     );
+    const homeworkIds = [...new Set((submitted ?? []).map((a) => a.homework_id as string))];
+    const homeworks = new Map<string, Homework>();
+    for (let offset = 0; offset < homeworkIds.length; offset += 150) {
+      const { data, error } = await db
+        .from("homeworks")
+        .select("*")
+        .in("id", homeworkIds.slice(offset, offset + 150));
+      if (error) throw error;
+      for (const h of (data ?? []) as Homework[])
+        if (h.organization_id && organizationIds.has(h.organization_id)) homeworks.set(h.id, h);
+    }
+    const attempts = (submitted ?? []).flatMap((a) => {
+      const homework = homeworks.get(a.homework_id as string);
+      return homework ? [{ ...a, homeworks: homework }] : [];
+    });
     // shortcut: cap one performance request at 5000 attempts; add server pagination before larger histories.
     const entries: {
       homeworkId: string;

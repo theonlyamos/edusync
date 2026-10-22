@@ -180,10 +180,17 @@ describe("homework policy lookup with the deployed foreign-key path", () => {
     await expect(editableHomeworkForUser("student-1")).resolves.toBeNull();
   });
 
-  it("allows overdue homework while late work remains accepted", async () => {
+  it("stops pausing AI tools once the homework is due, even when late work is accepted", async () => {
     state.tables.homeworks[0].due_at = "2026-10-12T12:00:00Z";
     state.tables.homeworks[0].accept_late = true;
-    await expect(editableHomeworkForUser("student-1")).resolves.toMatchObject({ homework_id: "homework-1" });
+    await expect(editableHomeworkForUser("student-1")).resolves.toBeNull();
+  });
+
+  it("returns the homework title for the student's banner", async () => {
+    state.tables.homeworks[0].title = "Forces check-in";
+    await expect(editableHomeworkForUser("student-1")).resolves.toMatchObject({
+      homework_recipients: { homeworks: { id: "homework-1", title: "Forces check-in" } },
+    });
   });
 
   it("rejects homework after its closing time", async () => {

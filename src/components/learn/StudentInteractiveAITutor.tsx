@@ -31,6 +31,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
   const [lessonDetail, setLessonDetail] = useState<StudentLessonDetail | null>(null);
   const [lessonLoading, setLessonLoading] = useState(!!lessonIdFromUrl);
   const [lessonError, setLessonError] = useState<string | null>(null);
+  const [lessonUnavailable, setLessonUnavailable] = useState(false);
 
   // Fetch lesson content if lessonId is provided
   useEffect(() => {
@@ -43,8 +44,12 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       try {
         setLessonLoading(true);
         setLessonError(null);
+        setLessonUnavailable(false);
         const response = await fetch(`/api/students/lessons/${lessonIdFromUrl}`);
         const data = await response.json().catch(() => ({}));
+        if (response.status === 403 || response.status === 404) {
+          setLessonUnavailable(true);
+        }
         if (!response.ok) throw new Error(data.error || 'Failed to load lesson');
         setLessonDetail(data);
       } catch (error) {
@@ -92,8 +97,14 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
           <h1 className="mt-4 text-xl font-semibold">Tutor session unavailable</h1>
           <p className="mt-2 text-sm leading-6 text-slate-300">{blockingError}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3 [&>button]:min-h-11">
-            <Button onClick={() => window.location.reload()}>Try again</Button>
-            <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => window.location.assign(`/students/lessons/${lessonIdFromUrl}`)}>Back to lesson</Button>
+            {lessonUnavailable ? (
+              <Button onClick={() => window.location.assign('/students/lessons')}>Back to lessons</Button>
+            ) : (
+              <>
+                <Button onClick={() => window.location.reload()}>Try again</Button>
+                <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => window.location.assign(`/students/lessons/${lessonIdFromUrl}`)}>Back to lesson</Button>
+              </>
+            )}
           </div>
         </div>
       </div>

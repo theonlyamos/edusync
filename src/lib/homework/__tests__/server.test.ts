@@ -191,25 +191,31 @@ describe("homework server trust boundary", () => {
     ).toHaveLength(1);
   });
   it("keeps changed objective revisions separate in released performance", async () => {
+    // Attempts and homeworks are read separately: homework_attempts has no
+    // direct foreign key to homeworks, so the API cannot embed them.
+    state.list = true;
+    state.tables.homeworks = [1, 2, 3].map((n) => ({
+      id: `homework-${n}`,
+      organization_id: "school",
+      lesson_id: "lesson",
+      title: "Forces",
+      subject: "Science",
+      questions: [{ id: "q", points: 4, objectiveId: "objective" }],
+      objectives: [
+        {
+          id: "objective",
+          revision: n === 3 ? 2 : 1,
+          text: n === 3 ? "Explain force direction" : "Identify forces",
+        },
+      ],
+    }));
     state.tables.homework_attempts = [1, 2, 3].map((n) => ({
       id: `attempt-${n}`,
+      homework_id: `homework-${n}`,
       student_id: state.id,
       attempt_number: 1,
       late: false,
-      homeworks: {
-        id: `homework-${n}`,
-        lesson_id: "lesson",
-        title: "Forces",
-        subject: "Science",
-        questions: [{ id: "q", points: 4, objectiveId: "objective" }],
-        objectives: [
-          {
-            id: "objective",
-            revision: n === 3 ? 2 : 1,
-            text: n === 3 ? "Explain force direction" : "Identify forces",
-          },
-        ],
-      },
+      submitted_at: "2026-10-08T12:00:00Z",
     }));
     state.tables.homework_grades = [1, 2, 3].map((n) => ({
       attempt_id: `attempt-${n}`,

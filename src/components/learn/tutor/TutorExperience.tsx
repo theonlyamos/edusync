@@ -672,7 +672,13 @@ export const TutorExperience = ({
 
   const currentObjectiveArtifact = objectiveLearning?.artifacts.at(-1);
   const preparingActivity = generatingVisualization || Boolean(objectiveLearning?.activityLoading);
-  const activityError = objectiveLearning?.error || error;
+  const studentBackHref = variant === 'student'
+    ? (lessonContext?.lessonId ? `/students/lessons/${lessonContext.lessonId}` : '/students/dashboard')
+    : undefined;
+  const studentBackLabel = lessonContext?.lessonId ? 'Back to lesson' : 'Back to dashboard';
+  const startOverlayVisible = (!voiceActive || connectionStatus !== 'connected') && !showFeedbackForm;
+  // The start overlay already shows voice errors; don't repeat them behind it.
+  const activityError = objectiveLearning?.error || (startOverlayVisible ? '' : error);
   const objectiveActivityControls = objectiveLearning?.runId ? (
     <div className="flex flex-wrap items-center justify-center gap-2">
       <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
@@ -689,7 +695,7 @@ export const TutorExperience = ({
       {/* Lesson context indicator (student) */}
       {lessonContext?.title && !voiceActive && lessonIndicator}
 
-      {(!voiceActive || (voiceActive && connectionStatus !== 'connected')) && !showFeedbackForm && (
+      {startOverlayVisible && (
         <div className="absolute inset-0 z-30">
           {creditsEnabled ? (
             <StartButtonOverlay
@@ -698,6 +704,8 @@ export const TutorExperience = ({
                 setVoiceActive(true);
               }}
               error={error}
+              backHref={studentBackHref}
+              backLabel={studentBackLabel}
               connectionStatus={connectionStatus}
               creditsLoading={creditsLoading}
               outOfCredits={credits !== null && credits <= 0}
@@ -710,6 +718,8 @@ export const TutorExperience = ({
                 setVoiceActive(true);
               }}
               error={error}
+              backHref={studentBackHref}
+              backLabel={studentBackLabel}
               connectionStatus={connectionStatus}
               hideCredits={true}
             />

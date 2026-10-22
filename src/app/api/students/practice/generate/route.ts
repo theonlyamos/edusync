@@ -54,11 +54,6 @@ const exercisesSchema = z.object({
     questions: z.array(questionSchema)
 });
 
-// Zod schema for the request body
-const generatePracticeSchema = z.object({
-    lessonId: z.string().min(1, "Lesson ID is required"),
-});
-
 export async function POST(req: Request) {
     try {
         const supabase = await createSSRUserSupabase();
@@ -79,16 +74,51 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Unauthorized - Student access required' }, { status: 403 });
         }
 
-        const { difficulty, subject, topic, type } = await req.json();
+        const body = await req.json().catch(() => ({}));
+        const type = typeof body.type === 'string' ? body.type : 'standard';
+        const difficulty = typeof body.difficulty === 'string' ? body.difficulty : 'medium';
+        let subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+        let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+        let gradeLevel = '';
+        let objectives: string[] = [];
 
-        let lessonContent = '';
+        const { data: student } = await supabase
+            .from('students')
+            .select('grade')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        gradeLevel = student?.grade ?? '';
 
-        lessonContent = `
-Topic: ${topic}
-Subject: ${subject}
-Difficulty: ${difficulty}
-Preferences: ${type}
-`;
+        // Practice started from a lesson is built from that lesson. The lesson
+        // must be published and for the student's grade, same as the lesson list.
+        if (typeof body.lessonId === 'string' && body.lessonId) {
+            const { data: lesson, error: lessonError } = await supabase
+                .from('lessons')
+                .select('id,title,subject,gradelevel,objectives,current_publication_id')
+                .eq('id', body.lessonId)
+                .maybeSingle();
+            if (lessonError) throw lessonError;
+            if (!lesson || !lesson.current_publication_id || (lesson.gradelevel && lesson.gradelevel !== student?.grade)) {
+                return NextResponse.json({ message: 'This lesson is not available for practice.' }, { status: 404 });
+            }
+            subject = lesson.subject;
+            topic = lesson.title;
+            gradeLevel = lesson.gradelevel ?? gradeLevel;
+            objectives = Array.isArray(lesson.objectives) ? lesson.objectives.filter(Boolean) : [];
+        }
+
+        if (!subject || !topic) {
+            return NextResponse.json({ message: 'Choose a subject and topic to practise.' }, { status: 400 });
+        }
+
+        const lessonContent = [
+            `Topic: ${topic}`,
+            `Subject: ${subject}`,
+            gradeLevel ? `Student grade level: ${gradeLevel.toUpperCase()}` : '',
+            objectives.length ? `Lesson objectives:\n${objectives.map((o) => `- ${o}`).join('\n')}` : '',
+            `Difficulty: ${difficulty}`,
+            `Preferences: ${type}`,
+        ].filter(Boolean).join('\n');
 
         const prompt = `Create a set of ${type === 'quick' ? '3' : '5'} multiple choice practice exercises for:
 Based on the following context:
@@ -147,7 +177,7 @@ Requirements:
 5. For 'true_false', options MUST be ["True", "False"].
 6. For 'short_answer', there MUST be no 'options' field.
 7. Include detailed explanations for each answer.
-8. Make questions challenging but appropriate for the subject, topic and difficulty level logic.
+8. Make questions challenging but appropriate for the student's grade level, subject, topic and difficulty. When lesson objectives are given, cover them.
 9. Questions should be relevant to the subject and topic.`;
 
         const generatedContent = await generateAICompletion(

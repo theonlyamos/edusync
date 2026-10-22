@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { HomeworkAiLockBanner, isStudentAiPage } from '@/components/students/HomeworkAiLockBanner';
 
 export interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -79,6 +80,7 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
         </>
       ) : role && <Sidebar role={role} />}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {role === 'student' && isStudentAiPage(pathname) && <HomeworkAiLockBanner />}
         {fullBleed ? (
           children
         ) : (

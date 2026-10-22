@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
+import { voiceErrorMessage } from '@/lib/live-tutor/voice-errors';
 
 interface VoiceControlProps {
   /** Whether mic streaming should be active */
@@ -111,7 +112,7 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
       } catch (err: any) {
         if (generation !== activationGenerationRef.current) return;
         console.error('VoiceControl streaming error:', err);
-        onError?.(err.message || 'Voice streaming failed');
+        onError?.(voiceErrorMessage(err, 'start'));
         onStartupFailed?.();
       }
     };

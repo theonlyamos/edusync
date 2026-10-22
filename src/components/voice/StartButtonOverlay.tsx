@@ -10,15 +10,18 @@ interface StartButtonOverlayProps {
   creditsLoading?: boolean;
   hideCredits?: boolean;
   error?: string;
+  /** Where students go if they'd rather not start a voice session. */
+  backHref?: string;
+  backLabel?: string;
 }
 
-export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error, backHref, backLabel = 'Back' }: StartButtonOverlayProps) {
   const isConnecting = connectionStatus === 'connecting';
 
   // Skip credit loading check if hideCredits is true
   if (!hideCredits && creditsLoading) {
     return (
-      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10">
+      <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center z-10">
         <Loader className="w-12 h-12 animate-spin" />
         {/* <div className="mt-4 text-lg font-medium">Checking credits...</div> */}
       </div>
@@ -28,7 +31,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
   // Skip out of credits check if hideCredits is true
   if (!hideCredits && outOfCredits) {
     return (
-      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10 p-6">
+      <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 p-6">
         <div className="flex flex-col items-center text-center">
           <div className="w-24 h-24 rounded-full border border-yellow-300 bg-yellow-100/60 flex items-center justify-center">
             <AlertTriangle className="w-12 h-12 text-yellow-700" />
@@ -48,7 +51,7 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
   }
 
   return (
-    <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center z-10">
+    <div className="absolute inset-0 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center z-10">
       <Button
         onClick={onStart}
         size="lg"
@@ -66,6 +69,11 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
         {isConnecting ? 'Connecting...' : error ? 'Try again' : 'Start Learning'}
       </div>
       {error && <div role="alert" className="mx-6 mt-4 max-w-md rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
+      {backHref && !isConnecting && (
+        <a href={backHref} className="mt-6 inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+          {backLabel}
+        </a>
+      )}
     </div>
   );
 }
