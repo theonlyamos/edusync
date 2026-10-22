@@ -50,8 +50,28 @@ export async function GET(request: NextRequest) {
   for (const e of organized || []) byId.set(e.id as string, e as Record<string, unknown>)
   for (const e of enrolledEvents) byId.set(e.id as string, e)
 
-  const merged = Array.from(byId.values())
   const me = await fetchStudentPlacement(supabase, auth.userId)
+
+  // Students who joined the school after a class was scheduled were never
+  // auto-enrolled. Show them their school's open classes too; Join enrolls them.
+  if (me.isStudent && me.organizationId) {
+    const { data: open } = await supabase
+      .from('live_class_events')
+      .select(LIVE_CLASS_LIST_SELECT)
+      .eq('organization_id', me.organizationId)
+      .not('status', 'in', '(ended,cancelled)')
+      .gt('scheduled_end_at', new Date().toISOString())
+      .order('scheduled_start_at', { ascending: true })
+      .limit(100)
+    for (const e of open || []) {
+      if (!byId.has(e.id as string)) byId.set(e.id as string, { ...(e as Record<string, unknown>), enrolled: false })
+    }
+  }
+
+  const enrolledSet = new Set(enrolledIds)
+  const merged = Array.from(byId.values()).map((e) =>
+    e.enrolled === false ? e : { ...e, enrolled: enrolledSet.has(e.id as string) || e.organizer_id === auth.userId }
+  )
   const items = merged.filter((e) => {
     const orgId = e.organizer_id as string
     if (orgId === auth.userId) return true

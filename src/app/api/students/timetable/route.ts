@@ -21,7 +21,7 @@ export async function GET() {
             .maybeSingle();
         if (studentError) throw studentError;
         if (!student?.grade || !student.organization_id) {
-            return NextResponse.json({ timeTable: {}, periods: [], teachers: [], lessons: [] });
+            return NextResponse.json({ timeTable: {}, periods: [] });
         }
 
         const { data: row, error } = await supabase
@@ -51,7 +51,7 @@ export async function GET() {
             }
         }
 
-        return NextResponse.json({ timeTable, periods: timetable.periods, teachers: [], lessons: [] });
+        return NextResponse.json({ timeTable, periods: timetable.periods });
     } catch (error) {
         console.error('[TIMETABLE_GET]', error);
         return new NextResponse('Internal Error', { status: 500 });
