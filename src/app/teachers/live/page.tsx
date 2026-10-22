@@ -37,6 +37,10 @@ import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick'
 import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window'
 import { CalendarPlus, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { GRADE_LEVELS } from '@/lib/constants'
+import { formatDateTimeRange } from '@/lib/format-date'
+import { formatGrade } from '@/lib/grade'
+import { groupLiveClasses, startsInLabel, type LiveClassPhase } from '@/lib/live-class-phase'
+import { Badge } from '@/components/ui/badge'
 
 type LessonOption = { _id: string; title: string; subject?: string }
 
@@ -60,6 +64,7 @@ function lessonTitleFromEmbed(lessons: LessonsEmbed | undefined): string | null 
 }
 
 const DEFAULT_TITLE = 'Live tutoring session'
+const PAST_PAGE = 10
 
 function toDatetimeLocalValue(iso: string): string {
   const d = new Date(iso)
@@ -88,6 +93,9 @@ export default function TeachersLiveClassesPage() {
   const prevGradeForLessonsRef = useRef('')
   const editLessonIdRef = useRef('')
   const joinTick = useLiveClassJoinTick()
+  const [pastShown, setPastShown] = useState(PAST_PAGE)
+  const now = useMemo(() => new Date(), [joinTick, items]) // eslint-disable-line react-hooks/exhaustive-deps
+  const groups = useMemo(() => groupLiveClasses(items, now), [items, now])
   const lobbyMinutes = getClientLiveClassLobbyMinutes()
   const joinById = useMemo(
     () => liveClassJoinStatesByEventId(items, lobbyMinutes, new Date()),
@@ -330,9 +338,81 @@ export default function TeachersLiveClassesPage() {
     }
   }
 
+  const renderCard = (ev: EventRow, phase: LiveClassPhase) => {
+    const lt = lessonTitleFromEmbed(ev.lessons)
+    const startsIn = phase === 'upcoming' ? startsInLabel(ev.scheduled_start_at, now) : null
+    const row = joinById.get(ev.id)
+    const joinAllowed = row?.joinAllowed ?? false
+    const joinHint = row?.joinHint ?? ''
+    return (
+      <li key={ev.id}>
+        <Card className={phase === 'now' ? 'border-primary' : phase === 'past' ? 'opacity-90' : undefined}>
+          <CardHeader className="pb-2">
+            <div className="flex flex-row items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">{ev.title}</CardTitle>
+                  {phase === 'now' && <Badge>Happening now</Badge>}
+                  {startsIn && <Badge variant="secondary">{startsIn}</Badge>}
+                  {ev.status === 'cancelled' && <Badge variant="outline">Cancelled</Badge>}
+                </div>
+                <CardDescription>
+                  {[ev.grade_level ? formatGrade(ev.grade_level) : null, lt].filter(Boolean).join(' · ')}
+                  <span className="block mt-1">{formatDateTimeRange(ev.scheduled_start_at, ev.scheduled_end_at)}</span>
+                </CardDescription>
+              </div>
+              <div className="flex shrink-0 gap-0.5">
+                {phase !== 'past' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    aria-label="Edit live class"
+                    onClick={() => openEditScheduleModal(ev)}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  aria-label="Delete live class"
+                  onClick={() => setDeleteTarget(ev)}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            {phase === 'past' ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/teachers/live/${ev.id}/summary`}>View summary</Link>
+              </Button>
+            ) : joinAllowed ? (
+              <Button asChild size="sm">
+                <Link href={`/teachers/live/${ev.id}`}>Enter live classroom</Link>
+              </Button>
+            ) : (
+              <Button size="sm" disabled title={joinHint}>
+                Enter live classroom
+              </Button>
+            )}
+            {phase !== 'past' && joinHint ? (
+              <p className="text-xs text-muted-foreground max-w-lg">{joinHint}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </li>
+    )
+  }
+
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-3xl mx-auto space-y-8">
+      <div className="max-w-3xl space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Live classes</h1>
@@ -489,73 +569,32 @@ export default function TeachersLiveClassesPage() {
             </CardContent>
           </Card>
         ) : (
-          <ul className="space-y-4">
-            {items.map((ev) => {
-              const lt = lessonTitleFromEmbed(ev.lessons)
-              const statusLabel = ev.status ? ev.status.charAt(0).toUpperCase() + ev.status.slice(1) : ''
-              const row = joinById.get(ev.id)
-              const joinAllowed = row?.joinAllowed ?? false
-              const joinHint = row?.joinHint ?? ''
-              return (
-                <li key={ev.id}>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <div className="flex flex-row items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <CardTitle className="text-lg">{ev.title}</CardTitle>
-                          <CardDescription>
-                            {ev.grade_level ? <span className="block">Grade: {ev.grade_level}</span> : null}
-                            {lt ? <span className="block">Lesson: {lt}</span> : null}
-                            <span className="block mt-1">
-                              {new Date(ev.scheduled_start_at).toLocaleString()} –{' '}
-                              {new Date(ev.scheduled_end_at).toLocaleString()}
-                              {statusLabel ? ` · ${statusLabel}` : null}
-                            </span>
-                          </CardDescription>
-                        </div>
-                        <div className="flex shrink-0 gap-0.5">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            aria-label="Edit live class"
-                            onClick={() => openEditScheduleModal(ev)}
-                          >
-                            <Pencil className="h-4 w-4" aria-hidden />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            aria-label="Delete live class"
-                            onClick={() => setDeleteTarget(ev)}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2 pt-0">
-                      {joinAllowed ? (
-                        <Button asChild size="sm">
-                          <Link href={`/teachers/live/${ev.id}`}>Enter live classroom</Link>
-                        </Button>
-                      ) : (
-                        <Button size="sm" disabled title={joinHint}>
-                          Enter live classroom
-                        </Button>
-                      )}
-                      {joinHint ? (
-                        <p className="text-xs text-muted-foreground max-w-lg">{joinHint}</p>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="space-y-8">
+            {groups.now.length + groups.upcoming.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No upcoming classes. Use &quot;Schedule live class&quot; to plan the next one.
+              </p>
+            ) : (
+              <section className="space-y-3" aria-labelledby="live-upcoming">
+                <h2 id="live-upcoming" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Upcoming</h2>
+                <ul className="space-y-4">
+                  {groups.now.map((ev) => renderCard(ev, 'now'))}
+                  {groups.upcoming.map((ev) => renderCard(ev, 'upcoming'))}
+                </ul>
+              </section>
+            )}
+            {groups.past.length > 0 && (
+              <section className="space-y-3" aria-labelledby="live-past">
+                <h2 id="live-past" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Past</h2>
+                <ul className="space-y-4">{groups.past.slice(0, pastShown).map((ev) => renderCard(ev, 'past'))}</ul>
+                {groups.past.length > pastShown && (
+                  <Button variant="outline" size="sm" onClick={() => setPastShown((n) => n + PAST_PAGE)}>
+                    Show more past classes
+                  </Button>
+                )}
+              </section>
+            )}
+          </div>
         )}
 
         <AlertDialog

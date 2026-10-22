@@ -1,4 +1,5 @@
 import { GRADE_LEVELS } from './constants';
+import { formatDate } from '@/lib/format-date';
 
 type LessonRecord = Record<string, unknown> & {
   id?: string;
@@ -23,8 +24,7 @@ export function mapLessonRecord<T extends LessonRecord>(record: T) {
 
 export function formatLessonDate(value: unknown): string {
   if (typeof value !== 'string' && !(value instanceof Date)) return 'Not available';
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString();
+  return formatDate(value);
 }
 
 export type LessonStatus = 'draft' | 'live' | 'archived';

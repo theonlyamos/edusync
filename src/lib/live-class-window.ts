@@ -1,3 +1,4 @@
+import { formatDateTime, formatTime } from './format-date'
 /** Default lobby before scheduled start; keep in sync with server (`LIVE_CLASS_LOBBY_MINUTES`). */
 export const DEFAULT_LIVE_CLASS_LOBBY_MINUTES = 15
 
@@ -56,7 +57,7 @@ export function liveClassJoinWindowBlockedMessage(
     const startMs = new Date(startIso).getTime()
     const openMs = startMs - lobbyMinutes * 60_000
     const openAt = new Date(openMs)
-    return `Join opens ${lobbyMinutes} minute${lobbyMinutes === 1 ? '' : 's'} before the start (${openAt.toLocaleString()}). Class starts ${new Date(startIso).toLocaleString()}.`
+    return `You can join from ${formatTime(openAt)}, ${lobbyMinutes} minute${lobbyMinutes === 1 ? '' : 's'} before the class starts at ${formatDateTime(startIso)}.`
   }
   if (window.reason === 'Invalid schedule') {
     return 'This class has invalid start or end times. Ask an admin to fix the schedule.'

@@ -18,7 +18,6 @@ import {
   Calendar,
   FileCheck,
   ListChecks,
-  FilePlus,
   BarChart2,
   LogOut,
   Sun,
@@ -30,6 +29,7 @@ import {
   Users2,
   Video,
   ClipboardCheck,
+  UserRound,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -90,59 +90,17 @@ const adminLinks: SidebarLink[] = [
 ];
 
 const teacherLinks: SidebarLink[] = [
-  {
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />,
-    href: '/teachers/dashboard'
-  },
-  {
-    label: 'Lessons',
-    icon: <Book className="h-5 w-5" />,
-    href: '/teachers/lessons'
-  },
-  {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/teachers/homework'},
-  {
-    label: 'Content',
-    icon: <FileText className="h-5 w-5" />,
-    href: '/teachers/content'
-  },
-  {
-    label: 'Resources',
-    icon: <Library className="h-5 w-5" />,
-    href: '/teachers/resources'
-  },
-  {
-    label: 'Live classes',
-    icon: <Video className="h-5 w-5" />,
-    href: '/teachers/live'
-  },
-  {
-    label: 'Time Table',
-    icon: <Calendar className="h-5 w-5" />,
-    href: '/teachers/timetable'
-  },
-  {
-    label: 'Class codes',
-    icon: <KeyRound className="h-5 w-5" />,
-    href: '/teachers/class-codes'
-  },
-  {
-    label: 'Assessments',
-    icon: <FileCheck className="h-5 w-5" />,
-    href: '/assessments',
-    submenu: [
-      {
-        label: 'All Assessments',
-        icon: <ListChecks className="h-5 w-5" />,
-        href: '/assessments'
-      },
-      {
-        label: 'Create Assessment',
-        icon: <FilePlus className="h-5 w-5" />,
-        href: '/assessments/create'
-      }
-    ]
-  }
+  { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, href: '/teachers/dashboard' },
+  { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/teachers/lessons' },
+  { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/teachers/homework' },
+  { label: 'Students', icon: <Users className="h-5 w-5" />, href: '/teachers/students' },
+  { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
+  { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
+  { label: 'Class codes', icon: <KeyRound className="h-5 w-5" />, href: '/teachers/class-codes' },
+  // Library pages: everything here can also be reached from inside a lesson.
+  { label: 'Content', icon: <FileText className="h-5 w-5" />, href: '/teachers/content' },
+  { label: 'Resources', icon: <Library className="h-5 w-5" />, href: '/teachers/resources' },
+  { label: 'Assessments', icon: <ListChecks className="h-5 w-5" />, href: '/assessments' },
 ];
 
 const studentLinks: SidebarLink[] = [
@@ -296,6 +254,20 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
       </div>
 
       <div className="shrink-0 border-t p-3 space-y-2">
+        {role === 'teacher' && (
+          <Button
+            variant={pathname.startsWith('/teachers/profile') ? 'secondary' : 'ghost'}
+            size={isCollapsed ? 'icon' : 'default'}
+            aria-label="Profile"
+            className={cn("w-full min-h-11", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
+            asChild
+          >
+            <Link href="/teachers/profile" prefetch={false} onClick={onNavigate}>
+              <UserRound className={isCollapsed ? 'h-8 w-8' : 'h-5 w-5 mr-3'} />
+              {!isCollapsed && <span>Profile</span>}
+            </Link>
+          </Button>
+        )}
         <Button
           variant="ghost"
           size={isCollapsed ? 'icon' : 'default'}

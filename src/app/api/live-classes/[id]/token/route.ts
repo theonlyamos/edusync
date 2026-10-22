@@ -145,6 +145,8 @@ export async function GET(request: NextRequest, ctx: Ctx) {
         .update({ joined_at: new Date().toISOString() })
         .eq('live_class_event_id', eventId)
         .eq('user_id', auth.userId)
+        // Keep the first join time; reconnects don't move it.
+        .is('joined_at', null)
     }
 
     return NextResponse.json({

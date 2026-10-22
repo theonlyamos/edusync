@@ -2,7 +2,7 @@
 
 import { useContext, useMemo } from 'react';
 import Link from 'next/link';
-import { BookOpen, CalendarClock, ClipboardCheck, FileText, Library, NotebookPen } from 'lucide-react';
+import { CalendarClock, ClipboardCheck } from 'lucide-react';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import {
   DashboardEmpty,
   DashboardSection,
   DashboardStats,
-  QuickLinkCard,
 } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
 import { useAllHomework } from '@/components/dashboard/useAllHomework';
@@ -186,40 +185,6 @@ export default function TeacherDashboard() {
           <LessonPipelineSection request={insights} />
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickLinkCard
-            title="Lessons"
-            description="Create and manage your lesson plans with AI assistance."
-            icon={<BookOpen className="h-5 w-5 text-primary" />}
-            href="/teachers/lessons"
-            action="View lessons"
-            accent="primary"
-          />
-          <QuickLinkCard
-            title="Homework"
-            description="Turn your lessons into practice, then mark and release feedback."
-            icon={<NotebookPen className="h-5 w-5 text-secondary" />}
-            href="/teachers/homework"
-            action="Manage homework"
-            accent="secondary"
-          />
-          <QuickLinkCard
-            title="Content"
-            description="Quizzes, worksheets, explanations and summaries across your lessons."
-            icon={<FileText className="h-5 w-5 text-accent" />}
-            href="/teachers/content"
-            action="Open content"
-            accent="accent"
-          />
-          <QuickLinkCard
-            title="Resources"
-            description="Files and links you've shared with students."
-            icon={<Library className="h-5 w-5 text-muted-foreground" />}
-            href="/teachers/resources"
-            action="View resources"
-            accent="muted"
-          />
-        </div>
       </div>
     </DashboardLayout>
   );

@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { ExternalLink, FileText, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { formatBytes, type LessonResource } from '@/lib/lesson-resources';
+import { formatDate } from '@/lib/format-date';
 
 interface LessonResourceListProps {
     resources: LessonResource[];
@@ -99,7 +100,7 @@ export function LessonResourceList({ resources, canManage, showLesson, onDeleted
                                 </a>
                             )}
                             <p className="text-xs text-muted-foreground">
-                                Added {new Date(resource.createdAt).toLocaleDateString()}
+                                Added {formatDate(resource.createdAt)}
                             </p>
                         </CardContent>
                     </Card>

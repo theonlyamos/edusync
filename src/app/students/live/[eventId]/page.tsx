@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider'
 import { Loader2 } from 'lucide-react'
+import { useSavedTheme } from '@/hooks/useSavedTheme'
 
 const LiveClassInteractiveTutor = dynamic(
   () =>
@@ -24,6 +25,7 @@ const LiveClassInteractiveTutor = dynamic(
 export default function StudentLiveClassRoomPage() {
   const params = useParams()
   const router = useRouter()
+  useSavedTheme()
   const session = useContext(SupabaseSessionContext)
   const eventId = typeof params.eventId === 'string' ? params.eventId : ''
 
