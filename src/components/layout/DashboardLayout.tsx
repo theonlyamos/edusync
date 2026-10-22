@@ -21,6 +21,7 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/practice', 'Practice'],
   ['/students/tutor', 'Study companion'],
   ['/students/collaborator', 'Collaborator'],
+  ['/students/settings', 'Settings'],
 ];
 
 /** The page name shown in the phone header. */

@@ -13,7 +13,7 @@ import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAut
 import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
 import { formatDate } from '@/lib/format-date';
 import { formatGrade } from '@/lib/grade';
-import { MIN_PASSWORD_LENGTH, validateNewPassword } from '@/lib/password-reset';
+import { ChangePasswordCard } from '@/components/account/ChangePasswordCard';
 
 interface TeacherProfile {
   name: string;
@@ -33,10 +33,6 @@ export default function TeacherProfilePage() {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [grades, setGrades] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
 
   const load = async () => {
     setLoadError('');
@@ -77,30 +73,6 @@ export default function TeacherProfilePage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const savePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const problem = validateNewPassword(password, confirm);
-    if (problem) {
-      setPasswordError(problem);
-      return;
-    }
-    setPasswordError('');
-    setSavingPassword(true);
-    const { error } = await supabase.auth.updateUser({ password });
-    setSavingPassword(false);
-    if (error) {
-      setPasswordError(
-        error.code === 'same_password'
-          ? 'Pick a password you have not used here before.'
-          : error.message || 'Your password could not be changed. Please try again.',
-      );
-      return;
-    }
-    setPassword('');
-    setConfirm('');
-    toast({ title: 'Password changed' });
   };
 
   const subjectOptions = [...new Set([...SUBJECTS, ...subjects])].map((s) => ({ label: s, value: s }));
@@ -161,29 +133,7 @@ export default function TeacherProfilePage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Change password</CardTitle>
-                <CardDescription>Use at least {MIN_PASSWORD_LENGTH} characters.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-5" onSubmit={savePassword}>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-password">New password</Label>
-                    <Input id="new-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm new password</Label>
-                    <Input id="confirm-password" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-                  </div>
-                  {passwordError && <p role="alert" className="text-sm text-destructive">{passwordError}</p>}
-                  <Button type="submit" variant="outline" disabled={savingPassword || !password}>
-                    {savingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Change password
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+            <ChangePasswordCard />
           </>
         )}
       </div>

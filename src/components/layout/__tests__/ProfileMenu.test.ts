@@ -16,19 +16,19 @@ describe('profileMenuLinks', () => {
 
   it('hides billing and the school page from ordinary school members', () => {
     expect(labels(profileMenuLinks('teacher', member))).toEqual(['Settings /teachers/profile']);
-    expect(profileMenuLinks('student', member)).toEqual([]);
+    expect(labels(profileMenuLinks('student', member))).toEqual(['Settings /students/settings']);
   });
 
   it('sends people without a school to their own credits', () => {
-    expect(labels(profileMenuLinks('student', null))).toEqual(['Billing /learn/credits']);
+    expect(labels(profileMenuLinks('student', null))).toEqual(['Billing /learn/credits', 'Settings /students/settings']);
   });
 
   it('shows nothing school-related while the school is still loading', () => {
-    expect(profileMenuLinks('student', undefined)).toEqual([]);
+    expect(labels(profileMenuLinks('student', undefined))).toEqual(['Settings /students/settings']);
   });
 
   it('gives platform admins the organizations list', () => {
-    expect(labels(profileMenuLinks('admin', null))).toEqual(['Organizations /admin/organizations']);
+    expect(labels(profileMenuLinks('admin', null))).toEqual(['Settings /admin/settings', 'Organizations /admin/organizations']);
   });
 });
 

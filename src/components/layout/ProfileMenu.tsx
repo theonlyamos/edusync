@@ -47,9 +47,8 @@ export function profileMenuLinks(role: Role, school: SchoolInfo | null | undefin
     // Without a school, people pay for their own tutor minutes.
     links.push({ label: 'Billing', href: '/learn/credits', icon: <CreditCard className={iconClass} /> });
   }
-  if (role === 'teacher') {
-    links.push({ label: 'Settings', href: '/teachers/profile', icon: <Settings className={iconClass} /> });
-  }
+  const settingsHref = role === 'teacher' ? '/teachers/profile' : role === 'admin' ? '/admin/settings' : '/students/settings';
+  links.push({ label: 'Settings', href: settingsHref, icon: <Settings className={iconClass} /> });
   if (role === 'admin') {
     links.push({ label: 'Organizations', href: '/admin/organizations', icon: <Building2 className={iconClass} /> });
   } else if (school?.canManage) {
