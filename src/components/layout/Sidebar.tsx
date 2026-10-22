@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
-import React, { ReactElement, useState, useEffect, useContext } from 'react';
-import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAuthProvider';
+import React, { ReactElement, useState, useEffect } from 'react';
+import { ProfileMenu } from './ProfileMenu';
 import {
   Book,
   GraduationCap,
@@ -19,9 +19,6 @@ import {
   FileCheck,
   ListChecks,
   BarChart2,
-  LogOut,
-  Sun,
-  Moon,
   ChevronLeft,
   ChevronRight,
   Building2,
@@ -29,7 +26,6 @@ import {
   Users2,
   Video,
   ClipboardCheck,
-  UserRound,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -125,8 +121,6 @@ interface SidebarProps {
 
 export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = useContext(SupabaseBrowserClientContext);
   // Sidebar collapse state
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
@@ -140,27 +134,6 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
     localStorage.setItem('sidebar-collapsed', String(next));
   };
   let links: SidebarLink[];
-
-  // Theme toggle state (default to dark)
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  useEffect(() => {
-    // On mount, read saved theme or default to dark
-    const saved = typeof window !== 'undefined' && localStorage.getItem('theme');
-    const initial = (saved === 'light' || saved === 'dark') ? saved : 'dark';
-    setTheme(initial);
-    document.documentElement.classList.toggle('dark', initial === 'dark');
-    const observer = new MutationObserver(() => {
-      setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('theme', next);
-    setTheme(next);
-    document.documentElement.classList.toggle('dark', next === 'dark');
-  };
 
   switch (role) {
     case 'admin':
@@ -253,54 +226,8 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
         </div>
       </div>
 
-      <div className="shrink-0 border-t p-3 space-y-2">
-        {role === 'teacher' && (
-          <Button
-            variant={pathname.startsWith('/teachers/profile') ? 'secondary' : 'ghost'}
-            size={isCollapsed ? 'icon' : 'default'}
-            aria-label="Profile"
-            className={cn("w-full min-h-11", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
-            asChild
-          >
-            <Link href="/teachers/profile" prefetch={false} onClick={onNavigate}>
-              <UserRound className={isCollapsed ? 'h-8 w-8' : 'h-5 w-5 mr-3'} />
-              {!isCollapsed && <span>Profile</span>}
-            </Link>
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size={isCollapsed ? 'icon' : 'default'}
-          aria-label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-          className={cn("w-full min-h-11", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
-          onClick={toggleTheme}
-        >
-          {theme === 'dark'
-            ? isCollapsed
-              ? <Sun className="h-8 w-8" />
-              : <Sun className="h-5 w-5 mr-3" />
-            : isCollapsed
-              ? <Moon className="h-8 w-8" />
-              : <Moon className="h-5 w-5 mr-3" />
-          }
-          {!isCollapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
-        </Button>
-        <Button
-          variant="ghost"
-          size={isCollapsed ? 'icon' : 'default'}
-          aria-label="Logout"
-          className={cn("w-full min-h-11 text-red-500 hover:text-red-500", { "justify-center": isCollapsed, "justify-start": !isCollapsed })}
-          onClick={async () => {
-            await supabase?.auth.signOut();
-            router.replace(`/login`);
-          }}
-        >
-          {isCollapsed
-            ? <LogOut className="h-8 w-8" />
-            : <LogOut className="h-5 w-5 mr-3" />
-          }
-          {!isCollapsed && <span className="ml-3">Logout</span>}
-        </Button>
+      <div className="shrink-0 border-t p-3">
+        <ProfileMenu role={role} collapsed={isCollapsed} onNavigate={onNavigate} />
       </div>
     </div>
   );

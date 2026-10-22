@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, SquarePen, Library, Menu, X, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
+import { applyThemePreference, readThemePreference, saveThemePreference, watchSystemTheme } from '@/lib/theme'
 
 type SessionHistoryItem = {
   id: string;
@@ -53,10 +54,9 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
-    const initial = (saved === 'light' || saved === 'dark') ? (saved as 'light' | 'dark') : 'dark'
+    const initial = applyThemePreference(readThemePreference())
     setTheme(initial)
-    document.documentElement.classList.toggle('dark', initial === 'dark')
+    return watchSystemTheme(setTheme)
   }, [])
 
   // Fetch credits and session history on mount
@@ -101,9 +101,8 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
-    localStorage.setItem('theme', next)
+    saveThemePreference(next)
     setTheme(next)
-    document.documentElement.classList.toggle('dark', next === 'dark')
   }
 
   const handleSidebarClick = (e: React.MouseEvent<HTMLElement>) => {
