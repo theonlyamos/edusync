@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ContentGenerationForm } from '@/components/content/ContentGenerationForm';
-import { QuizContent, WorksheetContent, ExplanationContent, SummaryContent } from '@/components/content/types';
 import type {
     QuizContentType,
     WorksheetContentType,
@@ -23,9 +22,8 @@ import type {
     SummaryContentType
 } from '@/components/content/types';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
-import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2, Pencil } from 'lucide-react';
+import { Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
 import { LessonHomeworkPanel } from '@/components/lessons/LessonHomeworkPanel';
 import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
@@ -33,20 +31,6 @@ import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAutho
 import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
 import { LessonStatusBadge } from '@/components/lessons/LessonStatusBadge';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
-
-interface Resource {
-    _id: string;
-    title: string;
-    description: string;
-    type: 'file' | 'url';
-    fileUrl?: string;
-    filename?: string;
-    url?: string;
-    originalUrl?: string;
-    lessonId: string;
-    lessonTitle?: string;
-    createdAt: string;
-}
 
 interface Lesson {
     _id: string;
@@ -85,11 +69,10 @@ export default function LessonPage() {
     const { toast } = useToast();
     const [lesson, setLesson] = useState<Lesson | null>(null);
     const [contents, setContents] = useState<Content[]>([]);
-    const [resources, setResources] = useState<Resource[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
     const [lessonLoadError, setLessonLoadError] = useState('');
-    const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content' | 'resource'; id: string } | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content'; id: string } | null>(null);
     const [deleting, setDeleting] = useState(false);
 
     const [editingDetails, setEditingDetails] = useState(false);
@@ -97,14 +80,13 @@ export default function LessonPage() {
     const openedTab = useRef(false);
     const requestedTab = searchParams.get('tab');
     useEffect(() => {
-        if (requestedTab && ['overview', 'studio', 'content', 'resources', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
+        if (requestedTab && ['overview', 'studio', 'content', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
     }, [requestedTab]);
 
     useEffect(() => {
         if (params.lessonId) {
             fetchLesson();
             fetchContents();
-            fetchResources();
         }
     }, [params.lessonId]);
 
@@ -145,22 +127,6 @@ export default function LessonPage() {
         }
     };
 
-    const fetchResources = async () => {
-        try {
-            const response = await fetch(`/api/resources?lessonId=${params.lessonId}`);
-            if (!response.ok) throw new Error('Failed to fetch resources');
-            const data = await response.json();
-            setResources(data);
-        } catch (error) {
-            console.error('Error:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to fetch resources',
-                variant: 'destructive',
-            });
-        }
-    };
-
     const handleContentDelete = async (contentId: string) => {
         try {
             const response = await fetch(`/api/content/${contentId}`, {
@@ -185,30 +151,6 @@ export default function LessonPage() {
         }
     };
 
-    const handleResourceDelete = async (resourceId: string) => {
-        try {
-            const response = await fetch(`/api/resources/${resourceId}`, {
-                method: 'DELETE',
-            });
-
-            if (!response.ok) throw new Error('Failed to delete resource');
-
-            toast({
-                title: 'Success',
-                description: 'Resource deleted successfully',
-            });
-
-            fetchResources();
-        } catch (error) {
-            console.error('Error:', error);
-            toast({
-                title: 'Error',
-                description: 'Failed to delete resource',
-                variant: 'destructive',
-            });
-        }
-    };
-
     const handleLessonDelete = async () => {
         try {
             const response = await fetch(`/api/lessons/${params.lessonId}`, { method: 'DELETE' });
@@ -228,8 +170,7 @@ export default function LessonPage() {
         setDeleting(true);
         try {
             if (pendingDelete.kind === 'lesson') await handleLessonDelete();
-            else if (pendingDelete.kind === 'content') await handleContentDelete(pendingDelete.id);
-            else await handleResourceDelete(pendingDelete.id);
+            else await handleContentDelete(pendingDelete.id);
         } finally {
             setDeleting(false);
             setPendingDelete(null);
@@ -289,9 +230,7 @@ export default function LessonPage() {
         ? status === 'draft'
             ? { title: 'Delete this draft?', description: 'This permanently removes the lesson, its objectives and every generated material. If you already set homework on it, it will be archived instead.' }
             : { title: 'Archive this lesson?', description: 'Students will no longer see it or be able to start it. Their results and any homework stay. You can restore it later from Archived.' }
-        : pendingDelete?.kind === 'content'
-            ? { title: 'Delete this content?', description: 'Students will no longer see it. This cannot be undone.' }
-            : { title: 'Remove this resource?', description: 'Students will no longer see it. This cannot be undone.' };
+        : { title: 'Delete this content?', description: 'Students will no longer see it. This cannot be undone.' };
 
     return (
         <DashboardLayout>
@@ -318,11 +257,10 @@ export default function LessonPage() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid h-auto grid-cols-3 sm:inline-flex">
+                    <TabsList className="grid h-auto grid-cols-2 sm:inline-flex">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
-                        <TabsTrigger value="resources">Resources</TabsTrigger>
                         <TabsTrigger value="homework">Homework</TabsTrigger>
                     </TabsList>
 
@@ -370,10 +308,6 @@ export default function LessonPage() {
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">Generated Content</span>
                                             <span className="font-medium">{contents.length}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-muted-foreground">Resources</span>
-                                            <span className="font-medium">{resources.length}</span>
                                         </div>
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted-foreground">Objectives</span>
@@ -481,78 +415,6 @@ export default function LessonPage() {
                                 open={isGenerating}
                             />
                         )}
-                    </TabsContent>
-
-                    <TabsContent value="resources" className="mt-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold">Lesson Resources</h2>
-                            <Button onClick={() => router.push(`/teachers/resources?lessonId=${params.lessonId}`)}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Resource
-                            </Button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {resources.map((resource) => (
-                                <Card key={resource._id}>
-                                    <CardContent className="p-6">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex-1">
-                                                <h2 className="text-xl font-semibold mb-2">{resource.title}</h2>
-                                                <p className="text-muted-foreground mb-4">{resource.description}</p>
-                                                {resource.type === 'file' && resource.fileUrl && (
-                                                    <a
-                                                        href={resource.fileUrl}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline inline-flex items-center gap-2"
-                                                    >
-                                                        <FileText className="h-4 w-4" />
-                                                        {resource.filename || 'Download File'}
-                                                    </a>
-                                                )}
-                                                {resource.type === 'url' && (
-                                                    <div className="space-y-2">
-                                                        {resource.fileUrl && (
-                                                            <a
-                                                                href={resource.fileUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-primary hover:underline inline-flex items-center gap-2"
-                                                            >
-                                                                <FileText className="h-4 w-4" />
-                                                                View Saved Content
-                                                            </a>
-                                                        )}
-                                                        {resource.originalUrl && (
-                                                            <a
-                                                                href={resource.originalUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-primary hover:underline inline-flex items-center gap-2 block"
-                                                            >
-                                                                <ExternalLink className="h-4 w-4" />
-                                                                Visit Original URL
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                <p className="text-sm text-muted-foreground mt-4">
-                                                    Added {new Date(resource.createdAt).toLocaleDateString()}
-                                                </p>
-                                            </div>
-                                            <Button
-                                                variant="destructive"
-                                                size="sm"
-                                                onClick={() => setPendingDelete({ kind: 'resource', id: resource._id })}
-                                            >
-                                                Delete
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
                     </TabsContent>
 
                     <TabsContent value="homework" className="mt-6">
