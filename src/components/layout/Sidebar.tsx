@@ -22,7 +22,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  KeyRound,
+  CreditCard,
+  Settings,
+  ShieldCheck,
   Users2,
   Video,
   ClipboardCheck,
@@ -92,11 +94,21 @@ const teacherLinks: SidebarLink[] = [
   { label: 'Students', icon: <Users className="h-5 w-5" />, href: '/teachers/students' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
-  { label: 'Class codes', icon: <KeyRound className="h-5 w-5" />, href: '/teachers/class-codes' },
   // Library pages: everything here can also be reached from inside a lesson.
   { label: 'Content', icon: <FileText className="h-5 w-5" />, href: '/teachers/content' },
   { label: 'Resources', icon: <Library className="h-5 w-5" />, href: '/teachers/resources' },
   { label: 'Assessments', icon: <ListChecks className="h-5 w-5" />, href: '/assessments' },
+];
+
+// The school admin portal (school owners and administrators).
+const schoolLinks: SidebarLink[] = [
+  { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, href: '/school/dashboard' },
+  { label: 'Students', icon: <GraduationCap className="h-5 w-5" />, href: '/school/students' },
+  { label: 'Teachers', icon: <Users className="h-5 w-5" />, href: '/school/teachers' },
+  { label: 'Administrators', icon: <ShieldCheck className="h-5 w-5" />, href: '/school/administrators' },
+  { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
+  { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/school/billing' },
+  { label: 'Settings', icon: <Settings className="h-5 w-5" />, href: '/school/settings' },
 ];
 
 const studentLinks: SidebarLink[] = [
@@ -113,8 +125,10 @@ const studentLinks: SidebarLink[] = [
   { label: 'My performance', icon: <BarChart2 className="h-5 w-5" />, href: '/students/homework/performance' },
 ];
 
+export type PortalRole = 'admin' | 'teacher' | 'student' | 'school';
+
 interface SidebarProps {
-  role: 'admin' | 'teacher' | 'student';
+  role: PortalRole;
   mobile?: boolean;
   onNavigate?: () => void;
 }
@@ -144,6 +158,9 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
       break;
     case 'student':
       links = studentLinks;
+      break;
+    case 'school':
+      links = schoolLinks;
       break;
     default:
       links = studentLinks;

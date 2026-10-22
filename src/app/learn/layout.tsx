@@ -39,7 +39,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
       const school = orgs.find((org: { type?: string; user_role?: string }) =>
         org.type === 'school' && ['owner', 'admin'].includes(org.user_role ?? ''));
       if (school) {
-        setOrgUrl(`/learn/org/${school.id}`);
+        setOrgUrl("/school/dashboard");
         setOrgLabel('My school');
       } else if (orgs.length === 1) {
         setOrgUrl(`/learn/org/${orgs[0].id}`);

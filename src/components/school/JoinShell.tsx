@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
 
-/** Page frame for the invite and class-code join pages. */
+/** Page frame for the sign-in side pages (activation, password reset). */
 export function JoinShell({ title, description, children }: { title: string; description?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">

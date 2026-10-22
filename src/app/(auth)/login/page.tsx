@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { getAppRedirect } from '@/lib/app-user';
+import { resolveAppRedirect } from '@/lib/app-user';
 import { Loader2 } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
 
@@ -25,7 +25,9 @@ function LoginContent() {
 
   useEffect(() => {
     if (!code && session?.user && appUser && !profileLoading) {
-      router.replace(getAppRedirect(appUser.role, redirectedFrom));
+      let cancelled = false;
+      resolveAppRedirect(appUser.role, redirectedFrom).then((to) => { if (!cancelled) router.replace(to); });
+      return () => { cancelled = true; };
     }
   }, [code, session, appUser, profileLoading, router, redirectedFrom]);
 

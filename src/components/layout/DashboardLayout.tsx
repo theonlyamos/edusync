@@ -24,19 +24,35 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/settings', 'Settings'],
 ];
 
+const SCHOOL_PAGE_TITLES: [string, string][] = [
+  ['/school/dashboard', 'Dashboard'],
+  ['/school/students', 'Students'],
+  ['/school/teachers', 'Teachers'],
+  ['/school/administrators', 'Administrators'],
+  ['/school/grades', 'Grades'],
+  ['/school/timetables', 'Timetables'],
+  ['/school/lessons', 'Lessons'],
+  ['/school/reports', 'Reports'],
+  ['/school/billing', 'Billing'],
+  ['/school/settings', 'School settings'],
+  ['/school/account', 'Account settings'],
+];
+
 /** The page name shown in the phone header. */
-function studentPageTitle(pathname: string | null) {
-  const match = STUDENT_PAGE_TITLES.find(([path]) => pathname === path || pathname?.startsWith(path + '/'));
-  return match?.[1] ?? 'Student Portal';
+function pageTitle(titles: [string, string][], pathname: string | null, fallback: string) {
+  const match = titles.find(([path]) => pathname === path || pathname?.startsWith(path + '/'));
+  return match?.[1] ?? fallback;
 }
 
 export interface DashboardLayoutProps {
   children: React.ReactNode;
   role?: string;
   fullBleed?: boolean;
+  /** Show a portal that doesn't follow the account role (the school admin portal). */
+  portal?: 'school';
 }
 
-export function DashboardLayout({ children, fullBleed = false }: DashboardLayoutProps) {
+export function DashboardLayout({ children, fullBleed = false, portal }: DashboardLayoutProps) {
   const router = useRouter();
   const session = useContext(SupabaseSessionContext);
   const { user: appUser, loading, error } = useContext(AppUserContext);
@@ -73,9 +89,8 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
   }
 
   const userRole = appUser.role;
-  const role = (userRole === 'admin' || userRole === 'teacher' || userRole === 'student')
-    ? userRole
-    : null;
+  const role = portal
+    ?? ((userRole === 'admin' || userRole === 'teacher' || userRole === 'student') ? userRole : null);
   const portalName = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
 
   return (
@@ -96,7 +111,11 @@ export function DashboardLayout({ children, fullBleed = false }: DashboardLayout
               </DialogContent>
             </Dialog>
 <span className="truncate text-sm font-semibold">
-              {role === 'student' ? studentPageTitle(pathname) : `${portalName} Portal`}
+              {role === 'student'
+                ? pageTitle(STUDENT_PAGE_TITLES, pathname, 'Student Portal')
+                : role === 'school'
+                  ? pageTitle(SCHOOL_PAGE_TITLES, pathname, 'School Portal')
+                  : `${portalName} Portal`}
             </span>
           </header>
           <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>

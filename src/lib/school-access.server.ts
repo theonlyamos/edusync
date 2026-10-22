@@ -4,11 +4,12 @@ import { createServerSupabase } from '@/lib/supabase.server'
 
 export type ServiceSupabase = ReturnType<typeof createServerSupabase>
 
-const SCHOOL_FIELDS = 'id, name, owner_id, country, timezone, grade_levels, setup_dismissed_at, total_credits_purchased, created_at'
+const SCHOOL_FIELDS = 'id, name, description, owner_id, country, timezone, grade_levels, setup_dismissed_at, total_credits_purchased, created_at'
 
 export type SchoolRecord = {
   id: string
   name: string
+  description: string | null
   owner_id: string
   country: string | null
   timezone: string | null

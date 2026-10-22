@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'payment',
-      success_url: `${base}/learn/org/${school.id}?tab=billing&purchase=success`,
-      cancel_url: `${base}/learn/org/${school.id}?tab=billing`,
+      success_url: `${base}/school/billing?purchase=success`,
+      cancel_url: `${base}/school/billing`,
       metadata: {
         kind: 'school_credits',
         organizationId: school.id,

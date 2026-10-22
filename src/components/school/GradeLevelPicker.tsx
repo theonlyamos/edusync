@@ -8,10 +8,14 @@ type Props = {
   value: string[];
   onChange: (value: string[]) => void;
   disabled?: boolean;
+  /** Grades to offer; all of the app's grades when left out. */
+  options?: readonly string[];
+  label?: string;
 };
 
 /** Toggle buttons for the grades a school teaches. */
-export function GradeLevelPicker({ value, onChange, disabled }: Props) {
+export function GradeLevelPicker({ value, onChange, disabled, options, label = 'Grades' }: Props) {
+  const offered = options && options.length > 0 ? GRADE_LEVELS.filter((g) => options.includes(g)) : GRADE_LEVELS;
   const selected = new Set(value);
   const toggle = (level: string) => {
     const next = new Set(selected);
@@ -21,8 +25,8 @@ export function GradeLevelPicker({ value, onChange, disabled }: Props) {
   };
 
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Grades">
-      {GRADE_LEVELS.map((level) => {
+    <div className="flex flex-wrap gap-2" role="group" aria-label={label}>
+      {offered.map((level) => {
         const on = selected.has(level);
         return (
           <button

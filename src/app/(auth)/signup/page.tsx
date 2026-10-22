@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { getAppRedirect } from '@/lib/app-user';
+import { resolveAppRedirect } from '@/lib/app-user';
 import { Logo } from '@/components/brand/Logo';
 import { Loader2 } from 'lucide-react';
 
@@ -27,7 +27,7 @@ export default function SignupPage() {
   }, []);
 
   useEffect(() => {
-    if (session?.user && appUser && !profileLoading) router.replace(getAppRedirect(appUser.role, redirectedFrom));
+    if (session?.user && appUser && !profileLoading) void resolveAppRedirect(appUser.role, redirectedFrom).then((to) => router.replace(to));
   }, [session, appUser, profileLoading, router, redirectedFrom]);
 
   const loginReturnUrl = () =>

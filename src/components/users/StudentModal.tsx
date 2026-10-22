@@ -83,8 +83,8 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
         setIsLoading(true);
 
         try {
-            // Support edits existing students only. Schools invite new ones.
-            if (!isEditMode) throw new Error('Students join through their school\'s invites.');
+            // Support edits existing students only. Schools add new ones from their school admin portal.
+            if (!isEditMode) throw new Error('Students are added by their school.');
             const url = `/api/admin/users/students/${student.id}`;
             const method = "PATCH";
 
@@ -148,7 +148,7 @@ export function StudentModal({ open, onOpenChange, student, onSuccess }: Student
                     <DialogDescription>
                         {isEditMode
                             ? 'Update the student\'s information below.'
-                            : 'Students join through their school\'s invites.'
+                            : 'Students are added by their school.'
                         }
                     </DialogDescription>
                 </DialogHeader>

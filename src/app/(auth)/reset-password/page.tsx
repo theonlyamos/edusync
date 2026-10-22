@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { JoinShell } from '@/components/school/JoinShell';
 import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { getAppRedirect } from '@/lib/app-user';
+import { resolveAppRedirect } from '@/lib/app-user';
 import { MIN_PASSWORD_LENGTH, RESET_PASSWORD_PATH, validateNewPassword } from '@/lib/password-reset';
 
 function ResetPasswordContent() {
@@ -80,7 +80,7 @@ function ResetPasswordContent() {
           <CheckCircle2 className="h-5 w-5 text-green-600" />
           Use it next time you sign in.
         </div>
-        <Button className="w-full" onClick={() => router.replace(getAppRedirect(appUser?.role ?? null))}>Continue</Button>
+        <Button className="w-full" onClick={async () => router.replace(await resolveAppRedirect(appUser?.role ?? null))}>Continue</Button>
       </JoinShell>
     );
   }

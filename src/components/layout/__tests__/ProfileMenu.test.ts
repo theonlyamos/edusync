@@ -6,11 +6,24 @@ const managed = { id: 's1', name: 'Hill School', canManage: true };
 const member = { id: 's1', name: 'Hill School', canManage: false };
 
 describe('profileMenuLinks', () => {
-  it('gives school managers school billing and the school page', () => {
+  it('gives school managers school billing and the school admin portal', () => {
     expect(labels(profileMenuLinks('teacher', managed))).toEqual([
-      'Billing /learn/org/s1?tab=billing',
+      'Billing /school/billing',
       'Settings /teachers/profile',
-      'My school /learn/org/s1',
+      'School admin /school/dashboard',
+    ]);
+  });
+
+  it('gives the school portal billing and account settings', () => {
+    expect(labels(profileMenuLinks('school', managed))).toEqual(['Billing /school/billing', 'Account settings /school/account']);
+  });
+
+  it('lets platform admins who run a school open it', () => {
+    expect(labels(profileMenuLinks('admin', managed))).toEqual([
+      'Billing /school/billing',
+      'Settings /admin/settings',
+      'Organizations /admin/organizations',
+      'School admin /school/dashboard',
     ]);
   });
 

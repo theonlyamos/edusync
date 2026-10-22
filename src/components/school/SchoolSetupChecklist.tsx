@@ -25,10 +25,8 @@ type CurrentSchool = {
 };
 
 type Props = {
-  /** Called after a save, so the page can refresh the school name and tabs. */
+  /** Called after a save, so the page can refresh the school details. */
   onChanged?: () => void;
-  /** Opens the page's People tab. */
-  onOpenPeople?: () => void;
 };
 
 function StepIcon({ done }: { done: boolean }) {
@@ -41,7 +39,7 @@ function errorMessage(error: unknown, fallback: string) {
   return (error as any)?.response?.data?.error ?? fallback;
 }
 
-export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
+export function SchoolSetupChecklist({ onChanged }: Props) {
   const [data, setData] = useState<CurrentSchool | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -109,7 +107,7 @@ export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
           </div>
           {data.school.setupDismissedAt ? (
             <Button variant="ghost" size="sm" onClick={() => save('dismiss', { setupDismissed: false })} disabled={saving !== null}>
-              Show on school home
+              Show on dashboard
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={() => save('dismiss', { setupDismissed: true })} disabled={saving !== null}>
@@ -158,9 +156,12 @@ export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
             <h3 className="font-medium">{byId.people?.title}</h3>
             <p className="text-sm text-muted-foreground">
               {data.setup.teacherCount} teachers and {data.setup.studentCount} students so far.
-              Invite people by email, import a CSV, or give a class a join code.
+              Add people one at a time or import a CSV. Each person gets an email to activate their account.
             </p>
-            {onOpenPeople && <Button size="sm" variant="outline" onClick={onOpenPeople}>Invite people</Button>}
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline"><Link href="/school/teachers">Add teachers</Link></Button>
+              <Button asChild size="sm" variant="outline"><Link href="/school/students">Add students</Link></Button>
+            </div>
           </div>
         </section>
 
@@ -171,7 +172,7 @@ export function SchoolSetupChecklist({ onChanged, onOpenPeople }: Props) {
             <p className="text-sm text-muted-foreground">
               1 credit is 1 minute of live AI tutoring. New schools start with a free trial of 300 credits for 30 days.
             </p>
-            <Button asChild size="sm" variant="outline"><Link href={`/learn/org/${data.school.id}?tab=billing`}>Buy credits</Link></Button>
+            <Button asChild size="sm" variant="outline"><Link href="/school/billing">Buy credits</Link></Button>
           </div>
         </section>
       </CardContent>

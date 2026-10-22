@@ -25,6 +25,16 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
       order: () => builder,
       limit: () => builder,
       neq: (col: string, value: unknown) => { filters.push((r) => r[col] !== value); return builder },
+      // Only `.not(col, 'is', null)` is needed by the tests.
+      not: (col: string, _op: string, value: unknown) => { filters.push((r) => (r[col] ?? null) !== value); return builder },
+      gte: (col: string, value: any) => { filters.push((r) => r[col] >= value); return builder },
+      upsert: (value: Row) => {
+        op = 'insert'
+        const existing = rows().find((r) => r.id === value.id)
+        if (existing) { Object.assign(existing, value); op = 'select'; filters.push((r) => r === existing) }
+        else payload = value
+        return builder
+      },
       maybeSingle: () => { single = true; return builder },
       single: () => { single = true; return builder },
       insert: (value: Row | Row[]) => { op = 'insert'; payload = value; return builder },

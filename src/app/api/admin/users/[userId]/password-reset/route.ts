@@ -3,7 +3,7 @@ import { isEmailConfigured, sendEmail } from '@/lib/email'
 import { buildPasswordResetEmail } from '@/lib/password-reset-email'
 import { resetLinkFromTokenHash, RESET_PASSWORD_PATH } from '@/lib/password-reset'
 import { requirePlatformAdmin } from '@/lib/platform-admin.server'
-import { appOrigin } from '@/lib/school-invites.server'
+import { appOrigin } from '@/lib/app-origin'
 
 /**
  * Support action: email someone a link to set a new password. The link goes

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GRADE_LEVELS } from '@/lib/constants';
 import { requireSchoolRole, SCHOOL_MANAGER_ROLES, type ServiceSupabase } from '@/lib/school-access.server';
-import { normalizeGradeLevel } from '@/lib/school-invites';
+import { normalizeGradeLevel } from '@/lib/school-people';
 import { readTimetable, validateTimetable } from '@/lib/timetable';
 
 /** Active teachers in the school, for the timetable's teacher picker. */

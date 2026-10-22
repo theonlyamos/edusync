@@ -163,7 +163,7 @@ export function SchoolTimetablesPanel() {
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-green-700 dark:text-green-400">{notice}</p>}
         {teachers.length === 0 && grade && (
-          <p className="text-sm text-muted-foreground">No teachers in your school yet. Invite them from the People tab to put them on the timetable.</p>
+          <p className="text-sm text-muted-foreground">No teachers in your school yet. Add them on the Teachers page to put them on the timetable.</p>
         )}
 
         {!grade ? (
