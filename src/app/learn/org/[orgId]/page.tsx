@@ -10,16 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle, ListChecks, CalendarDays } from 'lucide-react';
+import { Loader2, Settings, Users, Coins, Key, Edit, ChevronLeft, AlertCircle, CheckCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { SchoolSetupChecklist } from '@/components/school/SchoolSetupChecklist';
-import { SchoolPeoplePanel } from '@/components/school/SchoolPeoplePanel';
-import { SchoolTimetablesPanel } from '@/components/school/SchoolTimetablesPanel';
 import OrgMembersTab from './components/OrgMembersTab';
 import OrgApiKeysTab from './components/OrgApiKeysTab';
 import OrgSettingsTab from './components/OrgSettingsTab';
-import SchoolBillingTab from './components/SchoolBillingTab';
 
 type Organization = {
   id: string;
@@ -58,7 +54,6 @@ export default function OrganizationDetailPage() {
   const orgId = params?.orgId as string;
   const tabParam = searchParams?.get('tab') ?? null;
   const [tab, setTab] = useState<string | null>(tabParam);
-  // Links such as the setup checklist's "Buy credits" change ?tab= on this same page.
   useEffect(() => { if (tabParam) setTab(tabParam); }, [tabParam]);
 
   const [loading, setLoading] = useState(true);
@@ -79,6 +74,15 @@ export default function OrganizationDetailPage() {
     try {
       if (!silent) setLoading(true);
       const response = await axios.get(`/api/organizations/${orgId}`);
+      // Schools are run from the school admin portal now.
+      if (response.data.organization?.type === 'school') {
+        const tab = searchParams?.get('tab');
+        const page = tab === 'billing' || tab === 'timetables' || tab === 'settings' ? tab
+          : tab === 'members' ? 'students' : tab === 'api-keys' ? 'settings' : 'dashboard';
+        const purchase = searchParams?.get('purchase') === 'success' ? '?purchase=success' : '';
+        router.replace(`/school/${page}${page === 'billing' ? purchase : ''}`);
+        return;
+      }
       setOrganization(response.data.organization);
       setEditFormData({
         name: response.data.organization.name,
@@ -130,10 +134,8 @@ export default function OrganizationDetailPage() {
     (m) => m.is_active && m.user_id === session?.user?.id
   );
   const isOwnerOrAdmin = !!currentUserMember && ['owner', 'admin'].includes(currentUserMember.role);
-  const isSchool = organization.type === 'school';
-  const showSetup = isSchool && isOwnerOrAdmin;
-  const activeTab = tab ?? (showSetup && !organization.setup_dismissed_at ? 'setup' : 'members');
-  const kind = isSchool ? 'school' : 'organization';
+  const activeTab = tab ?? 'members';
+  const kind = 'organization';
 
   return (
     <div className="container max-w-6xl mx-auto p-6">
@@ -152,7 +154,6 @@ export default function OrganizationDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold">{organization.name}</h1>
-              {isSchool && <Badge variant="secondary">School</Badge>}
               {isOwnerOrAdmin && (
                 <Button
                   size="icon"
@@ -170,7 +171,7 @@ export default function OrganizationDetailPage() {
 
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-sm text-muted-foreground">{isSchool ? 'School credits' : 'Available Credits'}</div>
+              <div className="text-sm text-muted-foreground">Available Credits</div>
               <div className="text-2xl font-bold flex items-center gap-1">
                 <Coins className="w-5 h-5 text-yellow-500" />
                 {organization.credits}
@@ -202,28 +203,10 @@ export default function OrganizationDetailPage() {
 
       <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
         <TabsList className="h-auto flex-wrap">
-          {showSetup && (
-            <TabsTrigger value="setup">
-              <ListChecks className="w-4 h-4 mr-2" />
-              Setup
-            </TabsTrigger>
-          )}
           <TabsTrigger value="members">
             <Users className="w-4 h-4 mr-2" />
-            {isSchool ? 'People' : 'Members'}
+            Members
           </TabsTrigger>
-          {showSetup && (
-            <TabsTrigger value="billing">
-              <Coins className="w-4 h-4 mr-2" />
-              Billing
-            </TabsTrigger>
-          )}
-          {isSchool && isOwnerOrAdmin && (
-            <TabsTrigger value="timetables">
-              <CalendarDays className="w-4 h-4 mr-2" />
-              Timetables
-            </TabsTrigger>
-          )}
           <TabsTrigger value="api-keys">
             <Key className="w-4 h-4 mr-2" />
             API Keys
@@ -234,46 +217,16 @@ export default function OrganizationDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        {showSetup && (
-          <TabsContent value="setup">
-            <SchoolSetupChecklist
-              onChanged={() => { setTab(activeTab); fetchOrganization(true); }}
-              onOpenPeople={() => setTab('members')}
-            />
-          </TabsContent>
-        )}
 
         <TabsContent value="members">
-          {isSchool && isOwnerOrAdmin ? (
-            <SchoolPeoplePanel
-              members={organization.organization_members}
-              currentUserId={session?.user?.id ?? null}
-              currentUserRole={currentUserMember?.role ?? null}
-              onMembersChanged={() => fetchOrganization(true)}
-            />
-          ) : (
-            <OrgMembersTab
-              organization={organization}
-              isOwnerOrAdmin={isOwnerOrAdmin && !isSchool}
-              onRefresh={fetchOrganization}
-            />
-          )}
+          <OrgMembersTab
+            organization={organization}
+            isOwnerOrAdmin={isOwnerOrAdmin}
+            onRefresh={fetchOrganization}
+          />
         </TabsContent>
 
-        {showSetup && (
-          <TabsContent value="billing">
-            <SchoolBillingTab
-              purchased={searchParams?.get('purchase') === 'success'}
-              onChanged={() => fetchOrganization(true)}
-            />
-          </TabsContent>
-        )}
 
-        {isSchool && isOwnerOrAdmin && (
-          <TabsContent value="timetables">
-            <SchoolTimetablesPanel />
-          </TabsContent>
-        )}
 
         <TabsContent value="api-keys">
           <OrgApiKeysTab 
@@ -302,12 +255,12 @@ export default function OrganizationDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="org-name">{isSchool ? 'School name' : 'Organization name'}</Label>
+              <Label htmlFor="org-name">Organization name</Label>
               <Input
                 id="org-name"
                 value={editFormData.name}
                 onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                placeholder={isSchool ? 'School name' : 'Organization name'}
+                placeholder="Organization name"
               />
             </div>
             <div>

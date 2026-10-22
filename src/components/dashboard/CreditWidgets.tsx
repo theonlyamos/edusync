@@ -119,7 +119,7 @@ export function SchoolCreditsCard({ request, now }: { request: DashboardRequest<
     <DashboardSection
       title="School credits"
       icon={<Coins className="h-5 w-5 text-primary" />}
-      href={school?.canManage ? `/learn/org/${school.id}?tab=billing` : undefined}
+      href={school?.canManage ? "/school/billing" : undefined}
       linkLabel="Manage"
       loading={request.loading}
       error={request.error}
@@ -142,7 +142,7 @@ export function SchoolCreditsCard({ request, now }: { request: DashboardRequest<
               {school.balance.total <= 0
                 ? "The school is out of credits. Voice tutoring, live classes and extra visuals are paused until more are added."
                 : "The school is running low on credits."}{" "}
-              {school.canManage ? "Buy more from the billing tab." : "Let your school admin know."}
+              {school.canManage ? "Buy more on the Billing page." : "Let your school admin know."}
             </p>
           )}
           {authoring && (

@@ -93,6 +93,8 @@ export const API_AUTH_CONFIG: Record<string, ApiAuthMode> = {
     '/api/sessions': 'both',
     '/api/feedback': 'both',
     '/api/auth/*': 'none',
+    // Account activation and password links from a school; the token is the proof.
+    '/api/activate/*': 'none',
 };
 
 export function getAuthModeForPath(pathname: string): ApiAuthMode {

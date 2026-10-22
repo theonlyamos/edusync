@@ -63,8 +63,8 @@ export function TeacherModal({ open, onOpenChange, teacher, onSuccess }: Teacher
         setIsLoading(true);
 
         try {
-            // Support edits existing teachers only. Schools invite new ones.
-            if (!teacher) throw new Error('Teachers join through their school\'s invites.');
+            // Support edits existing teachers only. Schools add new ones from their school admin portal.
+            if (!teacher) throw new Error('Teachers are added by their school.');
             const url = `/api/admin/users/teachers?id=${teacher.id}`;
             const method = "PUT";
             const bodyData = { ...formData };

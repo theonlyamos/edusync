@@ -89,7 +89,7 @@ export function schoolSetupSteps(progress: SchoolSetupProgress): SchoolSetupStep
   return [
     { id: 'details', title: 'Add your school details', done: progress.hasDetails },
     { id: 'grades', title: 'Choose the grades you teach', done: progress.gradeCount > 0 },
-    { id: 'people', title: 'Invite teachers and students', done: progress.teacherCount > 0 && progress.studentCount > 0 },
+    { id: 'people', title: 'Add teachers and students', done: progress.teacherCount > 0 && progress.studentCount > 0 },
     { id: 'credits', title: 'Buy credits for tutor minutes', done: progress.hasPurchasedCredits },
   ]
 }

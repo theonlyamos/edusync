@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { Building2, ChevronUp, CreditCard, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { Building2, ChevronUp, CreditCard, LogOut, Monitor, Moon, School, Settings, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -25,7 +25,7 @@ import {
   type ThemePreference,
 } from '@/lib/theme';
 
-type Role = 'admin' | 'teacher' | 'student';
+type Role = 'admin' | 'teacher' | 'student' | 'school';
 
 interface SchoolInfo {
   id: string;
@@ -39,22 +39,29 @@ interface MenuLink {
   icon: ReactNode;
 }
 
-/** The menu links a role can actually open. School billing and the school page are for school owners and admins only. */
+const SETTINGS_HREF: Record<Role, string> = {
+  teacher: '/teachers/profile',
+  admin: '/admin/settings',
+  student: '/students/settings',
+  school: '/school/account',
+};
+
+/** The menu links a role can actually open. School billing and the school portal are for school owners and admins only. */
 export function profileMenuLinks(role: Role, school: SchoolInfo | null | undefined): MenuLink[] {
   const links: MenuLink[] = [];
   const iconClass = 'h-4 w-4';
   if (school?.canManage) {
-    links.push({ label: 'Billing', href: `/learn/org/${school.id}?tab=billing`, icon: <CreditCard className={iconClass} /> });
-  } else if (school === null && role !== 'admin') {
+    links.push({ label: 'Billing', href: '/school/billing', icon: <CreditCard className={iconClass} /> });
+  } else if (school === null && role !== 'admin' && role !== 'school') {
     // Without a school, people pay for their own tutor minutes.
     links.push({ label: 'Billing', href: '/learn/credits', icon: <CreditCard className={iconClass} /> });
   }
-  const settingsHref = role === 'teacher' ? '/teachers/profile' : role === 'admin' ? '/admin/settings' : '/students/settings';
-  links.push({ label: 'Settings', href: settingsHref, icon: <Settings className={iconClass} /> });
+  links.push({ label: role === 'school' ? 'Account settings' : 'Settings', href: SETTINGS_HREF[role], icon: <Settings className={iconClass} /> });
   if (role === 'admin') {
     links.push({ label: 'Organizations', href: '/admin/organizations', icon: <Building2 className={iconClass} /> });
-  } else if (school?.canManage) {
-    links.push({ label: 'My school', href: `/learn/org/${school.id}`, icon: <Building2 className={iconClass} /> });
+  }
+  if (role !== 'school' && school?.canManage) {
+    links.push({ label: 'School admin', href: '/school/dashboard', icon: <School className={iconClass} /> });
   }
   return links;
 }

@@ -203,10 +203,10 @@ function SchoolStep() {
     setError(null);
     setBusy(true);
     try {
-      const { data } = await axios.post('/api/schools', { name: schoolName, country, timezone, gradeLevels });
+      await axios.post('/api/schools', { name: schoolName, country, timezone, gradeLevels });
       clearPending();
       // Full load so the app picks up the owner's updated account.
-      window.location.assign(`/learn/org/${data.school.id}?tab=setup`);
+      window.location.assign("/school/dashboard");
     } catch (err) {
       setError(errorMessage(err, 'Could not register your school.'));
       setBusy(false);
@@ -224,7 +224,7 @@ function SchoolStep() {
         <h2 className="text-2xl font-semibold font-display">You already belong to {existing.name}</h2>
         <p className="text-muted-foreground">Each account can belong to one school.</p>
         {canManage && (
-          <Button asChild className="h-11"><Link href={`/learn/org/${existing.id}?tab=setup`}>Go to your school</Link></Button>
+          <Button asChild className="h-11"><Link href="/school/dashboard">Go to your school</Link></Button>
         )}
       </div>
     );
@@ -294,7 +294,7 @@ export default function RegisterSchoolPage() {
             <h1 className="text-3xl font-bold tracking-tight font-display">Register your school</h1>
             <p className="text-muted-foreground">
               {signedIn
-                ? 'Tell us about your school. You can invite teachers and students next.'
+                ? 'Tell us about your school. You can add teachers and students next.'
                 : 'Create the owner account for your school. We will email you a link to confirm it.'}
             </p>
           </div>

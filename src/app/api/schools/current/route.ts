@@ -53,12 +53,14 @@ export async function GET() {
       school: {
         id: school.id,
         name: school.name,
+        description: school.description ?? null,
         country: school.country,
         timezone: school.timezone,
         gradeLevels: school.grade_levels ?? [],
         setupDismissedAt: school.setup_dismissed_at,
       },
       role,
+      isOwner: school.owner_id === session.user.id,
       setup: { steps, teacherCount, studentCount },
     });
   } catch (error) {
@@ -92,6 +94,13 @@ export async function PATCH(request: NextRequest) {
 
     const update: Record<string, unknown> = {};
     if (parsed.value.name !== undefined) update.name = parsed.value.name;
+    if (body.description !== undefined) {
+      const description = typeof body.description === 'string' ? body.description.trim() : '';
+      if (description.length > 500) {
+        return NextResponse.json({ error: 'Description must be 500 characters or fewer.' }, { status: 400 });
+      }
+      update.description = description || null;
+    }
     if (parsed.value.country !== undefined) update.country = parsed.value.country;
     if (parsed.value.timezone !== undefined) update.timezone = parsed.value.timezone;
     if (parsed.value.gradeLevels !== undefined) update.grade_levels = parsed.value.gradeLevels;

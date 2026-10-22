@@ -3,7 +3,7 @@ import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server'
 import { requirePlatformAdmin } from '@/lib/platform-admin.server';
 import { adminPromotionProblem } from '@/lib/platform-admin';
-import { isValidEmail, normalizeEmail } from '@/lib/school-invites';
+import { isValidEmail, normalizeEmail } from '@/lib/school-people';
 export async function GET() {
     const supabase = createServerSupabase();
     try {
