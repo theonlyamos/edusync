@@ -110,7 +110,7 @@ describe('assessments for teachers', () => {
   })
 
   it('will not change questions after students have submitted', async () => {
-    fake.tables.assessment_results.push({ id: 'r1', assessmentid: A, studentid: 'student-1', answers: [] })
+    fake.tables.assessment_results.push({ id: 'r1', assessment_id: A, student_id: 'student-1', answers: [] })
     as('teacher-1', 'teacher')
     const response = await one.PUT(request({
       title: 'Quiz', subject: 'Maths', gradeLevel: 'jhs 1', type: 'quiz', duration: 10, passingScore: 50,

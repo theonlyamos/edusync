@@ -21,8 +21,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const { data: existing, error: existingError } = await actor.db
             .from('assessment_results')
             .select('id')
-            .eq('assessmentid', row.id)
-            .eq('studentid', actor.userId)
+            .eq('assessment_id', row.id)
+            .eq('student_id', actor.userId)
             .limit(1);
         if (existingError) throw existingError;
         if (existing?.length) throw new AssessmentHttpError(409, 'You have already submitted this assessment');
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const { data, error } = await actor.db
             .from('assessment_results')
             .insert({
-                assessmentid: row.id,
-                studentid: actor.userId,
+                assessment_id: row.id,
+                student_id: actor.userId,
                 answers: graded,
                 score: totalScore,
                 percentage,

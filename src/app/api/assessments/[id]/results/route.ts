@@ -12,8 +12,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             const { data, error } = await actor.db
                 .from('assessment_results')
                 .select('*')
-                .eq('assessmentid', row.id)
-                .eq('studentid', actor.userId)
+                .eq('assessment_id', row.id)
+                .eq('student_id', actor.userId)
                 .order('submittedat', { ascending: false })
                 .limit(1);
             if (error) throw error;
@@ -25,12 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const { data, error } = await actor.db
             .from('assessment_results')
             .select('*')
-            .eq('assessmentid', row.id)
+            .eq('assessment_id', row.id)
             .order('submittedat', { ascending: false });
         if (error) throw error;
         const rows = (data ?? []) as AssessmentResultRow[];
-        const students = await userNames(actor.db, rows.map((r) => r.studentid));
-        const results = rows.map((r) => mapResult(r, students.get(r.studentid)));
+        const students = await userNames(actor.db, rows.map((r) => r.student_id));
+        const results = rows.map((r) => mapResult(r, students.get(r.student_id)));
         return NextResponse.json({ results, statistics: resultStatistics(results) });
     } catch (error) {
         return assessmentErrorResponse(error, 'Failed to fetch assessment results');

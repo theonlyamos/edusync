@@ -39,8 +39,8 @@ export interface AssessmentRow {
 
 export interface AssessmentResultRow {
   id: string;
-  assessmentid: string;
-  studentid: string;
+  assessment_id: string;
+  student_id: string;
   answers: unknown;
   score: number | null;
   percentage: number | string | null;
@@ -194,8 +194,8 @@ export function mapResult(row: AssessmentResultRow, student?: { name?: string | 
   return {
     _id: row.id,
     id: row.id,
-    assessmentId: row.assessmentid,
-    studentId: { _id: row.studentid, name: student?.name ?? 'Student', email: student?.email ?? '' },
+    assessmentId: row.assessment_id,
+    studentId: { _id: row.student_id, name: student?.name ?? 'Student', email: student?.email ?? '' },
     answers: Array.isArray(row.answers) ? row.answers : [],
     totalScore: row.score ?? 0,
     percentage: Number(row.percentage ?? 0),

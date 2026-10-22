@@ -67,11 +67,11 @@ export async function GET(req: Request) {
         if (actor.role === 'student' && rows.length) {
             const { data: results, error: resultError } = await actor.db
                 .from('assessment_results')
-                .select('assessmentid,status,percentage')
-                .eq('studentid', actor.userId)
-                .in('assessmentid', rows.map((row) => row.id));
+                .select('assessment_id,status,percentage')
+                .eq('student_id', actor.userId)
+                .in('assessment_id', rows.map((row) => row.id));
             if (resultError) throw resultError;
-            mine = new Map((results ?? []).map((r) => [r.assessmentid as string, { status: r.status as string | null, percentage: Number(r.percentage ?? 0) }]));
+            mine = new Map((results ?? []).map((r) => [r.assessment_id as string, { status: r.status as string | null, percentage: Number(r.percentage ?? 0) }]));
         }
         const creators = await userNames(actor.db, rows.map((row) => row.createdby));
         return NextResponse.json(rows.map((row) => mapAssessment(row, {

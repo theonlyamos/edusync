@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
             const { count, error: countError } = await actor.db
                 .from('assessment_results')
                 .select('id', { count: 'exact', head: true })
-                .eq('assessmentid', row.id);
+                .eq('assessment_id', row.id);
             if (countError) throw countError;
             // Changing questions after students submit would make their marks wrong.
             if ((count ?? 0) > 0) throw new AssessmentHttpError(409, 'Students have already submitted this assessment, so its questions can no longer change');
