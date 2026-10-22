@@ -1,4 +1,5 @@
 "use client";
+import { pickTimezone, zonedInput, zonedValue } from "@/lib/timezone";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -285,11 +286,13 @@ export function formatHomeworkDate(
     timezone
   );
 }
-export function utcInput(value: string) {
-  return new Date(value).toISOString().slice(0, 16);
+/** Value for a datetime-local input, shown in the homework's timezone. */
+export function zonedDateInput(value: string, timezone = "UTC") {
+  return zonedInput(value, pickTimezone(timezone));
 }
-export function utcValue(value: string) {
-  return new Date(value + ":00Z").toISOString();
+/** A datetime-local value typed in the homework's timezone, as an ISO instant. */
+export function zonedDateValue(value: string, timezone = "UTC") {
+  return zonedValue(value, pickTimezone(timezone));
 }
 export function homeworkDue(
   h: Homework,
@@ -459,9 +462,12 @@ export function QuestionResponse({
   onUpload,
   onRemove,
   uploading = false,
+  answerKey,
 }: {
   question: Question;
   value?: Answers[string];
+  /** Teacher view: mark the correct options and any wrong picks. */
+  answerKey?: string | string[];
   onChange?: (v: Answers[string]) => void;
   readOnly?: boolean;
   attachments?: Attachment[];
@@ -478,7 +484,7 @@ export function QuestionResponse({
       <div className="flex gap-3 justify-between">
         <h2 className="min-w-0 break-words text-xl sm:text-2xl">{question.prompt}</h2>
         <Badge variant="secondary" className="shrink-0 self-start">
-          {question.points} marks
+          {question.points} {question.points === 1 ? "mark" : "marks"}
         </Badge>
       </div>
       {question.rubric.length > 0 && (
@@ -545,10 +551,29 @@ export function QuestionResponse({
               ? "Select all that apply."
               : "Choose one answer."}
           </p>
-          {question.options.map((option) => (
+          {question.options.map((option) => {
+            const picked = Array.isArray(value)
+              ? value.includes(option)
+              : value === option;
+            const showKey = readOnly && answerKey !== undefined && answerKey !== "";
+            const correct = showKey
+              ? Array.isArray(answerKey)
+                ? answerKey.includes(option)
+                : answerKey === option
+              : false;
+            const tone = !showKey
+              ? picked
+                ? "bg-primary/10 border-primary"
+                : ""
+              : correct
+                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                : picked
+                  ? "border-destructive bg-destructive/10"
+                  : "";
+            return (
             <label
               key={option}
-              className={`flex min-h-11 gap-3 p-3 border rounded-md text-sm ${(Array.isArray(value) ? value.includes(option) : value === option) ? "bg-primary/10 border-primary" : ""}`}
+              className={`flex min-h-11 gap-3 p-3 border rounded-md text-sm ${tone}`}
             >
               <input
                 type={
@@ -575,9 +600,20 @@ export function QuestionResponse({
                 }}
                 className="accent-primary shrink-0 self-start mt-1"
               />
-              <span className="min-w-0 break-words">{option}</span>
+              <span className="min-w-0 flex-1 break-words">{option}</span>
+              {showKey && correct && (
+                <span className="shrink-0 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  {picked ? "✓ Student’s pick · correct" : "✓ Correct answer"}
+                </span>
+              )}
+              {showKey && picked && !correct && (
+                <span className="shrink-0 text-xs font-medium text-destructive">
+                  ✗ Student’s pick
+                </span>
+              )}
             </label>
-          ))}
+            );
+          })}
         </fieldset>
       ) : (
         <Field label={readOnly ? "Submitted response" : "Your answer"}>

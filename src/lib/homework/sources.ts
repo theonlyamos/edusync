@@ -9,6 +9,8 @@ export interface HomeworkSource {
   subject: string;
   gradeLevel: string;
   organizationId: string | null;
+  /** The school's timezone from registration, if it set one. */
+  schoolTimezone: string | null;
   publicationId: string;
   publicationVersion: number;
   objectives: {
@@ -147,12 +149,23 @@ export async function sourceForHomework(
     }
   }
   eligibleStudents.sort((a, b) => a.name.localeCompare(b.name));
+  let schoolTimezone: string | null = null;
+  if (lesson.organization_id) {
+    const { data: school, error: schoolError } = await db
+      .from("organizations")
+      .select("timezone")
+      .eq("id", lesson.organization_id)
+      .maybeSingle();
+    if (schoolError) throw schoolError;
+    schoolTimezone = school?.timezone ?? null;
+  }
   return {
     lessonId,
     title: publication.manifest.lesson.title,
     subject: publication.manifest.lesson.subject,
     gradeLevel: publication.manifest.lesson.gradeLevel,
     organizationId: lesson.organization_id,
+    schoolTimezone,
     publicationId: publication.id,
     publicationVersion: publication.version,
     objectives,

@@ -26,8 +26,8 @@ import {
   useHomeworkData,
   command,
   formatHomeworkDate,
-  utcInput,
-  utcValue,
+  zonedDateInput,
+  zonedDateValue,
   useHomeworkLeaveWarning,
 } from "./shared";
 export function TeacherHomeworkMarking({ id }: { id: string }) {
@@ -72,9 +72,15 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
       setMarks(g?.marks ?? {});
       setFeedback(g?.feedback ?? "");
       setGradeVersion(g?.version ?? 0);
-      setQuestionIndex(0);
+      // Start on the first question still to mark.
+      const firstOpen = data.homework.questions.findIndex(
+        (q) => !g?.marks?.[q.id],
+      );
+      setQuestionIndex(firstOpen === -1 ? 0 : firstOpen);
     }
   }, [data, attemptId]);
+  const savedGrade = data?.grades.find((g) => g.attempt_id === attemptId),
+    released = Boolean(savedGrade?.released_at);
   async function saveGrade() {
     if (!data) throw new Error("Submission unavailable");
     const safe = validateMarks(data.homework.questions, marks);
@@ -86,7 +92,11 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
       feedback,
     });
     setGradeVersion(grade.version);
-    setMessage("Grading draft saved privately.");
+    setMessage(
+      released
+        ? "Changes saved. The student still sees the released marks until you release the update."
+        : "Grading draft saved privately.",
+    );
     return grade.version;
   }
   async function run(fn: () => Promise<void>) {
@@ -124,7 +134,18 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
     total = Object.values(marks).reduce((n, m) => n + m.score, 0),
     possible = h.questions.reduce((n, q) => n + q.points, 0),
     answerKey = data.keys?.[q?.id]?.correctAnswer,
-    nextId = overview.data ? nextStudentToMark(overview.data, studentId) : null;
+    nextId = overview.data ? nextStudentToMark(overview.data, studentId) : null,
+    markedCount = h.questions.filter((q) => marks[q.id]).length,
+    // Released, but what is on screen differs from what the student sees.
+    changedSinceRelease =
+      released &&
+      (feedback !== (savedGrade?.released_feedback ?? "") ||
+        JSON.stringify(marks) !==
+          JSON.stringify(savedGrade?.released_marks ?? {})),
+    autoMarked =
+      Boolean(provisional[q?.id]) &&
+      mark !== undefined &&
+      mark.score === provisional[q.id].score;
   let ready = false;
   try {
     validateMarks(h.questions, marks, true);
@@ -217,19 +238,29 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
             className="grid grid-cols-5 gap-2 mb-6"
             aria-label="Marking questions"
           >
-            {h.questions.map((q, i) => (
-              <Button
-                key={q.id}
-                variant={i === questionIndex ? "default" : "outline"}
-                className="h-auto py-3 min-w-0"
-                aria-current={i === questionIndex ? "true" : undefined}
-                onClick={() => setQuestionIndex(i)}
-                disabled={busy}
-              >
-                Q{i + 1}
-                <span className="hidden sm:inline ml-2">· {q.points}</span>
-              </Button>
-            ))}
+            {h.questions.map((q, i) => {
+              const done = Boolean(marks[q.id]);
+              return (
+                <Button
+                  key={q.id}
+                  variant={i === questionIndex ? "default" : "outline"}
+                  className="h-auto py-3 min-w-0 gap-1.5"
+                  aria-current={i === questionIndex ? "true" : undefined}
+                  aria-label={`Question ${i + 1}, ${done ? "marked" : "not marked yet"}`}
+                  onClick={() => setQuestionIndex(i)}
+                  disabled={busy}
+                >
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 shrink-0 rounded-full ${done ? "bg-emerald-500" : "border border-current opacity-60"}`}
+                  />
+                  Q{i + 1}
+                  <span className="hidden sm:inline">
+                    · {q.points} {q.points === 1 ? "mark" : "marks"}
+                  </span>
+                </Button>
+              );
+            })}
           </nav>
           <div className="grid lg:grid-cols-[1.1fr_1fr] gap-5 items-start">
             <HomeworkPanel>
@@ -239,6 +270,7 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                 attachments={data.attachments}
                 homeworkId={id}
                 readOnly
+                answerKey={provisional[q.id] ? answerKey : undefined}
               />
               <div className="flex flex-wrap gap-2 mt-5">
                 <Badge variant="secondary">
@@ -267,11 +299,18 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
             </HomeworkPanel>
             <HomeworkPanel>
               <fieldset disabled={busy}>
-                <div className="flex justify-between gap-3 mb-5">
+                <div className="flex flex-wrap justify-between gap-3 mb-5">
                   <h2 className="text-2xl">Marks & feedback</h2>
-                  <Badge variant="secondary">
-                    {total} / {possible}
-                  </Badge>
+                  <div className="flex flex-wrap gap-2">
+                    {released && (
+                      <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">
+                        Released
+                      </Badge>
+                    )}
+                    <Badge variant="secondary">
+                      {total} of {possible} marks
+                    </Badge>
+                  </div>
                 </div>
                 {q.rubric.map((r, i) => (
                   <Field key={i} label={`${r.label} · / ${r.points}`}>
@@ -296,6 +335,11 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                     />
                   </Field>
                 ))}
+                {autoMarked && (
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    Auto-marked from the answer key
+                  </p>
+                )}
                 <Field label={`Question score · / ${q.points}`}>
                   <input
                     className={fieldClass}
@@ -358,7 +402,7 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                       })
                     }
                   >
-                    Save private draft
+                    {released ? "Save changes" : "Save private draft"}
                   </Button>
                   <Button
                     variant="outline"
@@ -389,14 +433,39 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
           </div>
           <footer className="border-t mt-6 pt-5 flex gap-3 flex-wrap items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {Object.keys(marks).length} / {h.questions.length} questions
-              marked · Changes are private until release.
+              {markedCount} of {h.questions.length}{" "}
+              {h.questions.length === 1 ? "question" : "questions"} marked
+              {markedCount < h.questions.length && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="underline underline-offset-2 hover:text-foreground"
+                    onClick={() =>
+                      setQuestionIndex(
+                        Math.max(
+                          0,
+                          h.questions.findIndex((q) => !marks[q.id]),
+                        ),
+                      )
+                    }
+                  >
+                    Go to next unmarked
+                  </button>
+                </>
+              )}
+              {" · "}
+              {!released
+                ? "Changes are private until release."
+                : changedSinceRelease
+                  ? "Released earlier. The student won’t see these changes until you release the update."
+                  : "Released. The student can see these marks."}
             </p>
             <Button
-              disabled={busy || !ready}
+              disabled={busy || !ready || (released && !changedSinceRelease)}
               onClick={() => setModal("release")}
             >
-              Release feedback
+              {released ? "Release update" : "Release feedback"}
             </Button>
           </footer>
         </>
@@ -407,7 +476,11 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
           if (!v) setModal("");
         }}
         title={
-          modal === "release" ? "Release this feedback?" : "Ask for a revision"
+          modal === "release"
+            ? released
+              ? "Release the updated marks?"
+              : "Release this feedback?"
+            : "Ask for a revision"
         }
         description={
           modal === "release"
@@ -453,13 +526,14 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                 maxLength={10000}
               />
             </Field>
-            <Field label="Revision deadline · UTC">
+            <Field label={`Revision deadline · ${h.timezone}`}>
               <input
                 className={fieldClass}
                 type="datetime-local"
-                value={utcInput(revisionDue)}
+                value={zonedDateInput(revisionDue, h.timezone)}
                 onChange={(e) => {
-                  if (e.target.value) setRevisionDue(utcValue(e.target.value));
+                  if (e.target.value)
+                    setRevisionDue(zonedDateValue(e.target.value, h.timezone));
                 }}
               />
             </Field>
