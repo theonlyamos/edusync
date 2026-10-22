@@ -2,7 +2,7 @@
 
 import { LessonIntroduction } from '@/components/lessons/LessonIntroduction';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,9 @@ import type {
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import Link from 'next/link';
-import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2 } from 'lucide-react';
+import { FileText, Link as LinkIcon, ExternalLink, Plus, Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2, Pencil } from 'lucide-react';
+import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
+import { LessonHomeworkPanel } from '@/components/lessons/LessonHomeworkPanel';
 import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
 import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
@@ -90,9 +92,13 @@ export default function LessonPage() {
     const [pendingDelete, setPendingDelete] = useState<{ kind: 'lesson' } | { kind: 'content' | 'resource'; id: string } | null>(null);
     const [deleting, setDeleting] = useState(false);
 
+    const [editingDetails, setEditingDetails] = useState(false);
+    const [studioKey, setStudioKey] = useState(0);
+    const openedTab = useRef(false);
+    const requestedTab = searchParams.get('tab');
     useEffect(() => {
-        if (searchParams.get('tab') === 'studio') setActiveTab('studio');
-    }, [searchParams]);
+        if (requestedTab && ['overview', 'studio', 'content', 'resources', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
+    }, [requestedTab]);
 
     useEffect(() => {
         if (params.lessonId) {
@@ -109,6 +115,9 @@ export default function LessonPage() {
             if (!response.ok) throw new Error(response.status === 404 ? 'This lesson no longer exists.' : 'The lesson could not be loaded.');
             const data = await response.json();
             setLesson(data);
+            // Lessons still being built open where the work happens.
+            if (!openedTab.current && !requestedTab && !data.current_publication_id && !data.archived_at) setActiveTab('studio');
+            openedTab.current = true;
         } catch (error) {
             console.error('Error:', error);
             setLessonLoadError(error instanceof Error ? error.message : 'The lesson could not be loaded.');
@@ -301,7 +310,7 @@ export default function LessonPage() {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        {status === 'live' && <Button variant="outline" asChild><Link href={`/teachers/homework/new?lessonId=${params.lessonId}`}>Create homework</Link></Button>}
+                        {status !== 'archived' && <Button variant="outline" onClick={() => setEditingDetails(true)}><Pencil className="mr-2 h-4 w-4" />Edit details</Button>}
                         <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setPendingDelete({ kind: 'lesson' })}>
                             <Trash2 className="mr-2 h-4 w-4" />{status === 'draft' ? 'Delete lesson' : 'Archive lesson'}
                         </Button>
@@ -309,11 +318,12 @@ export default function LessonPage() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid h-auto grid-cols-2 sm:inline-flex">
+                    <TabsList className="grid h-auto grid-cols-3 sm:inline-flex">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
                         <TabsTrigger value="resources">Resources</TabsTrigger>
+                        <TabsTrigger value="homework">Homework</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-6">
@@ -398,17 +408,21 @@ export default function LessonPage() {
                     </TabsContent>
 
                     <TabsContent value="studio" className="mt-6">
-                        <ObjectiveAuthoringWorkspace lessonId={params.lessonId as string} />
+                        <ObjectiveAuthoringWorkspace key={studioKey} lessonId={params.lessonId as string} />
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">
                         <LessonContentEditor lessonId={lesson._id} content={lesson.content ?? null} live={!!lesson.current_publication_id} onSaved={(content) => setLesson((current) => current ? { ...current, content: content ?? '' } : current)} />
 
-                        {/* Generated Content Section */}
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold">Generated Content</h2>
-                            <Button onClick={() => setIsGenerating(true)}>
-                                Generate Content
+                        {/* Practice materials from the older generator. New lessons use the Objective Studio instead. */}
+                        {contents.length > 0 && <>
+                        <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
+                            <div>
+                                <h2 className="text-xl font-semibold">Earlier practice materials</h2>
+                                <p className="text-sm text-muted-foreground">Made with the older content generator. Students see these in a separate Content tab. Visuals and quizzes for each objective now live in the Objective Studio.</p>
+                            </div>
+                            <Button variant="outline" onClick={() => setIsGenerating(true)}>
+                                Generate more
                             </Button>
                         </div>
 
@@ -451,6 +465,7 @@ export default function LessonPage() {
                                 </Card>
                             ))}
                         </div>
+                        </>}
 
                         {isGenerating && (
                             <ContentGenerationForm
@@ -539,8 +554,22 @@ export default function LessonPage() {
                             ))}
                         </div>
                     </TabsContent>
+
+                    <TabsContent value="homework" className="mt-6">
+                        <LessonHomeworkPanel lessonId={params.lessonId} live={status === 'live'} />
+                    </TabsContent>
                 </Tabs>
             </div>
+            {editingDetails && (
+                <CreateLessonForm
+                    lesson={lesson}
+                    onClose={() => setEditingDetails(false)}
+                    onSaved={() => {
+                        void fetchLesson();
+                        setStudioKey((key) => key + 1);
+                    }}
+                />
+            )}
             <DeleteConfirmationDialog
                 open={!!pendingDelete}
                 onOpenChange={(open) => { if (!open && !deleting) setPendingDelete(null); }}

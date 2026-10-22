@@ -1,11 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
 
-import { buildDefaultBundleJobs } from '@/lib/lesson-artifacts/authoring';
 import { bundleRequestSchema } from '@/lib/lesson-artifacts/creative-concept';
 import { drainContentWorker } from '@/lib/lesson-artifacts/content-worker-runtime';
 import { processContentJobBatch } from '@/lib/lesson-artifacts/job-processor.server';
-import { quotaCategoryForJob } from '@/lib/lesson-artifacts/quota';
+import { enqueueObjectiveBundle } from '@/lib/lesson-artifacts/objective-bundle.server';
 import {
   lessonArtifactErrorResponse,
   LessonArtifactHttpError,
@@ -37,74 +35,17 @@ export async function POST(
     if (body.objectiveRevision !== undefined && body.objectiveRevision !== objective.revision) {
       throw new LessonArtifactHttpError(409, 'The objective changed. Refresh and review its creative concept again.');
     }
-    let batchId = randomUUID();
-    const prefix = body.idempotencyKey ?? batchId;
-    const jobs = buildDefaultBundleJobs({
-      lessonId: objective.lesson_id,
-      objectiveId,
-      requestedBy: session.user.id,
-      idempotencyPrefix: prefix,
+    const result = await enqueueObjectiveBundle(supabase, {
+      userId: session.user.id, lesson, objective,
+      creativeConcept: body.creativeConcept, idempotencyKey: body.idempotencyKey,
     });
-    const keys = jobs.map((job) => job.idempotencyKey);
-
-    const { data: existing, error: existingError } = await supabase
-      .from('content_jobs')
-      .select('*')
-      .eq('requested_by', session.user.id)
-      .in('idempotency_key', keys);
-    if (existingError) throw existingError;
-    if (existing?.some((job) => job.objective_id !== objectiveId || job.input?.objectiveRevision !== objective.revision || (job.input?.creativeConcept ?? '') !== (body.creativeConcept ?? ''))) {
-      throw new LessonArtifactHttpError(409, 'This generation request already belongs to a different objective revision or creative concept. Start a new generation request.');
-    }
-    if (existing?.length === jobs.length) {
-      return NextResponse.json({ batchId: existing[0].batch_id, jobs: existing });
-    }
-    if (existing?.length) batchId = existing[0].batch_id;
-    const existingKeys = new Set((existing ?? []).map((job) => job.idempotency_key));
-    const missingJobs = jobs.filter((job) => !existingKeys.has(job.idempotencyKey));
-
-    const rows = missingJobs.map((job) => ({
-      batch_id: batchId,
-      lesson_id: job.lessonId,
-      objective_id: job.objectiveId,
-      requested_by: job.requestedBy,
-      organization_id: lesson.organization_id,
-      job_type: job.jobType,
-      idempotency_key: job.idempotencyKey,
-      input: {
-        lessonTitle: lesson.title,
-        subject: lesson.subject,
-        gradeLevel: lesson.gradelevel,
-        objectiveText: objective.text,
-        objectiveRevision: objective.revision,
-        position: job.position,
-        visualInstructions: lesson.visual_instructions ?? '',
-        objectiveVisualInstructions: objective.visual_instructions ?? '',
-        ...(body.creativeConcept ? { creativeConcept: body.creativeConcept } : {}),
-      },
-    }));
-
-    const { error } = await supabase.rpc('enqueue_content_jobs_with_usage', {
-      p_organization_id: lesson.organization_id,
-      p_user_id: session.user.id,
-      p_rows: rows,
-      p_usage_items: missingJobs.map((job) => ({
-        category: quotaCategoryForJob(job.jobType), quantity: 1, referenceId: job.idempotencyKey,
-      })),
-    });
-    if (error) throw error;
-    const { data: allJobs, error: allJobsError } = await supabase
-      .from('content_jobs')
-      .select('*')
-      .eq('requested_by', session.user.id)
-      .in('idempotency_key', keys);
-    if (allJobsError) throw allJobsError;
+    if (!result.created) return NextResponse.json({ batchId: result.batchId, jobs: result.jobs });
     after(async () => {
-      await drainContentWorker({ workerId: `request:${batchId}`, processBatch: processContentJobBatch, batchLimit: 5 }).catch((jobError) => {
+      await drainContentWorker({ workerId: `request:${result.batchId}`, processBatch: processContentJobBatch, batchLimit: 5 }).catch((jobError) => {
         console.error('Background lesson artifact generation failed:', jobError);
       });
     });
-    return NextResponse.json({ batchId, jobs: allJobs ?? [] }, { status: 202 });
+    return NextResponse.json({ batchId: result.batchId, jobs: result.jobs }, { status: 202 });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }

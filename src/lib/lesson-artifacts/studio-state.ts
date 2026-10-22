@@ -96,3 +96,29 @@ export function directionEditImpact(
 
   return { lessonIntroduction, objectives, total: Number(lessonIntroduction) + objectives.reduce((sum, item) => sum + item.approved, 0) };
 }
+
+/** Six objectives (30 materials) finish well inside one background generation run. */
+export const PREPARE_OBJECTIVES_LIMIT = 6;
+
+/**
+ * Objectives with nothing generated for their current directions, in order.
+ * These are the ones "Prepare all objectives" fills in.
+ */
+export function unpreparedObjectives<T extends { id: string; revision: number; position: number }>(objectives: T[], artifacts: StudioArtifact[]) {
+  return [...objectives].sort((a, b) => a.position - b.position).filter(objective => !artifacts.some(item =>
+    item.objective_id === objective.id && item.objective_revision === objective.revision && item.kind !== 'uploaded_media'
+    && !['failed', 'rejected'].includes(item.status)));
+}
+
+export type ReviewStep = { objectiveId: string | null; key: string; approved: boolean; hasMaterial: boolean };
+
+/**
+ * Where to go after approving something: the next item waiting for review,
+ * then the next item that still needs generating, looking past the current
+ * step first and wrapping around. Null means everything is approved.
+ */
+export function nextReviewStep(order: ReviewStep[], current: { objectiveId: string | null; key: string }) {
+  const index = order.findIndex(step => step.objectiveId === current.objectiveId && step.key === current.key);
+  const rotated = [...order.slice(index + 1), ...order.slice(0, Math.max(index, 0))];
+  return rotated.find(step => !step.approved && step.hasMaterial) ?? rotated.find(step => !step.approved) ?? null;
+}

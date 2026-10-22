@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatGradeLevel, formatLessonDate, lessonObjectiveList, lessonStatus, mapLessonRecord } from '../lesson-record';
+import { formatGradeLevel, formatLessonDate, lessonObjectiveList, lessonStatus, mapLessonRecord, orderGradeLevels } from '../lesson-record';
 
 describe('lesson record mapping', () => {
   it('maps database field names to the lesson UI contract', () => {
@@ -41,5 +41,11 @@ describe('lesson list helpers', () => {
     expect(formatGradeLevel('jhs 1')).toBe('JHS 1');
     expect(formatGradeLevel('primary 3')).toBe('Primary 3');
     expect(formatGradeLevel('')).toBe('No grade');
+  });
+});
+
+describe('orderGradeLevels', () => {
+  it('puts grades in school order and keeps unknown grades last', () => {
+    expect(orderGradeLevels(['shs 1', 'Grade 7', 'jhs 1', 'primary 4', 'jhs 1'])).toEqual(['primary 4', 'jhs 1', 'shs 1', 'Grade 7']);
   });
 });

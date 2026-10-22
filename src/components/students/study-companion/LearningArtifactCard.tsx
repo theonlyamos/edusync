@@ -57,7 +57,8 @@ function PrivateAsset({
   ) : <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-muted"><Loader2 className="h-5 w-5 animate-spin" /></div>;
 }
 
-export function LearningArtifactCard({ attachment }: { attachment: LearningArtifactAttachment }) {
+/** `preview` shows a teacher what students get: answers can be picked but nothing is recorded or graded. */
+export function LearningArtifactCard({ attachment, preview = false }: { attachment: LearningArtifactAttachment; preview?: boolean }) {
   const { artifact, instanceId } = attachment;
   const payload = artifact.payload;
   const [answers, setAnswers] = useState<Record<string, string | string[] | boolean | number>>({});
@@ -73,14 +74,14 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
   useEffect(() => { renderedRef.current = false; }, [instanceId]);
 
   const recordRendered = useCallback(() => {
-    if (renderedRef.current || isStructured || isVisualQuiz) return;
+    if (preview || renderedRef.current || isStructured || isVisualQuiz) return;
     renderedRef.current = true;
     fetch(`/api/learning-artifact-instances/${instanceId}/rendered`, { method: 'POST' })
       .then((response) => {
         if (!response.ok) renderedRef.current = false;
       })
       .catch(() => { renderedRef.current = false; });
-  }, [instanceId, isStructured, isVisualQuiz]);
+  }, [instanceId, isStructured, isVisualQuiz, preview]);
 
   const sourceLabel = attachment.source === 'teacher_approved' ? 'Teacher reviewed' : 'Generated for this session';
   const interactiveElement = useMemo(() => artifact.kind === 'interactive_visualization' || artifact.kind === 'visual_quiz' ? {
@@ -177,10 +178,10 @@ export function LearningArtifactCard({ attachment }: { attachment: LearningArtif
             })}
             {result ? (
               <div className="space-y-3"><div className="flex items-center justify-between rounded-xl bg-slate-950 p-4 text-white"><span className="text-sm">Knowledge check complete</span><span className="text-2xl font-semibold">{result.percentage}%</span></div>{result.percentage < 80 && <Button variant="outline" onClick={retryQuiz} disabled={submitting}>Try this approved quiz again</Button>}</div>
-            ) : <Button onClick={submitQuiz} disabled={submitting || Object.keys(answers).length < payload.questions.length}>{submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Check my answers</Button>}
+            ) : preview ? <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">Students check their answers here and see each explanation.</p> : <Button onClick={submitQuiz} disabled={submitting || Object.keys(answers).length < payload.questions.length}>{submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Check my answers</Button>}
           </div>
         )}
-        {isVisualQuiz && <div className="mt-3 flex justify-end"><Button size="sm" onClick={completeVisual} disabled={submitting || completed}>{completed ? <CheckCircle2 className="mr-2 h-4 w-4" /> : null}{completed ? 'Challenge completed' : 'I completed the challenge'}</Button></div>}
+        {isVisualQuiz && !preview && <div className="mt-3 flex justify-end"><Button size="sm" onClick={completeVisual} disabled={submitting || completed}>{completed ? <CheckCircle2 className="mr-2 h-4 w-4" /> : null}{completed ? 'Challenge completed' : 'I completed the challenge'}</Button></div>}
       </CardContent>
     </Card>
   );

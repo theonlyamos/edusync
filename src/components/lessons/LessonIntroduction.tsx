@@ -13,11 +13,15 @@ async function readJson(response: Response) {
   return data;
 }
 
-export function LessonIntroduction({ lessonId }: { lessonId: string }) {
-  return <Introduction key={lessonId} lessonId={lessonId} />;
+/**
+ * Pass `artifact` (null for none) to show a known introduction, such as the
+ * one in a student preview manifest, instead of loading the latest approved one.
+ */
+export function LessonIntroduction({ lessonId, artifact }: { lessonId: string; artifact?: StudentSafeArtifact | null }) {
+  return <Introduction key={`${lessonId}:${artifact === undefined ? 'latest' : artifact?.id ?? 'none'}`} lessonId={lessonId} artifact={artifact} />;
 }
 
-function Introduction({ lessonId }: { lessonId: string }) {
+function Introduction({ lessonId, artifact: given }: { lessonId: string; artifact?: StudentSafeArtifact | null }) {
   const [visual, setVisual] = useState<{ url: string; alt: string; caption: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -27,9 +31,9 @@ function Introduction({ lessonId }: { lessonId: string }) {
     const controller = new AbortController();
     async function load() {
       try {
-        const { artifact }: { artifact: StudentSafeArtifact | null } = await readJson(await fetch(
+        const artifact: StudentSafeArtifact | null = given !== undefined ? given : (await readJson(await fetch(
           `/api/lessons/${lessonId}/introduction`, { cache: 'no-store', signal: controller.signal },
-        ));
+        ))).artifact;
         if (!artifact) return;
         if (artifact.payload.kind !== 'generated_image') throw new Error('The lesson introduction is unavailable');
         const asset = await readJson(await fetch(`/api/lesson-assets/${artifact.payload.assetId}`, { signal: controller.signal }));
@@ -42,7 +46,7 @@ function Introduction({ lessonId }: { lessonId: string }) {
     }
     void load();
     return () => controller.abort();
-  }, [lessonId, attempt]);
+  }, [lessonId, given, attempt]);
 
   if (!loading && !error && !visual) return null;
   return (

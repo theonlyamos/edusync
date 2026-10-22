@@ -14,6 +14,20 @@ type Question = Quiz['questions'][number];
 
 const label = 'block text-xs font-medium text-muted-foreground';
 
+/**
+ * Keeps what the teacher is typing (empty, "-", "2.") until it is a number,
+ * so clearing a field or starting a negative value never snaps to 0.
+ */
+function NumberField({ value, onChange, min, className }: { value: number; onChange: (value: number) => void; min?: number; className?: string }) {
+  const [text, setText] = useState(Number.isFinite(value) ? String(value) : '');
+  return <Input type="text" inputMode="decimal" className={className} value={text} onChange={event => {
+    const next = event.target.value;
+    setText(next);
+    const parsed = next.trim() === '' ? Number.NaN : Number(next);
+    onChange(min !== undefined && parsed < min ? Number.NaN : parsed);
+  }} aria-invalid={!Number.isFinite(Number(text)) || text.trim() === ''} />;
+}
+
 /** Lists the first few problems in plain words so the teacher knows what to fix. */
 function problems(quiz: Quiz) {
   const result = structuredQuizPayloadSchema.safeParse(quiz);
@@ -21,10 +35,11 @@ function problems(quiz: Quiz) {
   return result.error.issues.slice(0, 3).map((issue) => {
     const question = typeof issue.path[1] === 'number' ? `Question ${issue.path[1] + 1}: ` : '';
     const field = issue.path.includes('options') ? 'options must be filled in and different from each other'
-      : issue.path.includes('correctAnswer') ? 'pick a correct answer from the options'
+      : issue.path.includes('correctAnswer') ? (typeof issue.path[1] === 'number' && quiz.questions[issue.path[1]]?.type === 'numeric' ? 'enter the correct number' : 'pick a correct answer from the options')
         : issue.path.includes('prompt') ? 'the question is empty'
           : issue.path.includes('explanation') ? 'the explanation is empty'
-            : issue.path[0] === 'title' ? 'the quiz needs a title' : issue.message;
+            : issue.path.includes('tolerance') ? 'the allowed difference must be 0 or more'
+              : issue.path[0] === 'title' ? 'the quiz needs a title' : issue.message;
     return `${question}${field}`;
   });
 }
@@ -77,8 +92,8 @@ export function StructuredQuizEditor({ quiz, saving, onCancel, onSave }: { quiz:
       {(question.type === 'multiple_choice' || question.type === 'multiple_select') && <OptionsEditor question={question} onChange={next => update(index, next)} />}
       {question.type === 'true_false' && <fieldset className="flex gap-4 text-sm"><legend className={`${label} mb-2`}>Correct answer</legend>{[true, false].map(value => <label key={String(value)} className="flex items-center gap-2"><input type="radio" name={`correct-${question.id}`} checked={question.correctAnswer === value} onChange={() => update(index, { ...question, correctAnswer: value })} className="h-4 w-4" />{value ? 'True' : 'False'}</label>)}</fieldset>}
       {question.type === 'numeric' && <div className="flex flex-wrap gap-4">
-        <label className={label}>Correct answer<Input type="number" step="any" className="mt-1.5 w-36" value={Number.isFinite(question.correctAnswer) ? question.correctAnswer : ''} onChange={event => update(index, { ...question, correctAnswer: Number(event.target.value) })} /></label>
-        <label className={label}>Allowed difference (±)<Input type="number" step="any" min={0} className="mt-1.5 w-36" value={question.tolerance} onChange={event => update(index, { ...question, tolerance: Math.max(0, Number(event.target.value) || 0) })} /></label>
+        <label className={label}>Correct answer<NumberField className="mt-1.5 w-36" value={question.correctAnswer} onChange={correctAnswer => update(index, { ...question, correctAnswer })} /></label>
+        <label className={label}>Allowed difference (±)<NumberField className="mt-1.5 w-36" min={0} value={question.tolerance} onChange={tolerance => update(index, { ...question, tolerance })} /></label>
       </div>}
       <label className={label}>Explanation shown after answering<Textarea className="mt-1.5 min-h-16 text-sm text-foreground" value={question.explanation} onChange={event => update(index, { ...question, explanation: event.target.value })} /></label>
     </section>)}

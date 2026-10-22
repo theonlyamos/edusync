@@ -23,6 +23,46 @@ export const materialRoles = {
 };
 export type MaterialRole = keyof typeof materialRoles;
 
+/** The labelled parts of a creative concept, shown to teachers as separate cards. */
+export const conceptSections = [
+  { key: 'concept', label: 'Concept', hint: 'a short name, its narrative and visual language' },
+  { key: 'introduction', label: 'Introduction', hint: 'the opening image' },
+  { key: 'exploration', label: 'Explore', hint: 'what learners change and discover' },
+  { key: 'application', label: 'Apply', hint: 'the different situation where they use it' },
+  { key: 'knowledgeCheck', label: 'Knowledge check', hint: 'what the questions test' },
+  { key: 'visualChallenge', label: 'Visual challenge', hint: 'the visual puzzle and its decision' },
+] as const;
+export type ConceptSection = { label: string; text: string };
+
+const sectionPattern = new RegExp(`^\\s*(?:[#>*_-]+\\s*)*(?:\\*\\*)?(${conceptSections.map((section) => section.label).join('|')})(?:\\*\\*)?\\s*[:\u2013\u2014-]\\s*(?:\\*\\*)?\\s*`, 'i');
+
+/**
+ * Splits a concept into its labelled sections. Returns null for free-form text
+ * (older concepts, or ones the teacher wrote differently) so it stays one block.
+ */
+export function parseConceptSections(concept: string): ConceptSection[] | null {
+  const sections: ConceptSection[] = [];
+  for (const line of concept.split(/\r?\n/)) {
+    const match = line.match(sectionPattern);
+    if (match) {
+      const label = conceptSections.find((section) => section.label.toLowerCase() === match[1].toLowerCase())!.label;
+      sections.push({ label, text: line.slice(match[0].length).trim() });
+    } else if (sections.length) {
+      const current = sections[sections.length - 1];
+      current.text = current.text ? `${current.text}\n${line}` : line;
+    } else if (line.trim()) {
+      return null;
+    }
+  }
+  const labels = new Set(sections.map((section) => section.label));
+  if (labels.size < 4 || labels.size !== sections.length) return null;
+  return sections.map((section) => ({ ...section, text: section.text.trim() }));
+}
+
+export function joinConceptSections(sections: ConceptSection[]) {
+  return sections.map((section) => `${section.label}: ${section.text.trim()}`).join('\n\n');
+}
+
 export function artifactMaterialRole(artifact: {
   kind: string;
   position: number;
@@ -55,7 +95,9 @@ export function creativeConceptPrompt(input: {
 }) {
   return `Design one inventive, coherent teaching concept for this objective.
 Lesson: ${input.lessonTitle}\nSubject: ${input.subject}\nGrade: ${input.gradeLevel}\nObjective: ${input.objectiveText}
-Give the concept a short name and describe its narrative and visual language. Then give a concrete plan for each material:
+Use exactly these six labelled sections, each starting on its own line with the label and a colon, in this order:
+${conceptSections.map((section) => `${section.label}: ${section.hint}`).join('\n')}
+Material roles:
 ${Object.values(materialRoles).join('\n')}
 Choose distinct representations, examples and interactions across these materials, connected by the shared narrative. Name the actual objects, learner actions and learning payoff, not generic templates. Each material must be understandable independently. Keep scientific accuracy, accessible controls, legible labels and age appropriateness. Return only concise plain text, roughly 200–350 words and at most 4000 characters; no code or JSON.
 Teacher instructions are constraints and override creative choices. Objective instructions refine lesson defaults:
