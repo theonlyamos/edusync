@@ -25,6 +25,8 @@ export type StudentLessonDetail = {
   };
   publicationVersion: number;
   objectives: StudentObjectiveSummary[];
+  /** Objectives this student has mastered with the tutor (student lesson route only). */
+  masteredObjectiveIds?: string[];
 };
 
 type PublishedArtifactSummary = {

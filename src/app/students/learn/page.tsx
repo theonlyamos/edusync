@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, BookOpen, Search, Sparkles } from 'lucide-react';
 import StudentInteractiveAITutor from '@/components/learn/StudentInteractiveAITutor';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { formatGrade } from '@/lib/grade';
 
 interface Lesson {
   id: string;
@@ -141,7 +142,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
                       <div className="min-w-0 break-words">
                         <h3 className="font-medium">{lesson.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {lesson.subject} {lesson.gradelevel && `• ${lesson.gradelevel.toUpperCase()}`}
+                          {lesson.subject} {lesson.gradelevel && `· ${formatGrade(lesson.gradelevel)}`}
                         </p>
                       </div>
                     </div>

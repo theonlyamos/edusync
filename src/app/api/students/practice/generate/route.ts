@@ -36,7 +36,7 @@ async function publishedLessonForStudent(userId: string, lessonId: string, stude
         title: String(snapshot.title),
         subject: String(snapshot.subject),
         gradeLevel: String(snapshot.gradeLevel ?? lesson.gradelevel ?? ''),
-        objectives: objectives.map((objective) => objective.text).filter(Boolean),
+        objectives: objectives.filter((objective) => objective.text).map((objective) => ({ id: objective.id, text: objective.text })),
     };
 }
 
@@ -136,7 +136,11 @@ export async function POST(req: Request) {
             subject = published.subject;
             topic = published.title;
             gradeLevel = published.gradeLevel || gradeLevel;
-            objectives = published.objectives;
+            // "Practise this objective" narrows the set to one objective.
+            const focus = typeof body.objectiveId === 'string'
+                ? published.objectives.filter((objective) => objective.id === body.objectiveId)
+                : [];
+            objectives = (focus.length ? focus : published.objectives).map((objective) => objective.text);
         }
 
         if (!subject || !topic) {

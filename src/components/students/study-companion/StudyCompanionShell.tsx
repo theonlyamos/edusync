@@ -163,7 +163,7 @@ export function StudyCompanionShell() {
 
   useEffect(() => {
     const fetchStudentContext = async () => {
-      const lessonsResult = await fetch('/api/students/lessons').then(
+      const lessonsResult = await fetch('/api/students/lessons?withContent=1').then(
         (value) => ({ status: 'fulfilled' as const, value }),
         (reason) => ({ status: 'rejected' as const, reason }),
       );

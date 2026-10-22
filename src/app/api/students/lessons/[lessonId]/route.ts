@@ -80,14 +80,30 @@ export async function GET(
       : { data: [], error: null };
     if (artifactResult.error) throw artifactResult.error;
 
-    return NextResponse.json(buildStudentLessonDetail({
-      publicationVersion: publication.version,
-      manifest: {
-        lesson: publication.manifest.lesson,
-        objectives,
-      },
-      artifacts: artifactResult.data ?? [],
-    }));
+    // Objectives the student has already mastered in a tutor session.
+    const { data: mastered, error: masteredError } = await supabase
+      .from('learning_events')
+      .select('objective_id')
+      .eq('student_id', session.user.id)
+      .eq('lesson_id', lessonId)
+      .eq('event_type', 'objective_mastered')
+      .limit(500);
+    if (masteredError) throw masteredError;
+    const publishedIds = new Set(objectives.map((objective) => objective.id));
+
+    return NextResponse.json({
+      ...buildStudentLessonDetail({
+        publicationVersion: publication.version,
+        manifest: {
+          lesson: publication.manifest.lesson,
+          objectives,
+        },
+        artifacts: artifactResult.data ?? [],
+      }),
+      masteredObjectiveIds: [...new Set((mastered ?? [])
+        .map((row) => row.objective_id as string | null)
+        .filter((id): id is string => Boolean(id) && publishedIds.has(id!)))],
+    });
   } catch (error) {
     return lessonArtifactErrorResponse(error);
   }
