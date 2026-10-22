@@ -28,6 +28,7 @@ import {
   Users2,
   Video,
   ClipboardCheck,
+  Layers,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -106,7 +107,10 @@ const schoolLinks: SidebarLink[] = [
   { label: 'Students', icon: <GraduationCap className="h-5 w-5" />, href: '/school/students' },
   { label: 'Teachers', icon: <Users className="h-5 w-5" />, href: '/school/teachers' },
   { label: 'Administrators', icon: <ShieldCheck className="h-5 w-5" />, href: '/school/administrators' },
+  { label: 'Grades', icon: <Layers className="h-5 w-5" />, href: '/school/grades' },
+  { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/school/lessons' },
   { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
+  { label: 'Reports', icon: <BarChart2 className="h-5 w-5" />, href: '/school/reports' },
   { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/school/billing' },
   { label: 'Settings', icon: <Settings className="h-5 w-5" />, href: '/school/settings' },
 ];
