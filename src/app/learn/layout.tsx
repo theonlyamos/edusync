@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, LogOut, Sun, Moon, Coins, Plus, Play, SquarePen, Library, Menu, X, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
-import { applyThemePreference, readThemePreference, saveThemePreference } from '@/lib/theme'
+import { applyThemePreference, readThemePreference, saveThemePreference, watchSystemTheme } from '@/lib/theme'
 
 type SessionHistoryItem = {
   id: string;
@@ -56,6 +56,7 @@ export default function SessionLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     const initial = applyThemePreference(readThemePreference())
     setTheme(initial)
+    return watchSystemTheme(setTheme)
   }, [])
 
   // Fetch credits and session history on mount

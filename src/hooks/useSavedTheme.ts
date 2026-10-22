@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { applyThemePreference, readThemePreference } from '@/lib/theme'
+import { applyThemePreference, readThemePreference, watchSystemTheme } from '@/lib/theme'
 
 /**
  * Applies the portal's saved light/dark/system choice on pages that render
@@ -9,12 +9,7 @@ import { applyThemePreference, readThemePreference } from '@/lib/theme'
  */
 export function useSavedTheme() {
   useEffect(() => {
-    const preference = readThemePreference()
-    applyThemePreference(preference)
-    if (preference !== 'system') return
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => applyThemePreference('system')
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
+    applyThemePreference(readThemePreference())
+    return watchSystemTheme()
   }, [])
 }

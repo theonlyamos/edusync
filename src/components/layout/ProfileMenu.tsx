@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useContext, useEffect, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Building2, ChevronUp, CreditCard, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,8 @@ import {
   applyThemePreference,
   readThemePreference,
   saveThemePreference,
+  subscribeThemePreference,
+  watchSystemTheme,
   type ThemePreference,
 } from '@/lib/theme';
 
@@ -69,24 +71,17 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: ReactNode }[
   { value: 'system', label: 'System', icon: <Monitor className="h-4 w-4 shrink-0" /> },
 ];
 
-/** Keeps the saved appearance applied, following the device when set to System. */
+/**
+ * The saved appearance, shared by every menu on the page (phones mount a
+ * second sidebar in the navigation drawer), following the device when set to System.
+ */
 function useThemePreference() {
-  // The dashboard only renders in the browser, after the session loads.
-  const [preference, setPreference] = useState<ThemePreference>(() =>
-    typeof window === 'undefined' ? 'dark' : readThemePreference());
+  const preference = useSyncExternalStore(subscribeThemePreference, readThemePreference, () => 'dark' as ThemePreference);
   useEffect(() => {
-    applyThemePreference(preference);
-    if (preference !== 'system') return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => applyThemePreference('system');
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, [preference]);
-  const choose = (next: ThemePreference) => {
-    saveThemePreference(next);
-    setPreference(next);
-  };
-  return [preference, choose] as const;
+    applyThemePreference(readThemePreference());
+    return watchSystemTheme();
+  }, []);
+  return [preference, saveThemePreference] as const;
 }
 
 interface ProfileMenuProps {

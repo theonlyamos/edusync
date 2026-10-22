@@ -38,5 +38,47 @@ export function saveThemePreference(preference: ThemePreference): 'light' | 'dar
   } catch {
     // Still apply it for this page view.
   }
-  return applyThemePreference(preference);
+  const resolved = applyThemePreference(preference);
+  notifyThemeChange();
+  return resolved;
+}
+
+const THEME_CHANGE_EVENT = 'theme-preference-change';
+
+/** Tells every listener on this page (and other tabs, via storage) that the saved choice changed. */
+function notifyThemeChange() {
+  window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+}
+
+/** Calls back whenever the saved preference changes, in this tab or another. */
+export function subscribeThemePreference(onChange: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === THEME_STORAGE_KEY) {
+      applyThemePreference(readThemePreference());
+      onChange();
+    }
+  };
+  window.addEventListener(THEME_CHANGE_EVENT, onChange);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+/**
+ * Follows the device's light/dark setting while the saved preference is
+ * System. It reads the saved choice at the moment the device changes, so
+ * several pages or menus watching at once never fight over a stale value.
+ */
+export function watchSystemTheme(onChange?: (resolved: 'light' | 'dark') => void): () => void {
+  const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+  if (!media) return () => {};
+  const listener = () => {
+    if (readThemePreference() !== 'system') return;
+    const resolved = applyThemePreference('system');
+    onChange?.(resolved);
+  };
+  media.addEventListener('change', listener);
+  return () => media.removeEventListener('change', listener);
 }

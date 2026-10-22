@@ -6,7 +6,7 @@ import { Logo } from '@/components/brand/Logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Mic, Code2, Play, ArrowRight, MessageSquare, Sun, Moon } from 'lucide-react'
-import { applyThemePreference, readThemePreference, saveThemePreference } from '@/lib/theme'
+import { applyThemePreference, readThemePreference, saveThemePreference, watchSystemTheme } from '@/lib/theme'
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -19,6 +19,7 @@ function HomeContent() {
     // On mount, read saved theme or default to dark
     const initial = applyThemePreference(readThemePreference())
     setTheme(initial)
+    return watchSystemTheme(setTheme)
   }, [])
 
   const toggleTheme = () => {
