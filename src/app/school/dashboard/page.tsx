@@ -16,7 +16,8 @@ import type { CreditSummary } from '@/lib/school-billing.server';
 import type { SchoolOverview } from '@/lib/school-overview.server';
 
 function plural(n: number, word: string) {
-  return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+  const many = word.endsWith('s') ? `${word}es` : word === 'person' ? 'people' : `${word}s`;
+  return `${n.toLocaleString()} ${n === 1 ? word : many}`;
 }
 
 export default function SchoolDashboardPage() {

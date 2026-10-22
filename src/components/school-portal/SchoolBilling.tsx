@@ -159,10 +159,10 @@ export default function SchoolBilling({ purchased, onChanged }: { purchased?: bo
           <CardContent className="space-y-1 text-sm text-muted-foreground">
             <p>1 credit = 1 minute of live AI (voice tutor or live class).</p>
             {balance.trialActive && (
-              <p>
+              <div>
                 <Badge variant="secondary" className="mr-1">Trial</Badge>
                 {plural(balance.trial, 'credit')} {days === 0 ? 'end today' : `end in ${plural(days ?? 0, 'day')}`}.
-              </p>
+              </div>
             )}
             <p>{plural(balance.paid, 'purchased credit')}, which don&apos;t expire.</p>
             {balance.total <= 0 && (
@@ -262,10 +262,10 @@ export default function SchoolBilling({ purchased, onChanged }: { purchased?: bo
               {data.transactions.map((t) => (
                 <li key={t.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="break-words">
+                    <div className="break-words">
                       <Badge variant="outline" className="mr-2">{TYPE_LABEL[t.type] ?? t.type}</Badge>
                       {t.description}
-                    </p>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {new Date(t.createdAt).toLocaleString()}
                       {t.userName ? ` · ${t.userName}` : ''}
