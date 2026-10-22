@@ -260,7 +260,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
                       'mb-1': link.submenu
                     })}
                   >
-                    <Link href={link.href} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
+                    <Link href={link.href} prefetch={false} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
                       <Icon className={isCollapsed ? 'h-8 w-8 p-1' : 'h-5 w-5 mr-3'} />
                       {!isCollapsed && <span className="ml-3">{link.label}</span>}
                     </Link>
@@ -277,7 +277,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
                             asChild
                             className="w-full justify-start"
                           >
-                            <Link href={sublink.href} onClick={onNavigate} className="flex items-center w-full">
+                            <Link href={sublink.href} prefetch={false} onClick={onNavigate} className="flex items-center w-full">
                               <SubIcon className="h-5 w-5 mr-3" />
                               <span>{sublink.label}</span>
                             </Link>

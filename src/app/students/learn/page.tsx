@@ -6,9 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, BookOpen, Search, Sparkles } from 'lucide-react';
-import StudentInteractiveAITutor from '@/components/learn/StudentInteractiveAITutor';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { formatGrade } from '@/lib/grade';
+import dynamic from 'next/dynamic';
+
+// The voice tutor is heavy and only needed once a lesson is picked.
+const StudentInteractiveAITutor = dynamic(() => import('@/components/learn/StudentInteractiveAITutor'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-screen items-center justify-center bg-background">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+    </div>
+  ),
+});
 
 interface Lesson {
   id: string;
