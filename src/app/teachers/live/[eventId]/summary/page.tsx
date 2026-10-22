@@ -69,7 +69,7 @@ export default function LiveClassSummaryPage() {
               <Card>
                 <CardHeader className="pb-2">
                   <CardDescription className="flex items-center gap-2"><Presentation className="h-4 w-4" /> Visuals made</CardDescription>
-                  <CardTitle className="text-3xl tabular-nums">{data.visuals.length}</CardTitle>
+                  <CardTitle className="text-3xl tabular-nums">{data.visualCount}</CardTitle>
                 </CardHeader>
               </Card>
             </div>
@@ -115,7 +115,10 @@ export default function LiveClassSummaryPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Visuals the AI co-teacher made</CardTitle>
-                  <CardDescription>In the order they appeared.</CardDescription>
+                  <CardDescription>
+                    In the order they appeared.
+                    {data.visualCount > data.visuals.length ? ` Showing the first ${data.visuals.length} of ${data.visualCount}.` : ''}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {data.visuals.length === 0 ? (

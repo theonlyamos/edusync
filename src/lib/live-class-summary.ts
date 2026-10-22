@@ -20,7 +20,9 @@ export interface LiveClassSummary {
     /** Live AI minutes paid for (1 credit each). */
     minutesCharged: number;
   } | null;
+  /** The first visuals, in order; may be fewer than visualCount. */
   visuals: { id: string; description: string; createdAt: string }[];
+  visualCount: number;
 }
 
 interface Enrollment { user_id: string; role: string | null; joined_at: string | null }

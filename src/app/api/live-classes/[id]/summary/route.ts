@@ -5,6 +5,8 @@ import { buildAttendance, visualLabel, type LiveClassSummary } from '@/lib/live-
 
 type Ctx = { params: Promise<{ id: string }> }
 
+const VISUALS_SHOWN = 100
+
 /** Summary of a live class for the teacher who organised it. */
 export async function GET(request: NextRequest, ctx: Ctx) {
   const auth = getAuthContext(request)
@@ -31,7 +33,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
     db.from('live_class_enrollments').select('user_id,role,joined_at').eq('live_class_event_id', id),
     db
       .from('learning_sessions')
-      .select('id,topic,created_at,ended_at,updated_at')
+      .select('id,topic,created_at,ended_at')
       .eq('live_class_event_id', id)
       .order('created_at', { ascending: true }),
     db.from('live_class_billing').select('minutes_charged').eq('live_class_event_id', id),
@@ -51,14 +53,16 @@ export async function GET(request: NextRequest, ctx: Ctx) {
   const sessionRows = sessions.data ?? []
   const sessionIds = sessionRows.map((s) => s.id as string)
   let visuals: LiveClassSummary['visuals'] = []
+  let visualCount = 0
   if (sessionIds.length) {
-    const { data: rows, error: vizError } = await db
+    const { data: rows, error: vizError, count } = await db
       .from('learning_visualizations')
-      .select('id,description,explanation,created_at')
+      .select('id,description,explanation,created_at', { count: 'exact' })
       .in('session_id', sessionIds)
       .order('created_at', { ascending: true })
-      .limit(100)
+      .limit(VISUALS_SHOWN)
     if (vizError) throw vizError
+    visualCount = count ?? rows?.length ?? 0
     visuals = (rows ?? []).map((v) => ({
       id: v.id as string,
       description: visualLabel(v.description as string | null, v.explanation as string | null),
@@ -85,11 +89,13 @@ export async function GET(request: NextRequest, ctx: Ctx) {
       ? {
           topic: sessionRows.map((s) => s.topic as string | null).reverse().find(Boolean) ?? null,
           startedAt: first.created_at as string,
-          endedAt: (last.ended_at as string | null) ?? (last.updated_at as string | null) ?? null,
+          // Only a recorded end counts; updated_at moves on any session change.
+          endedAt: (last.ended_at as string | null) ?? null,
           minutesCharged: (billing.data ?? []).reduce((n, b) => n + (Number(b.minutes_charged) || 0), 0),
         }
       : null,
     visuals,
+    visualCount,
   }
   return NextResponse.json(summary)
 }
