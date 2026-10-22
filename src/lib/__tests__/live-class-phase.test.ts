@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupLiveClasses, liveClassPhase } from '../live-class-phase';
+import { groupLiveClasses, liveClassPhase, startsInLabel } from '../live-class-phase';
 
 const now = new Date('2026-10-22T12:00:00Z');
 const ev = (start: string, end: string, status = 'scheduled', id = start) => ({ id, status, scheduled_start_at: start, scheduled_end_at: end });
@@ -31,5 +31,18 @@ describe('groupLiveClasses', () => {
     ], now);
     expect(groups.upcoming.map((e) => e.id)).toEqual(['2026-10-23T09:00:00Z', '2026-10-25T09:00:00Z']);
     expect(groups.past.map((e) => e.id)).toEqual(['2026-10-20T09:00:00Z', '2026-03-01T09:00:00Z']);
+  });
+});
+
+describe('startsInLabel', () => {
+  const now = new Date('2026-10-22T15:00:00Z');
+  it('counts down within a day', () => {
+    expect(startsInLabel('2026-10-22T15:10:00Z', now)).toBe('Starts in 10 min');
+    expect(startsInLabel('2026-10-22T17:30:00Z', now)).toBe('Starts in 2 h 30 min');
+    expect(startsInLabel('2026-10-22T16:00:00Z', now)).toBe('Starts in 1 h');
+  });
+  it('gives nothing for past or far-off classes', () => {
+    expect(startsInLabel('2026-10-22T14:00:00Z', now)).toBeNull();
+    expect(startsInLabel('2026-10-24T15:00:00Z', now)).toBeNull();
   });
 });

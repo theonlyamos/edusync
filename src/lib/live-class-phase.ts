@@ -29,3 +29,13 @@ export function groupLiveClasses<T extends PhaseInput>(events: T[], now: Date) {
   groups.past.sort((a, b) => b.scheduled_start_at.localeCompare(a.scheduled_start_at));
   return groups;
 }
+
+/** "Starts in 10 min" for classes within a day, otherwise null (show the date). */
+export function startsInLabel(start: string, now: Date): string | null {
+  const minutes = Math.ceil((Date.parse(start) - now.getTime()) / 60000);
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes >= 24 * 60) return null;
+  if (minutes < 60) return `Starts in ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `Starts in ${hours} h${rest ? ` ${rest} min` : ''}`;
+}
