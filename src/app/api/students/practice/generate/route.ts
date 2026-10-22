@@ -3,6 +3,42 @@ import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { generateAICompletion } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import { createServerSupabase } from '@/lib/supabase.server';
+import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
+import { getUserSchoolId, inActiveSchool } from '@/lib/school';
+
+async function publishedLessonForStudent(userId: string, lessonId: string, studentGrade: string | null) {
+    const db = createServerSupabase();
+    const [{ data: lesson, error }, schoolId] = await Promise.all([
+        db.from('lessons')
+            .select('id,gradelevel,current_publication_id,organization_id,archived_at')
+            .eq('id', lessonId)
+            .maybeSingle(),
+        getUserSchoolId(db, userId),
+    ]);
+    if (error) throw error;
+    const lessonGrade = lesson?.gradelevel?.trim().toLowerCase();
+    if (
+        !lesson || lesson.archived_at || !lesson.current_publication_id ||
+        !inActiveSchool(schoolId, lesson.organization_id) ||
+        !lessonGrade || lessonGrade !== studentGrade?.trim().toLowerCase()
+    ) return null;
+    const { data: publication, error: publicationError } = await db
+        .from('lesson_publications')
+        .select('manifest')
+        .eq('id', lesson.current_publication_id)
+        .maybeSingle();
+    if (publicationError) throw publicationError;
+    const snapshot = publication?.manifest?.lesson;
+    if (!snapshot?.title || !snapshot?.subject) return null;
+    const objectives = normalizePublishedObjectives(publication?.manifest?.objectives ?? []) ?? [];
+    return {
+        title: String(snapshot.title),
+        subject: String(snapshot.subject),
+        gradeLevel: String(snapshot.gradeLevel ?? lesson.gradelevel ?? ''),
+        objectives: objectives.map((objective) => objective.text).filter(Boolean),
+    };
+}
 
 interface Question {
     question: string;
@@ -89,22 +125,18 @@ export async function POST(req: Request) {
             .maybeSingle();
         gradeLevel = student?.grade ?? '';
 
-        // Practice started from a lesson is built from that lesson. The lesson
-        // must be published and for the student's grade, same as the lesson list.
+        // Practice started from a lesson is built from what the student can
+        // see: the published snapshot, with the same school and grade checks
+        // as the student lesson page.
         if (typeof body.lessonId === 'string' && body.lessonId) {
-            const { data: lesson, error: lessonError } = await supabase
-                .from('lessons')
-                .select('id,title,subject,gradelevel,objectives,current_publication_id')
-                .eq('id', body.lessonId)
-                .maybeSingle();
-            if (lessonError) throw lessonError;
-            if (!lesson || !lesson.current_publication_id || (lesson.gradelevel && lesson.gradelevel !== student?.grade)) {
+            const published = await publishedLessonForStudent(user.id, body.lessonId, student?.grade ?? null);
+            if (!published) {
                 return NextResponse.json({ message: 'This lesson is not available for practice.' }, { status: 404 });
             }
-            subject = lesson.subject;
-            topic = lesson.title;
-            gradeLevel = lesson.gradelevel ?? gradeLevel;
-            objectives = Array.isArray(lesson.objectives) ? lesson.objectives.filter(Boolean) : [];
+            subject = published.subject;
+            topic = published.title;
+            gradeLevel = published.gradeLevel || gradeLevel;
+            objectives = published.objectives;
         }
 
         if (!subject || !topic) {

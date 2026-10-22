@@ -31,7 +31,9 @@ export async function editableHomeworkForUser(userId: string) {
       data.map((a) => a.homework_id),
     );
   if (recipientError) throw recipientError;
-  return (
+  const extensionFor = (homeworkId: string) =>
+    recipients?.find((r) => r.homework_id === homeworkId)?.extension_at ?? null;
+  const match =
     data.find((row) => {
       const a = row as unknown as Attempt & {
         homework_recipients: { homeworks: Homework };
@@ -39,15 +41,11 @@ export async function editableHomeworkForUser(userId: string) {
       const homework = a.homework_recipients.homeworks;
       return (
         organizations.has(homework.organization_id) &&
-        attemptLocksGeneralAi(
-          homework,
-          a,
-          recipients?.find((r) => r.homework_id === a.homework_id)
-            ?.extension_at ?? null,
-        )
+        attemptLocksGeneralAi(homework, a, extensionFor(a.homework_id))
       );
-    }) ?? null
-  );
+    }) ?? null;
+  // The student's own extension decides when the pause ends, so callers get it too.
+  return match ? { ...match, extension_at: extensionFor(match.homework_id) } : null;
 }
 
 export interface HomeworkAiLock {
@@ -65,7 +63,7 @@ export async function homeworkAiLockForUser(userId: string): Promise<HomeworkAiL
   return {
     homeworkId: a.homework_id,
     title: homework.title ?? "your homework",
-    dueAt: a.revision_due_at ?? homework.due_at,
+    dueAt: a.revision_due_at ?? (row.extension_at as string | null) ?? homework.due_at,
   };
 }
 
