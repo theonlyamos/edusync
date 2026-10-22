@@ -65,5 +65,8 @@ export function zonedValue(local: string, timeZone: string): string {
   // Guess with the offset at the naive time, then correct once for DST changes.
   let guess = naive.getTime() - offsetMinutes(naive, timeZone) * 60000;
   guess = naive.getTime() - offsetMinutes(new Date(guess), timeZone) * 60000;
-  return new Date(guess).toISOString();
+  const iso = new Date(guess).toISOString();
+  // Times skipped when the clocks go forward don't exist; don't quietly move them.
+  if (zonedInput(iso, timeZone) !== local) throw new Error('That time is skipped when the clocks change. Pick another time.');
+  return iso;
 }

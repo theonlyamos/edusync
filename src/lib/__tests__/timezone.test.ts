@@ -24,6 +24,12 @@ describe('timezone helpers', () => {
     expect(zonedValue('2026-12-01T09:00', 'Europe/London')).toBe('2026-12-01T09:00:00.000Z');
   });
 
+  it('rejects times skipped by a clock change', () => {
+    expect(() => zonedValue('2026-03-29T01:30', 'Europe/London')).toThrow(/skipped/);
+    // The repeated hour when clocks go back still resolves to a real instant.
+    expect(zonedInput(zonedValue('2026-10-25T01:30', 'Europe/London'), 'Europe/London')).toBe('2026-10-25T01:30');
+  });
+
   it('round-trips', () => {
     for (const zone of ['Africa/Accra', 'Asia/Kolkata', 'America/Los_Angeles']) {
       const iso = '2026-03-15T12:45:00.000Z';

@@ -330,8 +330,8 @@ export function TeacherHomeworkDetail({ id }: { id: string }) {
                 className={fieldClass}
                 value={zonedDateInput(extension, data.homework.timezone)}
                 onChange={(e) => {
-                  if (e.target.value)
-                    setExtension(zonedDateValue(e.target.value, data.homework.timezone));
+                  const next = e.target.value && zonedDateValue(e.target.value, data.homework.timezone);
+                  if (next) setExtension(next);
                 }}
               />
             </Field>

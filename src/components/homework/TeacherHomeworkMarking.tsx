@@ -532,8 +532,8 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                 type="datetime-local"
                 value={zonedDateInput(revisionDue, h.timezone)}
                 onChange={(e) => {
-                  if (e.target.value)
-                    setRevisionDue(zonedDateValue(e.target.value, h.timezone));
+                  const next = e.target.value && zonedDateValue(e.target.value, h.timezone);
+                  if (next) setRevisionDue(next);
                 }}
               />
             </Field>

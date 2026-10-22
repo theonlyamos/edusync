@@ -760,8 +760,8 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                   type="datetime-local"
                   value={zonedDateInput(form.dueAt, timezone)}
                   onChange={(e) => {
-                    if (e.target.value)
-                      update({ dueAt: zonedDateValue(e.target.value, timezone) });
+                    const next = e.target.value && zonedDateValue(e.target.value, timezone);
+                    if (next) update({ dueAt: next });
                   }}
                 />
               </Field>
@@ -806,8 +806,8 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                     type="datetime-local"
                     value={zonedDateInput(form.closeAt, timezone)}
                     onChange={(e) => {
-                      if (e.target.value)
-                        update({ closeAt: zonedDateValue(e.target.value, timezone) });
+                      const next = e.target.value && zonedDateValue(e.target.value, timezone);
+                      if (next) update({ closeAt: next });
                     }}
                   />
                 </Field>

@@ -290,9 +290,17 @@ export function formatHomeworkDate(
 export function zonedDateInput(value: string, timezone = "UTC") {
   return zonedInput(value, pickTimezone(timezone));
 }
-/** A datetime-local value typed in the homework's timezone, as an ISO instant. */
+/**
+ * A datetime-local value typed in the homework's timezone, as an ISO instant.
+ * Null for a time that doesn't exist there (skipped by a clock change); callers
+ * keep the previous value, so the field snaps back.
+ */
 export function zonedDateValue(value: string, timezone = "UTC") {
-  return zonedValue(value, pickTimezone(timezone));
+  try {
+    return zonedValue(value, pickTimezone(timezone));
+  } catch {
+    return null;
+  }
 }
 export function homeworkDue(
   h: Homework,
