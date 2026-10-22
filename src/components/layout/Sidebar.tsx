@@ -93,6 +93,7 @@ const teacherLinks: SidebarLink[] = [
   { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, href: '/teachers/dashboard' },
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/teachers/lessons' },
   { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/teachers/homework' },
+  { label: 'Students', icon: <Users className="h-5 w-5" />, href: '/teachers/students' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
   { label: 'Class codes', icon: <KeyRound className="h-5 w-5" />, href: '/teachers/class-codes' },
