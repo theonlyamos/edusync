@@ -6,6 +6,7 @@ import { Logo } from '@/components/brand/Logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Mic, Code2, Play, ArrowRight, MessageSquare, Sun, Moon } from 'lucide-react'
+import { applyThemePreference, readThemePreference, saveThemePreference } from '@/lib/theme'
 
 function HomeContent() {
   const searchParams = useSearchParams()
@@ -16,17 +17,14 @@ function HomeContent() {
 
   useEffect(() => {
     // On mount, read saved theme or default to dark
-    const saved = typeof window !== 'undefined' && localStorage.getItem('theme')
-    const initial = (saved === 'light' || saved === 'dark') ? saved : 'dark'
+    const initial = applyThemePreference(readThemePreference())
     setTheme(initial)
-    document.documentElement.classList.toggle('dark', initial === 'dark')
   }, [])
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark'
-    localStorage.setItem('theme', next)
+    saveThemePreference(next)
     setTheme(next)
-    document.documentElement.classList.toggle('dark', next === 'dark')
   }
 
   if (code) {
