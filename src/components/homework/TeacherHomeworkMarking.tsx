@@ -8,6 +8,8 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
   validateMarks,
   provisionalMarks,
+  markingQueue,
+  nextStudentToMark,
   type Marks,
   type Grade,
   type HomeworkDetail,
@@ -47,14 +49,17 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
   const api = useHomeworkData<HomeworkDetail>(
       `/api/homework/${id}${studentId ? "?studentId=" + studentId : ""}`,
     ),
-    data = api.data;
+    data = api.data,
+    // Unfiltered view of the class, used to pick who to mark next.
+    overview = useHomeworkData<HomeworkDetail>(`/api/homework/${id}`);
   useHomeworkLeaveWarning(message === "Unsaved grading changes");
   useEffect(() => {
-    if (data && !studentId) {
-      const candidate = data.attempts.find((a) => a.submitted_at);
-      if (candidate) setStudentId(candidate.student_id);
+    if (overview.data && !studentId) {
+      const queue = markingQueue(overview.data);
+      const first = queue.needsMarking[0] ?? queue.submitted[0];
+      if (first) setStudentId(first);
     }
-  }, [data, studentId]);
+  }, [overview.data, studentId]);
   useEffect(() => {
     if (data && studentId) {
       const a = data.attempts.find((a) => a.submitted_at);
@@ -118,7 +123,8 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
       : {},
     total = Object.values(marks).reduce((n, m) => n + m.score, 0),
     possible = h.questions.reduce((n, q) => n + q.points, 0),
-    answerKey = data.keys?.[q?.id]?.correctAnswer;
+    answerKey = data.keys?.[q?.id]?.correctAnswer,
+    nextId = overview.data ? nextStudentToMark(overview.data, studentId) : null;
   let ready = false;
   try {
     validateMarks(h.questions, marks, true);
@@ -356,26 +362,17 @@ export function TeacherHomeworkMarking({ id }: { id: string }) {
                   </Button>
                   <Button
                     variant="outline"
-                    disabled={
-                      data.recipients.findIndex(
-                        (r) => r.student_id === studentId,
-                      ) >=
-                      data.recipients.length - 1
-                    }
+                    disabled={!nextId}
+                    title={nextId ? undefined : "Everyone else who submitted is marked"}
                     onClick={() =>
                       run(async () => {
                         await saveGrade();
-                        setStudentId(
-                          data.recipients[
-                            data.recipients.findIndex(
-                              (r) => r.student_id === studentId,
-                            ) + 1
-                          ].student_id,
-                        );
+                        if (nextId) setStudentId(nextId);
+                        overview.refresh();
                       })
                     }
                   >
-                    Save & next student
+                    {nextId ? "Save & next student" : "No one else to mark"}
                   </Button>
                   <Button
                     variant="outline"

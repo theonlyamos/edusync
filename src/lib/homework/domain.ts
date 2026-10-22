@@ -432,3 +432,39 @@ export function studentGrade(grade: Grade): Grade | null {
     released_feedback: grade.released_feedback,
   };
 }
+/**
+ * Students to mark, in class-list order: those whose latest attempt is
+ * submitted, split by whether every question has a mark yet.
+ */
+export function markingQueue(detail: Pick<HomeworkDetail, "homework" | "attempts" | "grades" | "recipients">) {
+  const complete = (attemptId: string) => {
+    const grade = detail.grades.find((g) => g.attempt_id === attemptId);
+    try {
+      validateMarks(detail.homework.questions, grade?.marks ?? {}, true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const submitted: string[] = [];
+  const needsMarking: string[] = [];
+  for (const r of detail.recipients) {
+    // Attempts arrive newest first, so the first match is the latest attempt.
+    const latest = detail.attempts.find((a) => a.student_id === r.student_id);
+    if (!latest?.submitted_at) continue;
+    submitted.push(r.student_id);
+    if (!complete(latest.id)) needsMarking.push(r.student_id);
+  }
+  return { submitted, needsMarking };
+}
+/** The next submitted student still needing marks after `current`, wrapping round; null when none are left. */
+export function nextStudentToMark(
+  detail: Pick<HomeworkDetail, "homework" | "attempts" | "grades" | "recipients">,
+  current: string,
+) {
+  const { needsMarking } = markingQueue(detail);
+  const order = detail.recipients.map((r) => r.student_id);
+  const start = order.indexOf(current);
+  const rotated = [...order.slice(start + 1), ...order.slice(0, Math.max(start, 0))];
+  return rotated.find((id) => id !== current && needsMarking.includes(id)) ?? null;
+}
