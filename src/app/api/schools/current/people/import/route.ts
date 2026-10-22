@@ -6,7 +6,7 @@ import { createSchoolPerson, peopleErrorResponse, PeopleError } from '@/lib/scho
 
 export const maxDuration = 60
 
-type Outcome = { email: string; outcome: 'added' | 'failed'; message?: string; emailed?: boolean; url?: string }
+type Outcome = { email: string; outcome: 'added' | 'failed'; message?: string; emailed?: boolean; url?: string; linkFailed?: boolean }
 
 /**
  * Adds part of a CSV file: { role, people: [...] }, up to IMPORT_BATCH_SIZE
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       }
       try {
         const created = await createSchoolPerson(context, checked.value, { skipLimit: true })
-        results.push({ email: created.email, outcome: 'added', emailed: created.emailed, url: created.url })
+        results.push({ email: created.email, outcome: 'added', emailed: created.emailed, url: created.url, linkFailed: created.linkFailed })
       } catch (error) {
         const message = error instanceof PeopleError ? error.message : 'Could not create this account'
         if (!(error instanceof PeopleError)) console.error('CSV import row failed:', error)

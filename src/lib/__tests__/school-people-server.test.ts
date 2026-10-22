@@ -92,6 +92,27 @@ describe('createSchoolPerson', () => {
     expect(link.token).toBe(hashLinkToken(tokenFrom(created.url!)))
   })
 
+  it('keeps the account and reports it when the link cannot be made', async () => {
+    vi.stubEnv('RESEND_API_KEY', '')
+    const { fake, auth, context } = setup()
+    const from = context.supabase.from
+    context.supabase.from = (table: string) => {
+      if (table !== 'organization_invitations') return from(table)
+      const failing: any = new Proxy({}, {
+        get: (_t, prop) => prop === 'then'
+          ? (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'boom' } })
+          : () => failing,
+      })
+      return failing
+    }
+
+    const created = await createSchoolPerson(context as any, student('ama@x.co'))
+
+    expect(created).toMatchObject({ emailed: false, linkFailed: true })
+    expect(auth.deleteUser).not.toHaveBeenCalled()
+    expect(fake.tables.organization_members).toHaveLength(1)
+  })
+
   it('emails the link when email is set up', async () => {
     vi.stubEnv('RESEND_API_KEY', 'key')
     vi.stubEnv('EMAIL_FROM', 'InsyteAI <hi@x.co>')

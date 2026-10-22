@@ -53,6 +53,8 @@ export type LinkResult = {
   /** Only when the email did not go out, so the admin can pass the link on. */
   url?: string
   expiresAt: string
+  /** The account exists but no link could be made; the admin can resend one from the list. */
+  linkFailed?: boolean
 }
 
 type LinkPerson = { email: string; name: string | null; role: string; gradeLevel: string | null }
@@ -196,8 +198,15 @@ export async function createSchoolPerson(context: PeopleContext, person: NewPers
     console.error('Could not save profile details for a new school account:', error)
   }
 
-  const link = await issueAccountLink(context, { email: person.email, name: person.name, role: person.role, gradeLevel: person.gradeLevel }, 'activate')
-  return { userId, email: person.email, ...link }
+  try {
+    const link = await issueAccountLink(context, { email: person.email, name: person.name, role: person.role, gradeLevel: person.gradeLevel }, 'activate')
+    return { userId, email: person.email, ...link }
+  } catch (error) {
+    // The account is complete apart from its link. Report it as added so a
+    // retry doesn't hit "already uses this email"; "Resend activation" fixes it.
+    console.error('Could not issue an activation link for a new school account:', error)
+    return { userId, email: person.email, emailed: false, expiresAt: '', linkFailed: true }
+  }
 }
 
 async function saveProfileDetails(supabase: ServiceSupabase, userId: string, role: string, details: PersonUpdate) {

@@ -17,7 +17,7 @@ import {
   type SchoolPersonRole,
 } from '@/lib/school-people';
 
-type Outcome = { email: string; outcome: 'added' | 'failed'; message?: string; emailed?: boolean; url?: string };
+type Outcome = { email: string; outcome: 'added' | 'failed'; message?: string; emailed?: boolean; url?: string; linkFailed?: boolean };
 
 const ROLE_PLURAL: Record<SchoolPersonRole, string> = { student: 'students', teacher: 'teachers', admin: 'administrators' };
 
@@ -140,6 +140,11 @@ export function ImportPeopleDialog({ role, open, onOpenChange, schoolGrades, onD
                   <a href={linksHref} download={`${role}-activation-links.csv`}><Download className="mr-2 h-4 w-4" />Download activation links</a>
                 </Button>
               </div>
+            )}
+            {added.some((r) => r.linkFailed) && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
+                {added.filter((r) => r.linkFailed).length} accounts were created without an activation link. Find them on the list and use “Resend activation email”.
+              </p>
             )}
             {failed.length > 0 && (
               <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-3">

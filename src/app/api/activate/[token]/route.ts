@@ -1,14 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { rateLimit } from '@/lib/rate-limiter'
-import { completeAccountLink, findAccountLink, peopleErrorResponse } from '@/lib/school-people.server'
+import { completeAccountLink, findAccountLink, hashLinkToken, peopleErrorResponse } from '@/lib/school-people.server'
 import { validateNewPassword } from '@/lib/password-reset'
 
 type Params = { params: Promise<{ token: string }> }
 
+const TOKEN_TRIES = 10
+const TOKEN_WINDOW_SECONDS = 15 * 60
+
+/**
+ * A whole class may activate from one school network at once, so these routes
+ * don't use the strict per-IP sign-in bucket. Tokens can't be guessed; the
+ * per-IP API limit stops scanning and this caps tries on any one link.
+ */
+async function tooManyTriesOnLink(token: string): Promise<NextResponse | null> {
+  try {
+    const { data, error } = await createServerSupabase().rpc('hit_rate_limit', {
+      p_key: `activate:${hashLinkToken(token).slice(0, 32)}`,
+      p_max: TOKEN_TRIES,
+      p_window_seconds: TOKEN_WINDOW_SECONDS,
+    })
+    if (error || data !== false) return null
+  } catch {
+    return null
+  }
+  return NextResponse.json({ error: 'Too many tries with this link. Wait 15 minutes and try again.' }, { status: 429 })
+}
+
 /** What an activation or password link is for, so the page can greet the person. */
 export async function GET(request: NextRequest, { params }: Params) {
-  const limited = await rateLimit(request, 'auth')
+  const limited = await rateLimit(request, 'api')
   if (limited) return limited
   try {
     const { token } = await params
@@ -30,10 +52,12 @@ export async function GET(request: NextRequest, { params }: Params) {
 
 /** Sets the password: { password }. The page then signs in with it. */
 export async function POST(request: NextRequest, { params }: Params) {
-  const limited = await rateLimit(request, 'auth')
+  const limited = await rateLimit(request, 'api')
   if (limited) return limited
   try {
     const { token } = await params
+    const linkLimited = await tooManyTriesOnLink(token)
+    if (linkLimited) return linkLimited
     const body = await request.json().catch(() => null)
     const password = typeof body?.password === 'string' ? body.password : ''
     const problem = validateNewPassword(password, password)

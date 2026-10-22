@@ -5,7 +5,7 @@ import { Check, Copy, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export type LinkResult = { emailed: boolean; url?: string; expiresAt: string };
+export type LinkResult = { emailed: boolean; url?: string; expiresAt: string; linkFailed?: boolean };
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -22,6 +22,14 @@ export function AccountLinkNotice({ result, email, kind = 'activate' }: { result
         <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden />
         <p>We emailed an {what} to <strong className="break-all">{email}</strong>. It works until {formatDate(result.expiresAt)}.</p>
       </div>
+    );
+  }
+  if (result.linkFailed) {
+    return (
+      <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
+        The account was created, but we couldn’t make an {what} for <strong className="break-all">{email}</strong>.
+        Use “Resend activation email” on their row to send one.
+      </p>
     );
   }
   if (!result.url) return null;
