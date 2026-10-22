@@ -11,12 +11,14 @@ import {
   Book,
   GraduationCap,
   LayoutDashboard,
+  Library,
   FileText,
   MessagesSquare,
   Users,
   Calendar,
   FileCheck,
   ListChecks,
+  FilePlus,
   BarChart2,
   LogOut,
   Sun,
@@ -100,6 +102,16 @@ const teacherLinks: SidebarLink[] = [
   },
   {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/teachers/homework'},
   {
+    label: 'Content',
+    icon: <FileText className="h-5 w-5" />,
+    href: '/teachers/content'
+  },
+  {
+    label: 'Resources',
+    icon: <Library className="h-5 w-5" />,
+    href: '/teachers/resources'
+  },
+  {
     label: 'Live classes',
     icon: <Video className="h-5 w-5" />,
     href: '/teachers/live'
@@ -113,6 +125,23 @@ const teacherLinks: SidebarLink[] = [
     label: 'Class codes',
     icon: <KeyRound className="h-5 w-5" />,
     href: '/teachers/class-codes'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/assessments',
+    submenu: [
+      {
+        label: 'All Assessments',
+        icon: <ListChecks className="h-5 w-5" />,
+        href: '/assessments'
+      },
+      {
+        label: 'Create Assessment',
+        icon: <FilePlus className="h-5 w-5" />,
+        href: '/assessments/create'
+      }
+    ]
   }
 ];
 
@@ -157,6 +186,11 @@ const studentLinks: SidebarLink[] = [
     label: 'Collaborator',
     icon: <Users className="h-5 w-5" />,
     href: '/students/collaborator'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/assessments'
   }
 ];
 

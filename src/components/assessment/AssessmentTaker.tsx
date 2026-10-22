@@ -125,7 +125,8 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit assessment');
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? 'Failed to submit assessment');
       }
 
       const data = await response.json();
@@ -134,12 +135,12 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
         description: data.message,
       });
 
-      router.push('/assessments/results');
+      router.push(`/assessments/${assessment._id}/results`);
     } catch (error) {
       console.error('Error submitting assessment:', error);
       toast({
         title: 'Error',
-        description: 'Failed to submit assessment. Please try again.',
+        description: (error as Error)?.message || 'Failed to submit assessment. Please try again.',
         variant: 'destructive',
       });
     } finally {

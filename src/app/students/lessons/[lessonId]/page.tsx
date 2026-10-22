@@ -18,10 +18,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { PracticeExercise } from '@/components/practice/PracticeExercise';
 import { ContentDisplay } from '@/components/content/ContentDisplay';
-import { CircleHelp, ExternalLink, FileText, Link as LinkIcon, Loader2, Play, Presentation, Sparkles, Target } from 'lucide-react';
-import Link from 'next/link';
+import { CircleHelp, FileText, Loader2, Play, Presentation, Sparkles, Target } from 'lucide-react';
 import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { FloatingActionButton } from '@/components/ui/floating-action-button';
+import { LessonResourceList } from '@/components/resources/LessonResourceList';
+import type { LessonResource } from '@/lib/lesson-resources';
 import type { 
   QuizContentType, 
   WorksheetContentType, 
@@ -29,19 +30,6 @@ import type {
   SummaryContentType 
 } from '@/components/content/types';
 import type { StudentLessonDetail } from '@/lib/lesson-artifacts/student-learning';
-
-interface Resource {
-  _id: string;
-  title: string;
-  description: string;
-  type: 'file' | 'url';
-  fileUrl?: string;
-  filename?: string;
-  url?: string;
-  originalUrl?: string;
-  lessonId: string;
-  createdAt: string;
-}
 
 interface LessonContent {
   _id: string;
@@ -59,7 +47,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   const [lessonDetail, setLessonDetail] = useState<StudentLessonDetail | null>(null);
   const [lessonError, setLessonError] = useState<string | null>(null);
   const [contents, setContents] = useState<LessonContent[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [resources, setResources] = useState<LessonResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [practicing, setPracticing] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -361,55 +349,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
               </TabsContent>
 
               <TabsContent value="resources" className="space-y-4">
-                {resources.map((resource) => (
-                  <Card key={resource._id}>
-                    <CardContent className="pt-6">
-                      <div className="flex justify-between items-start min-w-0">
-                        <div className="min-w-0 w-full">
-                          <h3 className="text-lg font-semibold mb-2 break-words">{resource.title}</h3>
-                          <p className="text-muted-foreground mb-4 break-words">{resource.description}</p>
-                          {resource.type === 'file' && resource.fileUrl && (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <FileText className="h-4 w-4 shrink-0" />
-                              <Link 
-                                href={resource.fileUrl} 
-                                target="_blank"
-                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
-                              >
-                                {resource.filename}
-                                <ExternalLink className="h-3 w-3 inline ml-1" />
-                              </Link>
-                            </div>
-                          )}
-                          {resource.type === 'url' && resource.url && (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <LinkIcon className="h-4 w-4 shrink-0" />
-                              <Link 
-                                href={resource.url} 
-                                target="_blank"
-                                className="min-w-0 break-all text-primary hover:underline inline-block py-2"
-                              >
-                                {resource.originalUrl || 'View Resource'}
-                                <ExternalLink className="h-3 w-3 inline ml-1" />
-                              </Link>
-                            </div>
-                          )}
-                          <p className="text-sm text-muted-foreground mt-4">
-                            Added {new Date(resource.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {resources.length === 0 && (
-                  <div className="text-center py-12">
-                    <h3 className="text-lg font-semibold mb-2">No Resources Available</h3>
-                    <p className="text-muted-foreground">
-                      This lesson doesn't have any resources yet.
-                    </p>
-                  </div>
-                )}
+                <LessonResourceList resources={resources} />
               </TabsContent>
 
               <TabsContent value="practice" className="space-y-4">

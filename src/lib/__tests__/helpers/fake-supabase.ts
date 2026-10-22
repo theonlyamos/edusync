@@ -20,6 +20,8 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
       eq: (col: string, value: unknown) => { filters.push((r) => r[col] === value); return builder },
       is: (col: string, value: unknown) => { filters.push((r) => (r[col] ?? null) === value); return builder },
       in: (col: string, values: unknown[]) => { filters.push((r) => values.includes(r[col])); return builder },
+      // Case-insensitive equality; patterns with % or _ are not needed by the tests.
+      ilike: (col: string, value: string) => { filters.push((r) => String(r[col] ?? '').toLowerCase() === value.toLowerCase()); return builder },
       order: () => builder,
       limit: () => builder,
       neq: (col: string, value: unknown) => { filters.push((r) => r[col] !== value); return builder },

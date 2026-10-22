@@ -88,12 +88,13 @@ export default function AssessmentResultsPage({
       const resultsData = await resultsResponse.json();
 
       if (userRole === 'student') {
-        setResults([resultsData]); // Single result for student
+        // A student's own result, or null before they submit.
+        setResults(resultsData ? [resultsData] : []);
         setStatistics({
-          totalSubmissions: 1,
-          averageScore: resultsData.percentage,
-          passRate: resultsData.status === 'passed' ? 100 : 0,
-          averageTimeSpent: resultsData.timeSpent,
+          totalSubmissions: resultsData ? 1 : 0,
+          averageScore: resultsData?.percentage ?? 0,
+          passRate: resultsData?.status === 'passed' ? 100 : 0,
+          averageTimeSpent: resultsData?.timeSpent ?? 0,
         });
       } else {
         setResults(resultsData.results);

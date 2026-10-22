@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { Brain, BookOpen, FileQuestion, FileText as FileTextIcon, ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import { CreateLessonForm } from '@/components/lessons/CreateLessonForm';
 import { LessonHomeworkPanel } from '@/components/lessons/LessonHomeworkPanel';
+import { LessonResourcesPanel } from '@/components/resources/LessonResourcesPanel';
 import { LessonContentEditor } from '@/components/lessons/LessonContentEditor';
 import { ObjectiveAuthoringWorkspace } from '@/components/lessons/ObjectiveAuthoringWorkspace';
 import { formatGradeLevel, formatLessonDate, lessonStatus } from '@/lib/lesson-record';
@@ -80,7 +81,7 @@ export default function LessonPage() {
     const openedTab = useRef(false);
     const requestedTab = searchParams.get('tab');
     useEffect(() => {
-        if (requestedTab && ['overview', 'studio', 'content', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
+        if (requestedTab && ['overview', 'studio', 'content', 'resources', 'homework'].includes(requestedTab)) setActiveTab(requestedTab);
     }, [requestedTab]);
 
     useEffect(() => {
@@ -257,10 +258,11 @@ export default function LessonPage() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid h-auto grid-cols-2 sm:inline-flex">
+                    <TabsList className="grid h-auto grid-cols-3 sm:inline-flex">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="studio">Objective Studio</TabsTrigger>
                         <TabsTrigger value="content">Content</TabsTrigger>
+                        <TabsTrigger value="resources">Resources</TabsTrigger>
                         <TabsTrigger value="homework">Homework</TabsTrigger>
                     </TabsList>
 
@@ -415,6 +417,10 @@ export default function LessonPage() {
                                 open={isGenerating}
                             />
                         )}
+                    </TabsContent>
+
+                    <TabsContent value="resources" className="mt-6">
+                        {activeTab === 'resources' && <LessonResourcesPanel lessonId={params.lessonId} />}
                     </TabsContent>
 
                     <TabsContent value="homework" className="mt-6">

@@ -1,114 +1,38 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { mapResult, resultStatistics, type AssessmentResultRow } from '@/lib/assessments';
+import { AssessmentHttpError, assessmentErrorResponse, getAssessmentActor, loadAssessment, userNames } from '@/lib/assessments-server';
 
-export async function GET(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const supabase = await createSSRUserSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const actor = await getAssessmentActor();
+        const { row, canManage } = await loadAssessment(actor, (await params).id);
+
+        if (actor.role === 'student') {
+            // Students only ever see their own result (null until they submit).
+            const { data, error } = await actor.db
+                .from('assessment_results')
+                .select('*')
+                .eq('assessmentid', row.id)
+                .eq('studentid', actor.userId)
+                .order('submittedat', { ascending: false })
+                .limit(1);
+            if (error) throw error;
+            const result = data?.[0] as AssessmentResultRow | undefined;
+            return NextResponse.json(result ? mapResult(result, { name: actor.session.user.name, email: actor.session.user.email }) : null);
         }
 
-        // Get user role
-        const { data: userData } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        const userRole = userData?.role;
-
-        const { id } = await params;
-        const { data: assessment, error: assessErr } = await supabase
-            .from('assessments')
-            .select('id, createdBy')
-            .eq('id', id)
-            .maybeSingle();
-        if (assessErr) throw assessErr;
-        if (!assessment) {
-            return NextResponse.json(
-                { error: 'Assessment not found' },
-                { status: 404 }
-            );
-        }
-
-        // Check user role and permissions
-        if (userRole === 'student') {
-            // Students can only see their own results
-            const { data: result, error } = await supabase
-                .from('assessment_results')
-                .select('*, student:users(name, email)')
-                .eq('assessmentId', id)
-                .eq('studentId', user.id)
-                .maybeSingle();
-            if (error) throw error;
-            return NextResponse.json(result ?? null);
-        } else if (
-            userRole === 'teacher' &&
-            String(assessment.createdBy) === user.id
-        ) {
-            // Teachers can see all results for their assessments
-            const { data: results, error } = await supabase
-                .from('assessment_results')
-                .select('*, student:users(name, email)')
-                .eq('assessmentId', id)
-                .order('submittedAt', { ascending: false });
-            if (error) throw error;
-
-            // Calculate statistics
-            const totalSubmissions = results?.length ?? 0;
-            const averageScore = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.percentage, 0) / totalSubmissions) : 0;
-            const passRate = totalSubmissions ? ((results!.filter((r: any) => r.status === 'passed').length / totalSubmissions) * 100) : 0;
-            const averageTimeSpent = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.timeSpent, 0) / totalSubmissions) : 0;
-
-            return NextResponse.json({
-                results,
-                statistics: {
-                    totalSubmissions,
-                    averageScore,
-                    passRate,
-                    averageTimeSpent
-                }
-            });
-        } else if (userRole === 'admin') {
-            // Admins can see all results
-            const { data: results, error } = await supabase
-                .from('assessment_results')
-                .select('*, student:users(name, email)')
-                .eq('assessmentId', id)
-                .order('submittedAt', { ascending: false });
-            if (error) throw error;
-
-            // Calculate statistics
-            const totalSubmissions = results?.length ?? 0;
-            const averageScore = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.percentage, 0) / totalSubmissions) : 0;
-            const passRate = totalSubmissions ? ((results!.filter((r: any) => r.status === 'passed').length / totalSubmissions) * 100) : 0;
-            const averageTimeSpent = totalSubmissions ? (results!.reduce((acc: number, curr: any) => acc + curr.timeSpent, 0) / totalSubmissions) : 0;
-
-            return NextResponse.json({
-                results,
-                statistics: {
-                    totalSubmissions,
-                    averageScore,
-                    passRate,
-                    averageTimeSpent
-                }
-            });
-        }
-
-        return NextResponse.json(
-            { error: 'Not authorized to view these results' },
-            { status: 403 }
-        );
-    } catch (error: any) {
-        console.error('Error fetching assessment results:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch assessment results' },
-            { status: 500 }
-        );
+        if (!canManage) throw new AssessmentHttpError(403, 'Only the teacher who made this assessment can see its results');
+        const { data, error } = await actor.db
+            .from('assessment_results')
+            .select('*')
+            .eq('assessmentid', row.id)
+            .order('submittedat', { ascending: false });
+        if (error) throw error;
+        const rows = (data ?? []) as AssessmentResultRow[];
+        const students = await userNames(actor.db, rows.map((r) => r.studentid));
+        const results = rows.map((r) => mapResult(r, students.get(r.studentid)));
+        return NextResponse.json({ results, statistics: resultStatistics(results) });
+    } catch (error) {
+        return assessmentErrorResponse(error, 'Failed to fetch assessment results');
     }
 }

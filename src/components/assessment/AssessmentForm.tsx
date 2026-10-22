@@ -33,6 +33,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { Loader2, Plus, Trash } from 'lucide-react';
+import { GRADE_LEVELS } from '@/lib/constants';
 
 const questionTypes = [
   { value: 'multiple_choice', label: 'Multiple Choice' },
@@ -50,10 +51,9 @@ const formSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().min(1, 'Description is required'),
   subject: z.string().min(1, 'Subject is required'),
-  gradeLevel: z.string().min(1, 'Grade level is required'),
+  gradeLevel: z.string().min(1, 'Choose a grade'),
   type: z.enum(['quiz', 'exam', 'homework']),
   duration: z.number().min(1, 'Duration must be at least 1 minute'),
-  totalPoints: z.number().min(1, 'Total points must be at least 1'),
   passingScore: z.number().min(0, 'Passing score must be at least 0').max(100, 'Passing score cannot exceed 100'),
   questions: z.array(z.object({
     question: z.string().min(1, 'Question is required'),
@@ -85,7 +85,6 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
       gradeLevel: '',
       type: 'quiz',
       duration: 30,
-      totalPoints: 100,
       passingScore: 60,
       questions: [],
       dueDate: '',
@@ -98,14 +97,14 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
       await onSubmit(data);
       toast({
         title: 'Success',
-        description: `Assessment ${initialData ? 'updated' : 'created'} successfully`,
+        description: initialData ? 'Assessment updated' : 'Saved as a draft. Publish it from the Assessments page when students should see it.',
       });
       router.push('/assessments');
     } catch (error) {
       console.error('Error submitting assessment:', error);
       toast({
         title: 'Error',
-        description: 'Failed to submit assessment. Please try again.',
+        description: (error as Error)?.message || 'Failed to submit assessment. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -169,7 +168,7 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="subject"
@@ -189,17 +188,29 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
                 name="gradeLevel"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Grade Level</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
+                    <FormLabel>Grade</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a grade" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {GRADE_LEVELS.map((grade) => (
+                          <SelectItem key={grade} value={grade}>
+                            {grade.toUpperCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Students in this grade see it once you publish.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="type"
@@ -247,24 +258,13 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="totalPoints"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total Points</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Total points</p>
+                <p className="text-sm text-muted-foreground">
+                  {form.watch('questions').reduce((sum: number, q: { points?: number }) => sum + (Number(q.points) || 0), 0)} (adds up the points for each question)
+                </p>
+              </div>
 
               <FormField
                 control={form.control}
@@ -392,7 +392,27 @@ export function AssessmentForm({ initialData, onSubmit }: AssessmentFormProps) {
                       <FormItem>
                         <FormLabel>Correct Answer</FormLabel>
                         <FormControl>
-                          {question.type === 'true_false' ? (
+                          {question.type === 'multiple_choice' ? (
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Pick the correct option" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {(question.options ?? [])
+                                  .filter((option: string) => option?.trim())
+                                  .map((option: string, optionIndex: number) => (
+                                    <SelectItem key={optionIndex} value={option}>
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          ) : question.type === 'true_false' ? (
                             <Select
                               onValueChange={field.onChange}
                               defaultValue={field.value}
