@@ -51,8 +51,16 @@ export default function TakeAssessmentPage({
 
   const fetchAssessment = async () => {
     try {
-      const response = await fetch(`/api/assessments/${resolvedParams.id}`);
+      const [response, resultResponse] = await Promise.all([
+        fetch(`/api/assessments/${resolvedParams.id}`),
+        fetch(`/api/assessments/${resolvedParams.id}/results`),
+      ]);
       if (!response.ok) throw new Error('Failed to fetch assessment');
+      // One attempt per student: send them to their result if they've already submitted.
+      if (resultResponse.ok && (await resultResponse.json())) {
+        router.replace(`/assessments/${resolvedParams.id}/results`);
+        return;
+      }
 
       const data = await response.json();
       setAssessment(data);
@@ -110,14 +118,16 @@ export default function TakeAssessmentPage({
           <AlertDialogContent className="w-[calc(100%-2rem)] max-h-[85dvh] overflow-y-auto break-words">
             <AlertDialogHeader>
               <AlertDialogTitle>Start Assessment</AlertDialogTitle>
-              <AlertDialogDescription className="space-y-2">
-                <p>You are about to start: {assessment.title}</p>
-                <p>Duration: {assessment.duration} minutes</p>
-                <p>Total Points: {assessment.totalPoints}</p>
-                <p className="font-medium">
-                  Once you start, the timer will begin and you cannot pause or
-                  restart the assessment.
-                </p>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>You are about to start: {assessment.title}</p>
+                  <p>Duration: {assessment.duration} minutes</p>
+                  <p>Total Points: {assessment.totalPoints}</p>
+                  <p className="font-medium">
+                    Once you start, the timer will begin and you cannot pause or
+                    restart the assessment.
+                  </p>
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="[&>button]:min-h-11 xl:[&>button]:min-h-0">

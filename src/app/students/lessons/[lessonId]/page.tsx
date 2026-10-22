@@ -20,6 +20,8 @@ import { ArrowLeft, Check, CircleHelp, FileCheck, Loader2, PenLine, Play, Presen
 import { formatGrade } from '@/lib/grade';
 import Link from 'next/link';
 import type { StudentLessonDetail } from '@/lib/lesson-artifacts/student-learning';
+import { LessonResourceList } from '@/components/resources/LessonResourceList';
+import type { LessonResource } from '@/lib/lesson-resources';
 
 export default function LessonPage({ params }: { params: Promise<{ lessonId: string }> }) {
   const resolvedParams = use(params);
@@ -34,6 +36,7 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   // Which practice is being made: 'lesson', an objective id, or nothing.
   const [generatingPractice, setGeneratingPractice] = useState<string | null>(null);
   const [practiceFocus, setPracticeFocus] = useState<string | null>(null);
+  const [resources, setResources] = useState<LessonResource[] | null>(null);
   const lesson = lessonDetail?.lesson ?? null;
 
   const fetchLesson = useCallback(async () => {
@@ -57,6 +60,17 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
   useEffect(() => {
     if (resolvedParams.lessonId) void fetchLesson();
   }, [fetchLesson, resolvedParams.lessonId]);
+
+  // Resources load on their own so a slow or failed request never blocks the lesson.
+  useEffect(() => {
+    if (!resolvedParams.lessonId) return;
+    let cancelled = false;
+    fetch(`/api/resources?lessonId=${resolvedParams.lessonId}`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => { if (!cancelled) setResources(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setResources([]); });
+    return () => { cancelled = true; };
+  }, [resolvedParams.lessonId]);
 
   // objectiveId: practise one objective; undefined: the whole lesson.
   const handleStartPractice = async (objectiveId?: string) => {
@@ -266,6 +280,13 @@ export default function LessonPage({ params }: { params: Promise<{ lessonId: str
           })}
         </ol>
         {!objectives.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Your teacher hasn&apos;t published objectives for this lesson yet.</p>}
+
+        {resources && resources.length > 0 && (
+          <section className="space-y-3" aria-labelledby="lesson-resources-heading">
+            <h2 id="lesson-resources-heading" className="text-lg font-semibold">Resources</h2>
+            <LessonResourceList resources={resources} />
+          </section>
+        )}
       </div>
     </DashboardLayout>
   );

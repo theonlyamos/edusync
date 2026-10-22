@@ -11,12 +11,14 @@ import {
   Book,
   GraduationCap,
   LayoutDashboard,
+  Library,
   FileText,
   MessagesSquare,
   Users,
   Calendar,
   FileCheck,
   ListChecks,
+  FilePlus,
   BarChart2,
   LogOut,
   Sun,
@@ -27,6 +29,7 @@ import {
   KeyRound,
   Users2,
   Video,
+  ClipboardCheck,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -99,6 +102,16 @@ const teacherLinks: SidebarLink[] = [
   },
   {label:'Homework',icon:<FileCheck className="h-5 w-5"/>,href:'/teachers/homework'},
   {
+    label: 'Content',
+    icon: <FileText className="h-5 w-5" />,
+    href: '/teachers/content'
+  },
+  {
+    label: 'Resources',
+    icon: <Library className="h-5 w-5" />,
+    href: '/teachers/resources'
+  },
+  {
     label: 'Live classes',
     icon: <Video className="h-5 w-5" />,
     href: '/teachers/live'
@@ -112,6 +125,23 @@ const teacherLinks: SidebarLink[] = [
     label: 'Class codes',
     icon: <KeyRound className="h-5 w-5" />,
     href: '/teachers/class-codes'
+  },
+  {
+    label: 'Assessments',
+    icon: <FileCheck className="h-5 w-5" />,
+    href: '/assessments',
+    submenu: [
+      {
+        label: 'All Assessments',
+        icon: <ListChecks className="h-5 w-5" />,
+        href: '/assessments'
+      },
+      {
+        label: 'Create Assessment',
+        icon: <FilePlus className="h-5 w-5" />,
+        href: '/assessments/create'
+      }
+    ]
   }
 ];
 
@@ -123,6 +153,7 @@ const studentLinks: SidebarLink[] = [
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/students/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/students/timetable' },
   { label: 'Practice', icon: <FileText className="h-5 w-5" />, href: '/students/practice' },
+  { label: 'Assessments', icon: <ClipboardCheck className="h-5 w-5" />, href: '/assessments' },
   { label: 'Study companion', icon: <MessagesSquare className="h-5 w-5" />, href: '/students/tutor' },
   { label: 'Collaborator', icon: <Users className="h-5 w-5" />, href: '/students/collaborator' },
   { label: 'My performance', icon: <BarChart2 className="h-5 w-5" />, href: '/students/homework/performance' },

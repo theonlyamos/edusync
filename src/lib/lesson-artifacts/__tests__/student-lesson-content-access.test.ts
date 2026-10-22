@@ -27,7 +27,7 @@ function createHarness(lessonGrade: string, studentGrade: string) {
     if (table === 'students') {
       return { select: vi.fn(() => ({ eq: vi.fn(() => terminal({ grade: studentGrade })) })) };
     }
-    if (table === 'lesson_content') {
+    if (table === 'lesson_content' || table === 'lesson_resources') {
       return {
         select: vi.fn(() => ({
           eq: vi.fn(() => ({

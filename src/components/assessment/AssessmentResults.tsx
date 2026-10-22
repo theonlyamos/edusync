@@ -84,7 +84,8 @@ export function AssessmentResults({
   const scoreDistribution = Array.from({ length: 10 }, (_, i) => ({
     range: `${i * 10}-${(i + 1) * 10}`,
     count: results.filter(
-      (r) => r.percentage >= i * 10 && r.percentage < (i + 1) * 10
+      // The top bucket includes 100%.
+      (r) => r.percentage >= i * 10 && (i === 9 ? r.percentage <= 100 : r.percentage < (i + 1) * 10)
     ).length,
   }));
 
@@ -111,6 +112,23 @@ export function AssessmentResults({
       </CardContent>
     </Card>
   );
+
+  if (userRole === 'student') {
+    // A student sees only their own attempt, so class-wide stats would be misleading.
+    const mine = results[0];
+    if (!mine) {
+      return <p className="text-muted-foreground">You haven&apos;t taken this assessment yet.</p>;
+    }
+    const possible = questions.reduce((sum, q) => sum + q.points, 0);
+    return (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Your score" value={`${mine.percentage.toFixed(1)}%`} icon={Target} />
+        <StatCard title="Result" value={mine.status === 'passed' ? 'Passed' : 'Not passed'} icon={Award} />
+        <StatCard title="Points" value={`${mine.totalScore} of ${possible}`} icon={Users} />
+        <StatCard title="Time spent" value={`${mine.timeSpent} min`} icon={Clock} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 min-w-0">
@@ -180,7 +198,7 @@ export function AssessmentResults({
               <Table className="min-w-[560px]" tabIndex={0} aria-label="Individual assessment results">
                 <TableHeader>
                   <TableRow>
-                    {userRole !== 'student' && <TableHead>Student</TableHead>}
+                    <TableHead>Student</TableHead>
                     <TableHead>Score</TableHead>
                     <TableHead>Percentage</TableHead>
                     <TableHead>Status</TableHead>
@@ -191,9 +209,7 @@ export function AssessmentResults({
                 <TableBody>
                   {results.map((result) => (
                     <TableRow key={result._id}>
-                      {userRole !== 'student' && (
-                        <TableCell>{result.studentId.name}</TableCell>
-                      )}
+                      <TableCell>{result.studentId.name}</TableCell>
                       <TableCell>
                         {result.totalScore} / {questions.reduce((acc, q) => acc + q.points, 0)}
                       </TableCell>

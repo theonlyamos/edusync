@@ -1,62 +1,39 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { AssessmentForm } from '@/components/assessment/AssessmentForm';
-import { useToast } from '@/components/ui/use-toast';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CreateAssessmentPage() {
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const handleSubmit = async (data: any) => {
-    try {
-      const response = await fetch('/api/assessments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create assessment');
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Assessment created successfully',
-      });
-
-      router.push('/assessments');
-    } catch (error) {
-      console.error('Error creating assessment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create assessment. Please try again.',
-        variant: 'destructive',
-      });
-      throw error;
+  // The form shows success or error toasts and returns to the list.
+  const handleSubmit = async (data: unknown) => {
+    const response = await fetch('/api/assessments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error ?? 'Failed to create assessment');
     }
   };
 
   return (
     <DashboardLayout>
-      <div className="container max-w-4xl mx-auto p-6">
+      <div className="container mx-auto max-w-4xl p-4 sm:p-6">
         <Link
           href="/assessments"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
+          className="mb-6 inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground xl:min-h-0"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Assessments
         </Link>
 
         <div className="mb-6">
-          <h1 className="text-3xl font-bold">Create Assessment</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Create assessment</h1>
           <p className="text-muted-foreground">
-            Create a new assessment for your students
+            It is saved as a draft. Students in the chosen grade see it once you publish it.
           </p>
         </div>
 
@@ -64,4 +41,4 @@ export default function CreateAssessmentPage() {
       </div>
     </DashboardLayout>
   );
-} 
+}

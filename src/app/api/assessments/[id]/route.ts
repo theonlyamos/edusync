@@ -1,197 +1,81 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { assessmentColumns, assessmentInputSchema, mapAssessment, type AssessmentRow } from '@/lib/assessments';
+import {
+    ASSESSMENT_COLUMNS,
+    AssessmentHttpError,
+    assessmentErrorResponse,
+    getAssessmentActor,
+    loadAssessment,
+    userNames,
+} from '@/lib/assessments-server';
 
-// Get a single assessment
-export async function GET(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, { params }: Params) {
     try {
-        const supabase = await createSSRUserSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const { id } = await params;
-        const { data: assessment, error } = await supabase
-            .from('assessments')
-            .select('*, createdBy:users(name, email)')
-            .eq('id', id)
-            .maybeSingle();
-        if (error) throw error;
-
-        if (!assessment) {
-            return NextResponse.json(
-                { error: 'Assessment not found' },
-                { status: 404 }
-            );
-        }
-
-        return NextResponse.json(assessment);
-    } catch (error: any) {
-        console.error('Error fetching assessment:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch assessment' },
-            { status: 500 }
-        );
+        const actor = await getAssessmentActor();
+        const { row, canManage } = await loadAssessment(actor, (await params).id);
+        const creators = await userNames(actor.db, [row.createdby]);
+        return NextResponse.json(mapAssessment(row, {
+            // Only the author (or an admin) sees the answer key.
+            includeAnswers: canManage,
+            creator: row.createdby ? creators.get(row.createdby) : null,
+        }));
+    } catch (error) {
+        return assessmentErrorResponse(error, 'Failed to fetch assessment');
     }
 }
 
-// Update an assessment
-export async function PUT(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+// Update an assessment. Send { isPublished } alone to publish or unpublish.
+export async function PUT(req: NextRequest, { params }: Params) {
     try {
-        const supabase = await createSSRUserSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const actor = await getAssessmentActor();
+        const { row } = await loadAssessment(actor, (await params).id, 'manage');
+        const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+        if (!body) throw new AssessmentHttpError(400, 'Send the assessment changes');
+        let update: Record<string, unknown>;
+        if (Object.keys(body).length === 1 && typeof body.isPublished === 'boolean') {
+            update = { is_published: body.isPublished };
+        } else {
+            const input = assessmentInputSchema.parse(body);
+            try {
+                update = assessmentColumns(input);
+            } catch (error) {
+                throw new AssessmentHttpError(400, (error as Error).message);
+            }
+            const { count, error: countError } = await actor.db
+                .from('assessment_results')
+                .select('id', { count: 'exact', head: true })
+                .eq('assessment_id', row.id);
+            if (countError) throw countError;
+            // Changing questions after students submit would make their marks wrong.
+            if ((count ?? 0) > 0) throw new AssessmentHttpError(409, 'Students have already submitted this assessment, so its questions can no longer change');
         }
-
-        // Get user role
-        const { data: userData } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        const userRole = userData?.role;
-
-        const {
-            title,
-            description,
-            subject,
-            gradeLevel,
-            type,
-            duration,
-            totalPoints,
-            passingScore,
-            questions,
-            dueDate,
-            isPublished
-        } = await req.json();
-
-        const { id } = await params;
-        const { data: assessment, error: findErr } = await supabase
+        const { data, error } = await actor.db
             .from('assessments')
-            .select('id, createdBy')
-            .eq('id', id)
-            .maybeSingle();
-        if (findErr) throw findErr;
-
-        if (!assessment) {
-            return NextResponse.json(
-                { error: 'Assessment not found' },
-                { status: 404 }
-            );
-        }
-
-        // Only allow creator or admin to update
-        if (
-            String(assessment.createdBy) !== user.id &&
-            userRole !== 'admin'
-        ) {
-            return NextResponse.json(
-                { error: 'Not authorized to update this assessment' },
-                { status: 403 }
-            );
-        }
-
-        const { data: updatedAssessment, error } = await supabase
-            .from('assessments')
-            .update({
-                title,
-                description,
-                subject,
-                gradeLevel,
-                type,
-                duration,
-                totalPoints,
-                passingScore,
-                questions,
-                dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-                isPublished,
-                updatedAt: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select('*, createdBy:users(name, email)')
-            .maybeSingle();
+            .update(update)
+            .eq('id', row.id)
+            .select(ASSESSMENT_COLUMNS)
+            .single();
         if (error) throw error;
-
-        return NextResponse.json(updatedAssessment);
-    } catch (error: any) {
-        console.error('Error updating assessment:', error);
-        return NextResponse.json(
-            { error: 'Failed to update assessment' },
-            { status: 500 }
-        );
+        const creators = await userNames(actor.db, [row.createdby]);
+        return NextResponse.json(mapAssessment(data as AssessmentRow, {
+            includeAnswers: true,
+            creator: row.createdby ? creators.get(row.createdby) : null,
+        }));
+    } catch (error) {
+        return assessmentErrorResponse(error, 'Failed to update assessment');
     }
 }
 
-// Delete an assessment
-export async function DELETE(
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_req: NextRequest, { params }: Params) {
     try {
-        const supabase = await createSSRUserSupabase();
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        // Get user role
-        const { data: userData } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        const userRole = userData?.role;
-
-        const { id } = await params;
-        const { data: assessment, error: findErr2 } = await supabase
-            .from('assessments')
-            .select('id, createdBy')
-            .eq('id', id)
-            .maybeSingle();
-        if (findErr2) throw findErr2;
-
-        if (!assessment) {
-            return NextResponse.json(
-                { error: 'Assessment not found' },
-                { status: 404 }
-            );
-        }
-
-        // Only allow creator or admin to delete
-        if (
-            String(assessment.createdBy) !== user.id &&
-            userRole !== 'admin'
-        ) {
-            return NextResponse.json(
-                { error: 'Not authorized to delete this assessment' },
-                { status: 403 }
-            );
-        }
-
-        const { error } = await supabase
-            .from('assessments')
-            .delete()
-            .eq('id', id);
+        const actor = await getAssessmentActor();
+        const { row } = await loadAssessment(actor, (await params).id, 'manage');
+        const { error } = await actor.db.from('assessments').delete().eq('id', row.id);
         if (error) throw error;
-
         return NextResponse.json({ message: 'Assessment deleted successfully' });
-    } catch (error: any) {
-        console.error('Error deleting assessment:', error);
-        return NextResponse.json(
-            { error: 'Failed to delete assessment' },
-            { status: 500 }
-        );
+    } catch (error) {
+        return assessmentErrorResponse(error, 'Failed to delete assessment');
     }
 }
