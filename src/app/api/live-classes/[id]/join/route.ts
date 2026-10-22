@@ -25,7 +25,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Event not found' }, { status: 404 })
   }
 
-  if (ev.status === 'cancelled' || ev.status === 'ended') {
+  if (ev.status === 'cancelled' || ev.status === 'ended' || ev.status === 'draft') {
     return NextResponse.json({ error: 'Event is not open for enrollment' }, { status: 400 })
   }
 

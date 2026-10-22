@@ -89,7 +89,13 @@ function createHarness(options: HarnessOptions = {}) {
       chain.select = vi.fn(() => chain);
       chain.eq = vi.fn(() => chain);
       chain.limit = vi.fn().mockResolvedValue({
-        data: [{ objective_id: 'objective-1' }, { objective_id: 'retired-objective' }, { objective_id: 'objective-1' }],
+        data: [
+          { objective_id: 'objective-1', objective_revision: 3 },
+          { objective_id: 'retired-objective', objective_revision: 1 },
+          { objective_id: 'objective-1', objective_revision: null },
+          // Mastered before the objective was rewritten (now revision 2).
+          { objective_id: 'objective-2', objective_revision: 1 },
+        ],
         error: null,
       });
       return chain;
@@ -129,7 +135,7 @@ describe('student lesson detail route', () => {
     expect(json.objectives.map((objective: { id: string }) => objective.id)).toEqual(['objective-1', 'objective-2']);
     expect(json.objectives[0].artifactCounts).toEqual({ visualizations: 1, quizzes: 0, resources: 0 });
     expect(json.objectives[1].artifactCounts).toEqual({ visualizations: 0, quizzes: 1, resources: 0 });
-    // Only published objectives count, once each.
+    // Only published objectives at their current revision count, once each.
     expect(json.masteredObjectiveIds).toEqual(['objective-1']);
   });
 
