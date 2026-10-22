@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
     "worker:content": "tsx scripts/content-worker.ts",
-    "lesson-runtime:css": "tailwindcss -c tailwind.lesson-runtime.config.ts -i src/styles/lesson-runtime.css -o public/lesson-runtime/tailwind.generated.css --minify"
+    "lesson-runtime:css": "tailwindcss -c tailwind.lesson-runtime.config.ts -i src/styles/lesson-runtime.css -o public/lesson-runtime/tailwind.generated.css --minify",
+    "live-class-agent": "pnpm --filter live-class-agent dev"
   },
   "dependencies": {
     "@edusync/shared": "workspace:*",
