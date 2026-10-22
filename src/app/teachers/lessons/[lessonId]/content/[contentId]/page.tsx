@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ContentActions } from '@/components/content/ContentActions';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { formatDate } from '@/lib/format-date';
 
 interface LessonContent {
   _id: string;
@@ -151,7 +152,7 @@ export default function ContentViewPage() {
               {(content.content as any).title}
             </h1>
             <p className="text-muted-foreground">
-              Created: {new Date(content.createdAt).toLocaleDateString()}
+              Created {formatDate(content.createdAt)}
             </p>
           </div>
           <ContentActions

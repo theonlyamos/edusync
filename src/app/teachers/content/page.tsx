@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { BookOpen, FileText, HelpCircle, ListChecks, Loader2, Trash2 } from 'lucide-react';
+import { formatDate } from '@/lib/format-date';
 
 type ContentType = 'quiz' | 'worksheet' | 'explanation' | 'summary';
 
@@ -163,7 +164,7 @@ function ContentLibrary() {
                         {item.lessonTitle}
                       </Link>
                     )}
-                    <span>· {new Date(item.createdAt).toLocaleDateString()}</span>
+                    <span>· {formatDate(item.createdAt)}</span>
                   </div>
                   {detail(item) && <p className="line-clamp-2 text-sm text-muted-foreground">{detail(item)}</p>}
                 </CardContent>

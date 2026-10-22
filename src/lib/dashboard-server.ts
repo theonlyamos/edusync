@@ -325,11 +325,18 @@ export interface TeacherDashboardData {
 
 export const WEAK_OBJECTIVE_PERCENT = 70;
 
+/** Dashboard insights look at homework due in this many recent days (and anything due later). */
+export const INSIGHT_WINDOW_DAYS = 60;
+
 export async function teacherDashboard(
   db: DB,
   userId: string,
   schoolId: string | null,
+  now = new Date(),
 ): Promise<TeacherDashboardData> {
+  // Older homework stays on the Homework pages; reading it here would slow the
+  // dashboard down a little more every term.
+  const since = new Date(now.getTime() - INSIGHT_WINDOW_DAYS * 86400000).toISOString();
   const homeworkRows = (
     await readAll((from, to) =>
       db
@@ -337,6 +344,7 @@ export async function teacherDashboard(
         .select("id,title,due_at,close_at,questions,objectives,organization_id")
         .eq("owner_id", userId)
         .eq("status", "published")
+        .gte("due_at", since)
         .order("id")
         .range(from, to),
     )
@@ -390,7 +398,7 @@ export async function teacherDashboard(
     recipients,
     attempts,
     grades,
-    now: new Date(),
+    now,
   }).slice(0, 5);
   const names = new Map<string, string>();
   if (behind.length) {

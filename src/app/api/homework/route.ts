@@ -46,7 +46,12 @@ export async function GET(request: Request) {
           "lesson_id",
           z.string().uuid().parse(url.searchParams.get("lessonId")),
         );
-    } else query = query.eq("owner_id", user.id);
+    } else {
+      query = query.eq("owner_id", user.id);
+      // ?active=1 leaves out archived homework (the dashboard only needs current work).
+      if (url.searchParams.get("active") === "1")
+        query = query.in("status", ["draft", "published"]);
+    }
     const { data: rows, error } = await query.range(page * 50, page * 50 + 50);
     if (error) throw error;
     const organizations = [

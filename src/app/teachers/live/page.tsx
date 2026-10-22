@@ -37,6 +37,7 @@ import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick'
 import { getClientLiveClassLobbyMinutes, liveClassJoinStatesByEventId } from '@/lib/live-class-window'
 import { CalendarPlus, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { GRADE_LEVELS } from '@/lib/constants'
+import { formatDateTimeRange } from '@/lib/format-date'
 
 type LessonOption = { _id: string; title: string; subject?: string }
 
@@ -332,7 +333,7 @@ export default function TeachersLiveClassesPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-3xl mx-auto space-y-8">
+      <div className="max-w-3xl space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Live classes</h1>
@@ -507,8 +508,7 @@ export default function TeachersLiveClassesPage() {
                             {ev.grade_level ? <span className="block">Grade: {ev.grade_level}</span> : null}
                             {lt ? <span className="block">Lesson: {lt}</span> : null}
                             <span className="block mt-1">
-                              {new Date(ev.scheduled_start_at).toLocaleString()} –{' '}
-                              {new Date(ev.scheduled_end_at).toLocaleString()}
+                              {formatDateTimeRange(ev.scheduled_start_at, ev.scheduled_end_at)}
                               {statusLabel ? ` · ${statusLabel}` : null}
                             </span>
                           </CardDescription>

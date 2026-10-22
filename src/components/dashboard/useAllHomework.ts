@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { homeworkRequest } from "@/components/homework/shared";
 import type { DashboardHomeworkItem } from "@/lib/dashboard";
 
-// /api/homework returns 50 items per page. Dashboard totals need every page.
+// /api/homework returns 50 items per page. Dashboard totals need every page of
+// current (draft or published) homework; archived homework is left out.
 const MAX_PAGES = 20;
 
 export function useAllHomework() {
@@ -22,7 +23,7 @@ export function useAllHomework() {
         const data = await homeworkRequest<{
           items: DashboardHomeworkItem[];
           hasMore: boolean;
-        }>(`/api/homework?page=${page}`);
+        }>(`/api/homework?active=1&page=${page}`);
         all.push(...data.items);
         if (!data.hasMore) break;
       }

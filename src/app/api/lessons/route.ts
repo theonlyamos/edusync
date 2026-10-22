@@ -62,8 +62,16 @@ export async function GET(request: Request) {
             query = query.eq('organization_id', schoolId);
         }
 
-        const { data, error } = await query.order('created_at', { ascending: false });
+        // Optional paging: ?limit=24&offset=0. Without it every lesson is returned.
+        const limit = Math.min(100, Math.max(0, Number.parseInt(searchParams.get('limit') ?? '', 10) || 0));
+        const offset = Math.max(0, Number.parseInt(searchParams.get('offset') ?? '', 10) || 0);
+        // Paged requests ask for one extra row to know whether another page exists.
+        const { data: rows, error } = limit
+            ? await query.order('created_at', { ascending: false }).order('id', { ascending: true }).range(offset, offset + limit)
+            : await query.order('created_at', { ascending: false });
         if (error) throw error;
+        const hasMore = limit > 0 && (rows?.length ?? 0) > limit;
+        const data = hasMore ? rows!.slice(0, limit) : rows;
 
         // Transform to include teacher name/email at top level
         const lessons = (data ?? []).map((lesson: any) => mapLessonRecord({
@@ -71,7 +79,7 @@ export async function GET(request: Request) {
             teacherName: lesson.teacher_info?.users?.name || null,
         }));
 
-        return NextResponse.json(lessons);
+        return NextResponse.json(lessons, limit ? { headers: { 'X-Has-More': hasMore ? '1' : '0' } } : undefined);
     } catch (error) {
         console.error("Error fetching lessons:", error);
         return NextResponse.json(

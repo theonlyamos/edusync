@@ -29,6 +29,7 @@ interface Lesson {
 
 type View = 'active' | 'archived';
 const PREVIEW_OBJECTIVES = 3;
+const PAGE_SIZE = 24;
 
 export default function LessonsPage() {
   const { toast } = useToast();
@@ -38,20 +39,41 @@ export default function LessonsPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [restoringId, setRestoringId] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const lessonsUrl = (nextView: View, offset: number) =>
+    `/api/lessons?limit=${PAGE_SIZE}&offset=${offset}${nextView === 'archived' ? '&archived=only' : ''}`;
 
   const fetchLessons = useCallback(async (nextView: View) => {
     setLoading(true);
     setLoadError('');
     try {
-      const response = await fetch(nextView === 'archived' ? '/api/lessons?archived=only' : '/api/lessons');
+      const response = await fetch(lessonsUrl(nextView, 0));
       if (!response.ok) throw new Error('Your lessons could not be loaded.');
       setLessons(await response.json());
+      setHasMore(response.headers.get('X-Has-More') === '1');
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Your lessons could not be loaded.');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const response = await fetch(lessonsUrl(view, lessons.length));
+      if (!response.ok) throw new Error('More lessons could not be loaded.');
+      const next: Lesson[] = await response.json();
+      setLessons((current) => [...current, ...next.filter((l) => !current.some((c) => c._id === l._id))]);
+      setHasMore(response.headers.get('X-Has-More') === '1');
+    } catch (error) {
+      toast({ title: 'Could not load more', description: (error as Error).message, variant: 'destructive' });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => { queueMicrotask(() => void fetchLessons(view)); }, [fetchLessons, view]);
 
@@ -164,6 +186,15 @@ export default function LessonsPage() {
                 ? <div key={lesson._id}>{card}</div>
                 : <Link href={`/teachers/lessons/${lesson._id}`} key={lesson._id} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{card}</Link>;
             })}
+          </div>
+        )}
+
+        {!loading && !loadError && hasMore && (
+          <div className="mt-6 flex justify-center">
+            <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Show more lessons
+            </Button>
           </div>
         )}
 
