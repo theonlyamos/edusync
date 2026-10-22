@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
-import { practiceStatsFromRow } from '@/lib/practice-stats';
+import { practiceStatsFromRow, practiceStreak } from '@/lib/practice-stats';
 
 export async function GET() {
     try {
@@ -29,7 +29,20 @@ export async function GET() {
             .maybeSingle();
         if (error) throw error;
 
-        return NextResponse.json(practiceStatsFromRow(user.id, row));
+        const since = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: recent, error: recentError } = await supabase
+            .from('practice_results')
+            .select('completedat')
+            .eq('student_id', user.id)
+            .gte('completedat', since)
+            .order('completedat', { ascending: false })
+            .limit(1000);
+        if (recentError) throw recentError;
+
+        return NextResponse.json({
+            ...practiceStatsFromRow(user.id, row),
+            currentStreak: practiceStreak((recent ?? []).map((r) => r.completedat as string)),
+        });
     } catch (error) {
         console.error('Error fetching practice stats:', error);
         return new NextResponse('Internal Server Error', { status: 500 });

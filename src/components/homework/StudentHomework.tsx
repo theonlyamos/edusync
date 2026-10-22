@@ -516,8 +516,8 @@ function StudentWork({
             </div>
             {hint && <Notice>{hint}</Notice>}
             <p className="text-xs text-muted-foreground mt-3">
-              Use this assignment’s help controls. General AI tools are paused
-              while you have an editable homework attempt.
+              Use this assignment’s help controls. The tutor and other AI tools
+              are paused until you submit this homework or it’s due.
             </p>
           </HomeworkPanel>
         </div>

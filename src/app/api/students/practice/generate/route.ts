@@ -3,6 +3,42 @@ import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { generateAICompletion } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import { createServerSupabase } from '@/lib/supabase.server';
+import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
+import { getUserSchoolId, inActiveSchool } from '@/lib/school';
+
+async function publishedLessonForStudent(userId: string, lessonId: string, studentGrade: string | null) {
+    const db = createServerSupabase();
+    const [{ data: lesson, error }, schoolId] = await Promise.all([
+        db.from('lessons')
+            .select('id,gradelevel,current_publication_id,organization_id,archived_at')
+            .eq('id', lessonId)
+            .maybeSingle(),
+        getUserSchoolId(db, userId),
+    ]);
+    if (error) throw error;
+    const lessonGrade = lesson?.gradelevel?.trim().toLowerCase();
+    if (
+        !lesson || lesson.archived_at || !lesson.current_publication_id ||
+        !inActiveSchool(schoolId, lesson.organization_id) ||
+        !lessonGrade || lessonGrade !== studentGrade?.trim().toLowerCase()
+    ) return null;
+    const { data: publication, error: publicationError } = await db
+        .from('lesson_publications')
+        .select('manifest')
+        .eq('id', lesson.current_publication_id)
+        .maybeSingle();
+    if (publicationError) throw publicationError;
+    const snapshot = publication?.manifest?.lesson;
+    if (!snapshot?.title || !snapshot?.subject) return null;
+    const objectives = normalizePublishedObjectives(publication?.manifest?.objectives ?? []) ?? [];
+    return {
+        title: String(snapshot.title),
+        subject: String(snapshot.subject),
+        gradeLevel: String(snapshot.gradeLevel ?? lesson.gradelevel ?? ''),
+        objectives: objectives.map((objective) => objective.text).filter(Boolean),
+    };
+}
 
 interface Question {
     question: string;
@@ -54,11 +90,6 @@ const exercisesSchema = z.object({
     questions: z.array(questionSchema)
 });
 
-// Zod schema for the request body
-const generatePracticeSchema = z.object({
-    lessonId: z.string().min(1, "Lesson ID is required"),
-});
-
 export async function POST(req: Request) {
     try {
         const supabase = await createSSRUserSupabase();
@@ -79,16 +110,47 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Unauthorized - Student access required' }, { status: 403 });
         }
 
-        const { difficulty, subject, topic, type } = await req.json();
+        const body = await req.json().catch(() => ({}));
+        const type = typeof body.type === 'string' ? body.type : 'standard';
+        const difficulty = typeof body.difficulty === 'string' ? body.difficulty : 'medium';
+        let subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+        let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+        let gradeLevel = '';
+        let objectives: string[] = [];
 
-        let lessonContent = '';
+        const { data: student } = await supabase
+            .from('students')
+            .select('grade')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        gradeLevel = student?.grade ?? '';
 
-        lessonContent = `
-Topic: ${topic}
-Subject: ${subject}
-Difficulty: ${difficulty}
-Preferences: ${type}
-`;
+        // Practice started from a lesson is built from what the student can
+        // see: the published snapshot, with the same school and grade checks
+        // as the student lesson page.
+        if (typeof body.lessonId === 'string' && body.lessonId) {
+            const published = await publishedLessonForStudent(user.id, body.lessonId, student?.grade ?? null);
+            if (!published) {
+                return NextResponse.json({ message: 'This lesson is not available for practice.' }, { status: 404 });
+            }
+            subject = published.subject;
+            topic = published.title;
+            gradeLevel = published.gradeLevel || gradeLevel;
+            objectives = published.objectives;
+        }
+
+        if (!subject || !topic) {
+            return NextResponse.json({ message: 'Choose a subject and topic to practise.' }, { status: 400 });
+        }
+
+        const lessonContent = [
+            `Topic: ${topic}`,
+            `Subject: ${subject}`,
+            gradeLevel ? `Student grade level: ${gradeLevel.toUpperCase()}` : '',
+            objectives.length ? `Lesson objectives:\n${objectives.map((o) => `- ${o}`).join('\n')}` : '',
+            `Difficulty: ${difficulty}`,
+            `Preferences: ${type}`,
+        ].filter(Boolean).join('\n');
 
         const prompt = `Create a set of ${type === 'quick' ? '3' : '5'} multiple choice practice exercises for:
 Based on the following context:
@@ -147,7 +209,7 @@ Requirements:
 5. For 'true_false', options MUST be ["True", "False"].
 6. For 'short_answer', there MUST be no 'options' field.
 7. Include detailed explanations for each answer.
-8. Make questions challenging but appropriate for the subject, topic and difficulty level logic.
+8. Make questions challenging but appropriate for the student's grade level, subject, topic and difficulty. When lesson objectives are given, cover them.
 9. Questions should be relevant to the subject and topic.`;
 
         const generatedContent = await generateAICompletion(

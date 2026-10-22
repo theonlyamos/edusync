@@ -61,3 +61,39 @@ export function nextPracticeStatsRow(
     lastpracticedate: completedAt,
   };
 }
+
+const normalizeAnswer = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+/** Compares one answer, including multi-select answers given as lists. */
+export function practiceAnswerIsCorrect(answer: unknown, correct: unknown) {
+    if (Array.isArray(correct) || Array.isArray(answer)) {
+        const given = new Set((Array.isArray(answer) ? answer : [answer]).map(normalizeAnswer).filter(Boolean));
+        const expected = new Set((Array.isArray(correct) ? correct : [correct]).map(normalizeAnswer).filter(Boolean));
+        return given.size === expected.size && [...expected].every((value) => given.has(value));
+    }
+    const given = normalizeAnswer(answer);
+    return given !== '' && given === normalizeAnswer(correct);
+}
+
+/**
+ * Days in a row with at least one finished practice set, counting back from
+ * today (or from yesterday, so the streak survives until the day is over).
+ */
+export function practiceStreak(completedAt: string[], timeZone = 'UTC', now = new Date()) {
+  const dayOf = (value: Date) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
+  const days = new Set(
+    completedAt
+      .map((value) => new Date(value))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .map(dayOf),
+  );
+  const cursor = new Date(now);
+  if (!days.has(dayOf(cursor))) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  let streak = 0;
+  while (days.has(dayOf(cursor))) {
+    streak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}

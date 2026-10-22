@@ -8,6 +8,7 @@ import { VoiceTokenRequestError } from '@/lib/audio/ephemeral-token-error';
 import { buildLiveTokenRequest, isRetryableRenewalError, LIVE_TOKEN_RENEW_RETRY_MS, liveTokenRenewDelay, type LiveTokenResponse } from '@/lib/live-tutor/live-token-request';
 import { createQuizFeedbackDelivery, createTutorTurnTracker, matchesQuizFeedbackScope, QUIZ_FEEDBACK_EVENT } from '@/lib/lesson-artifacts/quiz-feedback-delivery';
 import { createVisualStatusDelivery, isVisualToolName, VISUAL_PENDING_TOOL_RESPONSE, type VisualStatusReport } from '@/lib/visual-status';
+import { voiceErrorMessage } from '@/lib/live-tutor/voice-errors';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion';
@@ -524,7 +525,7 @@ export function useAudioStreaming(
     const handleStreamingFailure = useCallback((err: unknown, action: 'start' | 'resume', generation: number) => {
         if (generation !== sessionGenerationRef.current) return;
         stopStreaming();
-        setError(`Failed to ${action} streaming: ${err instanceof Error ? err.message : 'Voice connection failed'}`);
+        setError(voiceErrorMessage(err, action));
     }, [stopStreaming]);
 
     // Main function to start the streaming process

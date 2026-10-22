@@ -17,7 +17,7 @@ vi.mock("@/lib/supabase.server", () => ({
     });
   },
 }));
-import { editableHomeworkForUser } from "../ai-policy-server";
+import { editableHomeworkForUser, homeworkAiLockForUser } from "../ai-policy-server";
 
 function filterRows(rows: Row[], query: URLSearchParams) {
   return rows.filter((row) =>
@@ -180,10 +180,17 @@ describe("homework policy lookup with the deployed foreign-key path", () => {
     await expect(editableHomeworkForUser("student-1")).resolves.toBeNull();
   });
 
-  it("allows overdue homework while late work remains accepted", async () => {
+  it("stops pausing AI tools once the homework is due, even when late work is accepted", async () => {
     state.tables.homeworks[0].due_at = "2026-10-12T12:00:00Z";
     state.tables.homeworks[0].accept_late = true;
-    await expect(editableHomeworkForUser("student-1")).resolves.toMatchObject({ homework_id: "homework-1" });
+    await expect(editableHomeworkForUser("student-1")).resolves.toBeNull();
+  });
+
+  it("returns the homework title for the student's banner", async () => {
+    state.tables.homeworks[0].title = "Forces check-in";
+    await expect(editableHomeworkForUser("student-1")).resolves.toMatchObject({
+      homework_recipients: { homeworks: { id: "homework-1", title: "Forces check-in" } },
+    });
   });
 
   it("rejects homework after its closing time", async () => {
@@ -197,6 +204,15 @@ describe("homework policy lookup with the deployed foreign-key path", () => {
     state.tables.homeworks[0].due_at = "2026-10-12T12:00:00Z";
     state.tables.homework_recipients[0].extension_at = "2026-10-14T12:00:00Z";
     await expect(editableHomeworkForUser("student-1")).resolves.toMatchObject({ homework_id: "homework-1" });
+  });
+
+  it("reports the student's extension as the end of the pause", async () => {
+    state.tables.homeworks[0].due_at = "2026-10-12T12:00:00Z";
+    state.tables.homework_recipients[0].extension_at = "2026-10-14T12:00:00Z";
+    await expect(homeworkAiLockForUser("student-1")).resolves.toMatchObject({
+      homeworkId: "homework-1",
+      dueAt: "2026-10-14T12:00:00Z",
+    });
   });
 
   it("does not use another student's extension", async () => {

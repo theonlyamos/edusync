@@ -208,14 +208,10 @@ export default function CollaboratorPage() {
     }
   });
 
-  // Function to get computed background color based on current theme
-  const getThemeBackgroundColor = () => {
-    if (typeof window !== 'undefined') {
-      // Get actual background color from CSS variables
-      return getComputedStyle(document.documentElement).getPropertyValue('--background').trim() || '#ffffff';
-    }
-    return '#ffffff'; // Default fallback
-  };
+  // The canvas is always white paper, in both themes, so the default black pen
+  // shows up and the drawing sent to the AI reads the same either way.
+  // (The theme's --background variable holds HSL parts, not a usable colour.)
+  const getThemeBackgroundColor = () => '#ffffff';
 
   // Refine getCoords to use clientX/Y and getBoundingClientRect consistently
   const getCoords = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -644,7 +640,7 @@ export default function CollaboratorPage() {
         {/* Canvas takes full space */}
         <canvas
           ref={attachCanvas}
-          className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
+          className="absolute inset-0 h-full w-full touch-none cursor-crosshair bg-white"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}

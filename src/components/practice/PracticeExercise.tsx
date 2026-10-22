@@ -121,6 +121,31 @@ export function PracticeExercise({
     setCurrentQuestionIndex((prev) => prev + 1);
   };
 
+  // Save the finished set so practice stats, streaks and the dashboard update.
+  // The student still sees their results if saving fails.
+  const saveResult = async () => {
+    try {
+      const response = await fetch('/api/students/practice/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject,
+          topic,
+          questions: questions.map(({ id, type, correctAnswer, points, explanation }) => ({ id, type, correctAnswer, points, explanation })),
+          answers: questions.map((question, index) => ({ questionId: question.id, answer: selectedAnswers[index] })),
+        }),
+      });
+      if (!response.ok) throw new Error(`Save failed (${response.status})`);
+    } catch (error) {
+      console.error('Error saving practice result:', error);
+      toast({
+        title: 'Result not saved',
+        description: 'Your score is below, but it could not be added to your progress.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!isAnswerSelected()) {
       toast({
@@ -191,6 +216,7 @@ export function PracticeExercise({
       });
       
       setCompleted(true);
+      await saveResult();
       onComplete?.(percentage);
     } catch (error) {
       console.error('Error calculating score:', error);

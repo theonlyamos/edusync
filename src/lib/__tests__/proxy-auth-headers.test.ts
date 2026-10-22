@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/lib/homework/ai-policy-server', () => ({ editableHomeworkForUser: async () => null }));
+vi.mock('@/lib/homework/ai-policy-server', () => ({ homeworkAiLockForUser: async () => null, homeworkAiLockMessage: () => '' }));
 import { proxy } from '@/proxy';
 
 describe('proxy auth headers', () => {

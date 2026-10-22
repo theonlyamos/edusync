@@ -405,6 +405,21 @@ export function attemptIsEditable(
     !(!h.accept_late && now > Date.parse(due))
   );
 }
+/**
+ * General AI tools pause only while an attempt is open and the homework is
+ * not yet due. Late work stays editable, but it no longer blocks the tutor,
+ * so a forgotten attempt can't lock a student out indefinitely.
+ */
+export function attemptLocksGeneralAi(
+  h: Homework,
+  a: Attempt,
+  extension: string | null,
+  now = Date.now(),
+) {
+  if (!attemptIsEditable(h, a, extension, now)) return false;
+  const due = Date.parse(a.revision_due_at ?? extension ?? h.due_at);
+  return !(now > due);
+}
 export function studentGrade(grade: Grade): Grade | null {
   if (!grade.released_at || !grade.released_marks) return null;
   return {

@@ -27,7 +27,8 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
     const fetchLessons = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/lessons');
+        // Only lessons published for the student's own grade.
+        const response = await fetch('/api/students/lessons');
         if (response.ok) {
           const data = await response.json();
           setLessons(data.items || data || []);
@@ -140,7 +141,7 @@ function LessonSelector({ onSelectLesson }: { onSelectLesson: (lesson: Lesson) =
                       <div className="min-w-0 break-words">
                         <h3 className="font-medium">{lesson.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {lesson.subject} {lesson.gradelevel && `• ${lesson.gradelevel}`}
+                          {lesson.subject} {lesson.gradelevel && `• ${lesson.gradelevel.toUpperCase()}`}
                         </p>
                       </div>
                     </div>

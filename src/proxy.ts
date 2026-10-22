@@ -5,7 +5,7 @@ import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 import { rateLimit } from '@/lib/rate-limiter';
 import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/auth-middleware';
 import {isGeneralHomeworkAiTool} from '@/lib/homework/ai-policy';
-import {editableHomeworkForUser} from '@/lib/homework/ai-policy-server';
+import {homeworkAiLockForUser, homeworkAiLockMessage} from '@/lib/homework/ai-policy-server';
 
 // Set by this proxy after authentication. Route handlers trust them, so a
 // client must never be able to send its own values (a header the proxy leaves
@@ -64,10 +64,13 @@ export async function proxy(request: NextRequest) {
           isGeneralHomeworkAiTool(pathname, request.method)
         ) {
           try {
-            const homework = await editableHomeworkForUser(authContext.userId);
-            if (homework) return NextResponse.json({
-              error: 'Use the help controls in your homework while an editable attempt is open.',
-              homeworkId: homework.homework_id,
+            const lock = await homeworkAiLockForUser(authContext.userId);
+            if (lock) return NextResponse.json({
+              error: homeworkAiLockMessage(lock),
+              code: 'homework_ai_lock',
+              homeworkId: lock.homeworkId,
+              homeworkTitle: lock.title,
+              homeworkUrl: `/students/homework/${lock.homeworkId}`,
             }, { status: 403 });
           } catch {
             return NextResponse.json({

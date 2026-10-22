@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextPracticeStatsRow, practiceStatsFromRow } from "../practice-stats";
+import { nextPracticeStatsRow, practiceAnswerIsCorrect, practiceStatsFromRow, practiceStreak } from "../practice-stats";
 
 describe("practice stats", () => {
   it("defaults to zero for a student with no practice yet", () => {
@@ -38,5 +38,31 @@ describe("practice stats", () => {
       recentscores: [2, 3, 4, 5, 6, 7, 8, 9, 10, 75],
       lastpracticedate: "2026-10-21T00:00:00Z",
     });
+  });
+});
+
+describe('practiceAnswerIsCorrect', () => {
+  it('matches single answers without caring about case or spaces', () => {
+    expect(practiceAnswerIsCorrect(' Newton ', 'newton')).toBe(true);
+    expect(practiceAnswerIsCorrect('', '')).toBe(false);
+  });
+  it('compares multi-select answers as sets', () => {
+    expect(practiceAnswerIsCorrect(['B', 'A'], ['a', 'b'])).toBe(true);
+    expect(practiceAnswerIsCorrect(['A'], ['A', 'B'])).toBe(false);
+    expect(practiceAnswerIsCorrect(undefined, ['A'])).toBe(false);
+  });
+});
+
+describe('practiceStreak', () => {
+  const now = new Date('2026-10-22T15:00:00Z');
+  it('counts consecutive days ending today', () => {
+    expect(practiceStreak(['2026-10-22T08:00:00Z', '2026-10-21T20:00:00Z', '2026-10-20T09:00:00Z', '2026-10-18T09:00:00Z'], 'UTC', now)).toBe(3);
+  });
+  it('keeps yesterday\'s streak until today is over', () => {
+    expect(practiceStreak(['2026-10-21T08:00:00Z', '2026-10-20T08:00:00Z'], 'UTC', now)).toBe(2);
+  });
+  it('is zero after a missed day', () => {
+    expect(practiceStreak(['2026-10-20T08:00:00Z'], 'UTC', now)).toBe(0);
+    expect(practiceStreak([], 'UTC', now)).toBe(0);
   });
 });
