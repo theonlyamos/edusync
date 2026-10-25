@@ -9,7 +9,7 @@ import {
   type LiveClassRoomLessonMetadata,
 } from '@/lib/livekit-token'
 import { billLiveClassMinute } from '@/lib/school-billing.server'
-import { isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
+import { eventClassIds, isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
       attendeeUserId: auth.userId,
       eventGradeLevel: ev.grade_level as string | null,
       eventOrganizationId: (ev as { organization_id?: string | null }).organization_id ?? null,
+      eventClassIds: eventClassIds(ev),
     })
     if (!okGrade) {
       return NextResponse.json({ error: 'Only the host or students in this grade can join the live room' }, { status: 403 })

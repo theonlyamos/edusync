@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SUBJECTS } from '@/lib/constants';
 import { gradeLevelLabel } from '@/lib/school-registration';
+import { classLabel } from '@/lib/school-classes';
 import {
   MAX_PERIODS,
   MAX_SUBJECT_LENGTH,
@@ -23,17 +24,23 @@ import {
 } from '@/lib/timetable';
 
 type Teacher = { id: string; name: string };
+type SchoolClass = { id: string; grade: string; name: string };
+type Clash = { day: string; time: string; teacherName: string; otherLabel: string };
 type EditingCell = { day: string; periodId: string; subject: string; teacherId: string };
 
 const NO_TEACHER = 'none';
+const WHOLE_GRADE = 'grade';
 const EMPTY: Timetable = { periods: [], schedule: {} };
 const errorText = (error: unknown, fallback: string) => (error as any)?.response?.data?.error ?? fallback;
 
-/** Lets school owners and admins set each grade's weekly timetable. */
-export function SchoolTimetablesPanel() {
+/** Lets school owners and admins set each grade's (or each class's) weekly timetable. */
+export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initialGrade?: string; initialClassId?: string } = {}) {
   const [grades, setGrades] = useState<string[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [grade, setGrade] = useState('');
+  const [classId, setClassId] = useState<string>(WHOLE_GRADE);
+  const [clashes, setClashes] = useState<Clash[]>([]);
   const [timetable, setTimetable] = useState<Timetable>(EMPTY);
   const [saved, setSaved] = useState<string>(JSON.stringify(EMPTY));
   const [loading, setLoading] = useState(true);
@@ -51,29 +58,58 @@ export function SchoolTimetablesPanel() {
       .then(({ data }) => {
         setGrades(data.grades ?? []);
         setTeachers(data.teachers ?? []);
+        setClasses(data.classes ?? []);
+        if (initialGrade && (data.grades ?? []).includes(initialGrade)) void load(initialGrade, initialClassId ?? WHOLE_GRADE);
       })
       .catch((err) => setError(errorText(err, 'Could not load timetables.')))
       .finally(() => setLoading(false));
   }, []);
 
-  const openGrade = async (next: string) => {
-    if (dirty && !window.confirm('You have unsaved changes. Switch grade and lose them?')) return;
-    setGrade(next);
+  const gradeClasses = classes.filter((c) => c.grade === grade);
+  const selectedClass = classes.find((c) => c.id === classId) ?? null;
+  const target = selectedClass ? classLabel(gradeLevelLabel(selectedClass.grade), selectedClass.name) : grade ? gradeLevelLabel(grade) : '';
+
+  const load = async (nextGrade: string, nextClass: string) => {
+    setGrade(nextGrade);
+    setClassId(nextClass);
     setLoadingGrade(true);
     setError(null);
     setNotice(null);
+    setClashes([]);
     try {
-      const { data } = await axios.get('/api/schools/current/timetables', { params: { grade: next } });
+      const params: Record<string, string> = { grade: nextGrade };
+      if (nextClass !== WHOLE_GRADE) params.class = nextClass;
+      const { data } = await axios.get('/api/schools/current/timetables', { params });
       const loaded: Timetable = data.timetable ?? EMPTY;
       setTimetable(loaded);
       setSaved(JSON.stringify(loaded));
+      setClashes(data.clashes ?? []);
       if (data.teachers) setTeachers(data.teachers);
+      if (data.classes) setClasses(data.classes);
     } catch (err) {
       setError(errorText(err, 'Could not load this timetable.'));
       setTimetable(EMPTY);
       setSaved(JSON.stringify(EMPTY));
     } finally {
       setLoadingGrade(false);
+    }
+  };
+
+  const confirmLeave = () => !dirty || window.confirm('You have unsaved changes. Switch and lose them?');
+  const openGrade = (next: string) => { if (confirmLeave()) void load(next, WHOLE_GRADE); };
+  const openClass = (next: string) => { if (confirmLeave()) void load(grade, next); };
+
+  const copyFrom = async (sourceClass: string) => {
+    try {
+      const params: Record<string, string> = { grade };
+      if (sourceClass !== WHOLE_GRADE) params.class = sourceClass;
+      const { data } = await axios.get('/api/schools/current/timetables', { params });
+      const source: Timetable = data.timetable ?? EMPTY;
+      if (source.periods.length === 0) return setNotice('That timetable is empty, so there was nothing to copy.');
+      setTimetable(source);
+      setNotice('Copied. Change what differs for this class, then save.');
+    } catch (err) {
+      setError(errorText(err, 'Could not copy that timetable.'));
     }
   };
 
@@ -114,10 +150,15 @@ export function SchoolTimetablesPanel() {
     setError(null);
     setNotice(null);
     try {
-      const { data } = await axios.put('/api/schools/current/timetables', { grade, ...timetable });
+      const { data } = await axios.put('/api/schools/current/timetables', { grade, classId: selectedClass?.id ?? null, ...timetable });
       setTimetable(data.timetable);
       setSaved(JSON.stringify(data.timetable));
-      setNotice('Saved. Teachers and students in this grade see it now.');
+      setClashes(data.clashes ?? []);
+      setNotice(selectedClass
+        ? `Saved. Students in ${target} and their teachers see it now.`
+        : gradeClasses.length > 0
+          ? 'Saved. Classes in this grade without their own timetable use this one.'
+          : 'Saved. Teachers and students in this grade see it now.');
     } catch (err) {
       setError(errorText(err, 'Could not save the timetable.'));
     } finally {
@@ -134,7 +175,7 @@ export function SchoolTimetablesPanel() {
       <CardHeader>
         <CardTitle>Timetables</CardTitle>
         <CardDescription>
-          Set each grade&apos;s weekly periods, subjects and teachers. Students see their grade&apos;s timetable and teachers see their own slots.
+          Set each class&apos;s weekly periods, subjects and teachers. A class without its own timetable uses its grade&apos;s. Teachers see all their slots.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -149,6 +190,18 @@ export function SchoolTimetablesPanel() {
             </Select>
           </div>
           {grade && (
+            <div className="space-y-1">
+              <Label htmlFor="timetable-class">Class</Label>
+              <Select value={classId} onValueChange={openClass}>
+                <SelectTrigger id="timetable-class" className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={WHOLE_GRADE}>Whole grade</SelectItem>
+                  {gradeClasses.map((c) => <SelectItem key={c.id} value={c.id}>{classLabel(gradeLevelLabel(c.grade), c.name)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {grade && (
             <>
               <Button variant="outline" onClick={addPeriod} disabled={loadingGrade || timetable.periods.length >= MAX_PERIODS}>
                 <Plus className="mr-1 h-4 w-4" />Add period
@@ -162,6 +215,26 @@ export function SchoolTimetablesPanel() {
 
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-green-700 dark:text-green-400">{notice}</p>}
+        {clashes.length > 0 && (
+          <div role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
+            <p className="font-medium">Teachers booked twice</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {clashes.slice(0, 8).map((c, i) => (
+                <li key={i}>{c.teacherName} also teaches {c.otherLabel} on {c.day}, {c.time}.</li>
+              ))}
+            </ul>
+            {clashes.length > 8 && <p className="mt-1">And {clashes.length - 8} more.</p>}
+          </div>
+        )}
+        {grade && selectedClass && timetable.periods.length === 0 && !loadingGrade && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Start from another timetable:</span>
+            <Button variant="outline" size="sm" onClick={() => copyFrom(WHOLE_GRADE)}>Copy the grade&apos;s</Button>
+            {gradeClasses.filter((c) => c.id !== selectedClass.id).map((c) => (
+              <Button key={c.id} variant="outline" size="sm" onClick={() => copyFrom(c.id)}>Copy {classLabel(gradeLevelLabel(c.grade), c.name)}</Button>
+            ))}
+          </div>
+        )}
         {teachers.length === 0 && grade && (
           <p className="text-sm text-muted-foreground">No teachers in your school yet. Add them on the Teachers page to put them on the timetable.</p>
         )}
@@ -171,7 +244,11 @@ export function SchoolTimetablesPanel() {
         ) : loadingGrade ? (
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : timetable.periods.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No periods yet. Add the first one to start this grade&apos;s timetable.</p>
+          <p className="text-sm text-muted-foreground">
+            {selectedClass
+              ? `${target} has no timetable of its own yet, so its students see the grade's. Add a period or copy one to start.`
+              : 'No periods yet. Add the first one to start this grade’s timetable.'}
+          </p>
         ) : (
           <div className="overflow-x-auto rounded-md border">
             <Table>
@@ -235,7 +312,7 @@ export function SchoolTimetablesPanel() {
               <DialogHeader>
                 <DialogTitle>{editing.day}</DialogTitle>
                 <DialogDescription>
-                  {formatPeriodTime(timetable.periods.find((p) => p.id === editing.periodId) ?? { startTime: '', endTime: '' })}, {gradeLevelLabel(grade)}
+                  {formatPeriodTime(timetable.periods.find((p) => p.id === editing.periodId) ?? { startTime: '', endTime: '' })}, {target}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1">

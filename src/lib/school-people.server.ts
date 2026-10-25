@@ -247,6 +247,8 @@ export type SchoolPerson = {
   subjects?: string[]
   grades?: string[]
   lessonCount?: number
+  /** The student's class, if they're in one. */
+  schoolClass?: { id: string; name: string } | null
 }
 
 type LinkRow = { email: string; accepted_at: string | null; revoked_at: string | null; expires_at: string; last_sent_at: string | null; created_at: string }
@@ -317,6 +319,11 @@ export async function listSchoolPeople(supabase: ServiceSupabase, schoolId: stri
     }
   }
 
+  // Lazy import: school-classes.server imports this file.
+  const studentClasses = role === 'student'
+    ? await (await import('@/lib/school-classes.server')).classesByStudent(supabase, schoolId)
+    : new Map<string, { id: string; name: string }>()
+
   const now = new Date()
   return rows.map((m) => {
     const user = users.get(m.user_id as string)
@@ -344,6 +351,8 @@ export async function listSchoolPeople(supabase: ServiceSupabase, schoolId: stri
       person.guardianName = s?.guardianname ?? null
       person.guardianContact = s?.guardiancontact ?? null
       person.dateOfBirth = s?.date_of_birth ?? null
+      const c = studentClasses.get(m.user_id as string)
+      person.schoolClass = c ? { id: c.id, name: c.name } : null
     } else if (role === 'teacher') {
       const t = teachers.get(m.user_id as string)
       person.subjects = t?.subjects ?? []

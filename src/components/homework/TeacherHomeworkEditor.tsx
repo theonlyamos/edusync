@@ -142,7 +142,12 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
         allowReferences: true,
         minutes: 30,
       });
-      setRecipients(s.eligibleStudents.map((s) => s.id));
+      // A lesson set for some classes starts with just their students.
+      setRecipients(
+        s.eligibleStudents
+          .filter((st) => !s.lessonClassIds?.length || (st.classId && s.lessonClassIds.includes(st.classId)))
+          .map((st) => st.id),
+      );
       setDirty(true);
     } catch (e) {
       setError((e as Error).message);
@@ -729,6 +734,27 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                     />
                     Select up to 200 · {recipients.length} selected
                   </label>
+                  {source.classes?.length > 0 && (
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Pick a class:</span>
+                      {source.classes.map((c) => {
+                        const ids = source.eligibleStudents.filter((st) => st.classId === c.id).map((st) => st.id);
+                        const on = ids.length > 0 && ids.every((sid) => recipients.includes(sid)) && recipients.length === ids.length;
+                        return (
+                          <Button
+                            key={c.id}
+                            type="button"
+                            size="sm"
+                            variant={on ? "default" : "outline"}
+                            disabled={ids.length === 0}
+                            onClick={() => setRecipients(ids.slice(0, 200))}
+                          >
+                            {c.name} ({ids.length})
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {source.eligibleStudents.map((s) => (
                     <label key={s.id} className="flex gap-3 py-3 border-b">
                       <input
@@ -743,6 +769,11 @@ export function TeacherHomeworkEditor({ id }: { id?: string }) {
                         }
                       />
                       {s.name}
+                      {s.classId && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {source.classes.find((c) => c.id === s.classId)?.name}
+                        </span>
+                      )}
                     </label>
                   ))}
                 </>

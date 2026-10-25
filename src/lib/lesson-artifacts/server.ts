@@ -26,7 +26,7 @@ export async function requireLessonManager(lessonId: string) {
   const supabase = createServerSupabase();
   const { data: lesson, error } = await supabase
     .from('lessons')
-    .select('id,title,subject,gradelevel,content,teacher_id,organization_id,current_publication_id,visual_instructions,visual_revision')
+    .select('id,title,subject,gradelevel,content,teacher_id,organization_id,current_publication_id,visual_instructions,visual_revision,audience_class_ids')
     .eq('id', lessonId)
     .maybeSingle();
   if (error) throw error;

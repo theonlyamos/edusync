@@ -23,6 +23,7 @@ import { NATIVE_SELECT_CLASS, PersonFormDialog } from '@/components/school-porta
 import { SchoolPageHeader, useSchoolPortal } from '@/components/school-portal/SchoolPortalProvider';
 import { GRADE_LEVELS } from '@/lib/constants';
 import { gradeLevelLabel } from '@/lib/school-registration';
+import { classLabel, type SchoolClassSummary } from '@/lib/school-classes';
 import { ACCOUNT_STATUS_LABEL, type AccountStatus, type SchoolPersonRole } from '@/lib/school-people';
 import type { SchoolPerson } from '@/lib/school-people.server';
 import { cn } from '@/lib/utils';
@@ -94,6 +95,9 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
     return s === 'active' || s === 'pending' || s === 'deactivated' ? s : 'all';
   });
   const [grade, setGrade] = useState(() => searchParams?.get('grade') ?? '');
+  const [classFilter, setClassFilter] = useState(() => searchParams?.get('class') ?? '');
+  const [classes, setClasses] = useState<SchoolClassSummary[]>([]);
+  const [classMove, setClassMove] = useState<{ people: SchoolPerson[]; to: string } | null>(null);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -117,7 +121,18 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
     }
   }, [role, copy.plural]);
 
+  const loadClasses = useCallback(async () => {
+    if (role !== 'student') return;
+    try {
+      const { data: body } = await axios.get<{ classes: SchoolClassSummary[] }>('/api/schools/current/classes');
+      setClasses(body.classes);
+    } catch {
+      setClasses([]);
+    }
+  }, [role]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadClasses(); }, [loadClasses]);
 
   // Drop ?add=1 once the dialog has opened, so a reload doesn't reopen it.
   useEffect(() => {
@@ -143,11 +158,14 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
         if (role === 'student' && (p.gradeLevel ?? 'none') !== grade) return false;
         if (role === 'teacher' && !(p.grades ?? []).includes(grade)) return false;
       }
+      if (role === 'student' && classFilter) {
+        if (classFilter === 'none' ? p.schoolClass : p.schoolClass?.id !== classFilter) return false;
+      }
       return true;
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [data, query, status, grade, role]);
+  }, [data, query, status, grade, classFilter, role]);
 
-  useEffect(() => { setPage(0); }, [query, status, grade]);
+  useEffect(() => { setPage(0); }, [query, status, grade, classFilter]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const selectedPeople = (data?.people ?? []).filter((p) => selected.has(p.memberId));
@@ -231,7 +249,7 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
       toast({ title: 'Grade changed', description: `${gradeMove.people.length} moved to ${gradeLevelLabel(gradeMove.to)}.` });
       setGradeMove(null);
       setSelected(new Set());
-      await load();
+      await Promise.all([load(), loadClasses()]);
     } catch (err) {
       toast({ title: 'Could not change the grade', description: errorMessage(err, 'Please try again.'), variant: 'destructive' });
     } finally {
@@ -239,13 +257,42 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
     }
   };
 
+  const moveClass = async () => {
+    if (!classMove?.to) return;
+    setBusy(true);
+    try {
+      const { data: result } = await axios.post<{ movedGrade?: number }>(`/api/schools/current/classes/${classMove.to}/students`, {
+        add: classMove.people.map((p) => p.userId),
+      });
+      const target = classes.find((c) => c.id === classMove.to);
+      const name = target ? classLabel(gradeLevelLabel(target.grade), target.name) : 'the class';
+      toast({
+        title: 'Class changed',
+        description: `${classMove.people.length} now in ${name}.${result.movedGrade ? ` ${result.movedGrade} also moved to ${target ? gradeLevelLabel(target.grade) : 'its grade'}.` : ''}`,
+      });
+      setClassMove(null);
+      setSelected(new Set());
+      await Promise.all([load(), loadClasses()]);
+    } catch (err) {
+      toast({ title: 'Could not change the class', description: errorMessage(err, 'Please try again.'), variant: 'destructive' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const classOptions = classes.filter((c) => !grade || c.grade === grade);
+
   const gradeFilterOptions = role === 'student'
     ? [...new Set([...schoolGrades, ...(data?.people ?? []).map((p) => p.gradeLevel ?? 'none')])]
         .sort((a, b) => (GRADE_LEVELS as readonly string[]).indexOf(a) - (GRADE_LEVELS as readonly string[]).indexOf(b))
     : schoolGrades;
 
   const detail = (p: SchoolPerson) => {
-    if (role === 'student') return p.gradeLevel ? gradeLevelLabel(p.gradeLevel) : 'No grade';
+    if (role === 'student') {
+      if (!p.gradeLevel) return 'No grade';
+      const label = gradeLevelLabel(p.gradeLevel);
+      return p.schoolClass ? classLabel(label, p.schoolClass.name) : label;
+    }
     if (role === 'teacher') {
       const subjects = (p.subjects ?? []).join(', ');
       const grades = (p.grades ?? []).map(gradeLevelLabel).join(', ');
@@ -317,9 +364,16 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
           <option value="deactivated">Deactivated ({counts.deactivated})</option>
         </select>
         {role !== 'admin' && gradeFilterOptions.length > 0 && (
-          <select className={cn(NATIVE_SELECT_CLASS, 'sm:w-44')} value={grade} onChange={(e) => setGrade(e.target.value)} aria-label="Grade">
+          <select className={cn(NATIVE_SELECT_CLASS, 'sm:w-44')} value={grade} onChange={(e) => { setGrade(e.target.value); setClassFilter(''); }} aria-label="Grade">
             <option value="">All grades</option>
             {gradeFilterOptions.map((g) => <option key={g} value={g}>{g === 'none' ? 'No grade' : gradeLevelLabel(g)}</option>)}
+          </select>
+        )}
+        {role === 'student' && classes.length > 0 && (
+          <select className={cn(NATIVE_SELECT_CLASS, 'sm:w-44')} value={classFilter} onChange={(e) => setClassFilter(e.target.value)} aria-label="Class">
+            <option value="">All classes</option>
+            <option value="none">Not in a class</option>
+            {classOptions.map((c) => <option key={c.id} value={c.id}>{classLabel(gradeLevelLabel(c.grade), c.name)}</option>)}
           </select>
         )}
       </div>
@@ -329,6 +383,9 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
           <span className="mr-auto text-sm font-medium">{selectedPeople.length} selected</span>
           {role === 'student' && (
             <Button size="sm" variant="outline" onClick={() => setGradeMove({ people: selectedPeople, to: '' })} disabled={busy}>Change grade</Button>
+          )}
+          {role === 'student' && classes.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setClassMove({ people: selectedPeople.filter((p) => p.isActive), to: '' })} disabled={busy || !selectedPeople.some((p) => p.isActive)}>Move to class</Button>
           )}
           {selectedPeople.some((p) => p.isActive) && (
             <Button size="sm" variant="outline" onClick={() => setConfirm({ people: selectedPeople.filter((p) => p.isActive), active: false })} disabled={busy}>Deactivate</Button>
@@ -390,7 +447,7 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
                     </th>
                   )}
                   <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">{role === 'student' ? 'Grade' : role === 'teacher' ? 'Teaches' : 'Role'}</th>
+                  <th className="px-3 py-2 font-medium">{role === 'student' ? (classes.length ? 'Grade & class' : 'Grade') : role === 'teacher' ? 'Teaches' : 'Role'}</th>
                   {role === 'student' && <th className="px-3 py-2 font-medium">Guardian</th>}
                   {role === 'teacher' && <th className="px-3 py-2 font-medium">Lessons</th>}
                   <th className="px-3 py-2 font-medium">Status</th>
@@ -478,7 +535,7 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Move {gradeMove?.people.length} {gradeMove?.people.length === 1 ? 'student' : 'students'} to another grade</DialogTitle>
-            <DialogDescription>They’ll see lessons, homework and live classes for the new grade.</DialogDescription>
+            <DialogDescription>They’ll see lessons, homework and live classes for the new grade, and leave their current class.</DialogDescription>
           </DialogHeader>
           <select
             className={NATIVE_SELECT_CLASS}
@@ -492,6 +549,28 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setGradeMove(null)} disabled={busy}>Cancel</Button>
             <Button onClick={moveGrade} disabled={busy || !gradeMove?.to}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Move'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(classMove)} onOpenChange={(open) => { if (!open) setClassMove(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move {classMove?.people.length} {classMove?.people.length === 1 ? 'student' : 'students'} to a class</DialogTitle>
+            <DialogDescription>They leave any class they’re in now. Students from another grade also move to the class’s grade.</DialogDescription>
+          </DialogHeader>
+          <select
+            className={NATIVE_SELECT_CLASS}
+            value={classMove?.to ?? ''}
+            onChange={(e) => setClassMove((m) => (m ? { ...m, to: e.target.value } : m))}
+            aria-label="Class"
+          >
+            <option value="" disabled>Pick a class</option>
+            {classes.map((c) => <option key={c.id} value={c.id}>{classLabel(gradeLevelLabel(c.grade), c.name)}</option>)}
+          </select>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setClassMove(null)} disabled={busy}>Cancel</Button>
+            <Button onClick={moveClass} disabled={busy || !classMove?.to}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Move'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

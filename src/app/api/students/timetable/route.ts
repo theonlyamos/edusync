@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { readTimetable } from '@/lib/timetable';
 
-/** The timetable for the signed-in student's grade in their school. */
+/** The timetable for the signed-in student's class (or, without one, their grade) in their school. */
 export async function GET() {
     try {
         const supabase = await createSSRUserSupabase();
@@ -24,15 +24,24 @@ export async function GET() {
             return NextResponse.json({ timeTable: {}, periods: [] });
         }
 
-        const { data: row, error } = await supabase
-            .from('timetables')
-            .select('periods, schedule')
-            .eq('organization_id', student.organization_id)
-            .eq('grade', student.grade)
-            .order('updated_at', { ascending: false })
-            .limit(1)
+        // Their class's timetable when it has one, otherwise the whole grade's.
+        const { data: membership } = await supabase
+            .from('school_class_students')
+            .select('class_id')
+            .eq('student_id', user.id)
             .maybeSingle();
-        if (error) throw error;
+        const findTimetable = async (classId: string | null) => {
+            let query = supabase
+                .from('timetables')
+                .select('periods, schedule')
+                .eq('organization_id', student.organization_id)
+                .eq('grade', student.grade);
+            query = classId ? query.eq('class_id', classId) : query.is('class_id', null);
+            const { data, error } = await query.order('updated_at', { ascending: false }).limit(1).maybeSingle();
+            if (error) throw error;
+            return data;
+        };
+        const row = (membership?.class_id ? await findTimetable(membership.class_id as string) : null) ?? await findTimetable(null);
         const timetable = readTimetable(row);
 
         const teacherIds = [...new Set(Object.values(timetable.schedule).flatMap((cells) => Object.values(cells).map((c) => c.teacherId)).filter(Boolean))];

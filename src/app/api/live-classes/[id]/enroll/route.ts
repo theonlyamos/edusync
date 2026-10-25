@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
 
   const { data: ev, error: evErr } = await supabase
     .from('live_class_events')
-    .select('organizer_id, max_attendees, grade_level, organization_id')
+    .select('organizer_id, max_attendees, grade_level, organization_id, audience_class_ids')
     .eq('id', eventId)
     .maybeSingle()
 
@@ -96,6 +96,23 @@ export async function POST(request: NextRequest, ctx: Ctx) {
         { error: 'Each user must be a student in this school whose grade matches this class' },
         { status: 400 }
       )
+    }
+  }
+
+  // A live class for some classes only takes students in them.
+  const classIds = Array.isArray(ev.audience_class_ids) ? (ev.audience_class_ids as string[]) : []
+  if (classIds.length > 0) {
+    const students = userIds.filter((uid) => uid !== ev.organizer_id)
+    const { data: links, error: linkErr } = students.length
+      ? await supabase.from('school_class_students').select('student_id').in('class_id', classIds).in('student_id', students)
+      : { data: [], error: null }
+    if (linkErr) {
+      console.error('[enroll] class lookup', linkErr)
+      return NextResponse.json({ error: 'Could not verify student classes' }, { status: 500 })
+    }
+    const inClasses = new Set((links || []).map((l) => (l as { student_id: string }).student_id))
+    if (students.some((uid) => !inClasses.has(uid))) {
+      return NextResponse.json({ error: 'Each student must be in one of the classes this live class is for' }, { status: 400 })
     }
   }
 

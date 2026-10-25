@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { validateLiveClassGradeAndLesson } from '@/lib/live-class-lesson-validation'
-import { isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
+import { eventClassIds, isEligibleLiveClassAttendee } from '@/lib/live-class-attendance'
+import { validAudienceClasses } from '@/lib/lesson-artifacts/audience.server'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest, ctx: Ctx) {
       attendeeUserId: auth.userId,
       eventGradeLevel: ev.grade_level as string | null,
       eventOrganizationId: (ev as { organization_id?: string | null }).organization_id ?? null,
+      eventClassIds: eventClassIds(ev),
     })
     if (!ok) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -63,7 +65,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 
   const { data: ev, error: loadErr } = await supabase
     .from('live_class_events')
-    .select('organizer_id, grade_level, lesson_id')
+    .select('organizer_id, grade_level, lesson_id, organization_id')
     .eq('id', id)
     .maybeSingle()
 
@@ -83,6 +85,7 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
     'status',
     'livekit_room_name',
     'max_attendees',
+    'audience_class_ids',
   ] as const
 
   const patch: Record<string, unknown> = {}
@@ -113,6 +116,24 @@ export async function PATCH(request: NextRequest, ctx: Ctx) {
 
   if (typeof patch.grade_level === 'string') {
     patch.grade_level = patch.grade_level.trim()
+  }
+
+  // Classes must belong to the (new) grade; changing the grade without saying which classes means the whole grade.
+  if ('audience_class_ids' in body || 'grade_level' in body) {
+    const grade = (body.grade_level !== undefined ? body.grade_level : ev.grade_level) as string | null
+    const requested: string[] = Array.isArray(body.audience_class_ids)
+      ? body.audience_class_ids.filter((x: unknown): x is string => typeof x === 'string')
+      : []
+    const classIds = await validAudienceClasses(
+      supabase,
+      (ev as { organization_id?: string | null }).organization_id ?? null,
+      typeof grade === 'string' ? grade.trim().toLowerCase() : null,
+      requested,
+    )
+    if (!classIds) {
+      return NextResponse.json({ error: 'Pick classes from this grade at your school' }, { status: 400 })
+    }
+    patch.audience_class_ids = classIds
   }
 
   const { error } = await supabase.from('live_class_events').update(patch).eq('id', id)

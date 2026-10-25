@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getUserSchoolId, inActiveSchool } from '@/lib/school'
+import { inClassAudience } from '@/lib/school-classes'
 
 /** Trim; empty → null */
 export function normalizeLiveClassGrade(g: string | null | undefined): string | null {
@@ -54,13 +55,29 @@ export async function isEligibleLiveClassAttendee(
     attendeeUserId: string
     eventGradeLevel: string | null | undefined
     eventOrganizationId: string | null | undefined
+    /** Classes the live class is for; empty means the whole grade. */
+    eventClassIds?: string[] | null
   }
 ): Promise<boolean> {
-  const { organizerId, attendeeUserId, eventGradeLevel, eventOrganizationId } = params
+  const { organizerId, attendeeUserId, eventGradeLevel, eventOrganizationId, eventClassIds } = params
   if (attendeeUserId === organizerId) return true
   const required = normalizeLiveClassGrade(eventGradeLevel)
   if (!required) return false
   const student = await fetchStudentPlacement(supabase, attendeeUserId)
   if (!student.isStudent || !inActiveSchool(student.organizationId, eventOrganizationId)) return false
-  return liveClassGradesEqual(required, student.grade)
+  if (!liveClassGradesEqual(required, student.grade)) return false
+  if (!eventClassIds?.length) return true
+  return inClassAudience(eventClassIds, await studentClassOf(supabase, attendeeUserId))
+}
+
+/** The class a student is in, or null. */
+export async function studentClassOf(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('school_class_students').select('class_id').eq('student_id', userId).limit(1).maybeSingle()
+  if (error) throw error
+  return (data as { class_id?: string } | null)?.class_id ?? null
+}
+
+/** Class ids of the live class's audience, from its row. */
+export function eventClassIds(ev: { audience_class_ids?: unknown }): string[] {
+  return Array.isArray(ev.audience_class_ids) ? ev.audience_class_ids.filter((id): id is string => typeof id === 'string') : []
 }

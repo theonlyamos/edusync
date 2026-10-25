@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
-import { ArrowUpCircle, BookOpen, GraduationCap, Loader2, Settings, Users } from 'lucide-react';
+import { ArrowUpCircle, BookOpen, GraduationCap, Loader2, School, Settings, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,6 +16,7 @@ import { SchoolPageHeader, useSchoolPortal } from '@/components/school-portal/Sc
 import { gradeLevelLabel } from '@/lib/school-registration';
 import { defaultPromotionPlan, sortGrades, type PromotionPlan } from '@/lib/school-grades';
 import type { GradeSummary } from '@/lib/school-grades.server';
+import type { SchoolClassSummary } from '@/lib/school-classes';
 
 type PromotionOutcome = { moved: number; graduated: number; unchanged: number };
 
@@ -24,6 +25,7 @@ const count = (n: number, one: string, many: string) => `${n.toLocaleString()} $
 export default function SchoolGradesPage() {
   const { school } = useSchoolPortal();
   const grades = useHomeworkData<{ grades: GradeSummary[] }>('/api/schools/current/grades');
+  const classes = useHomeworkData<{ classes: SchoolClassSummary[] }>('/api/schools/current/classes');
   const [promoteOpen, setPromoteOpen] = useState(false);
   const list = grades.data?.grades ?? [];
   const totalStudents = list.reduce((sum, g) => sum + g.students, 0);
@@ -79,6 +81,15 @@ export default function SchoolGradesPage() {
                   <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />
                   {count(g.publishedLessons, 'published lesson', 'published lessons')}
                 </Link>
+                <Link href={`/school/classes?grade=${encodeURIComponent(g.grade)}`} className="flex items-start gap-2 hover:underline">
+                  <School className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  {(() => {
+                    const inGrade = (classes.data?.classes ?? []).filter((c) => c.grade === g.grade);
+                    return inGrade.length === 0
+                      ? <span className="text-muted-foreground">No classes yet</span>
+                      : <span className="min-w-0 break-words">{count(inGrade.length, 'class', 'classes')}: {inGrade.map((c) => c.name).join(', ')}</span>;
+                  })()}
+                </Link>
                 <div className="flex items-start gap-2">
                   <Users className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   {g.teachers.length === 0 ? (
@@ -100,7 +111,7 @@ export default function SchoolGradesPage() {
         onOpenChange={setPromoteOpen}
         schoolGrades={school.gradeLevels}
         summary={list}
-        onDone={grades.refresh}
+        onDone={() => { grades.refresh(); classes.refresh(); }}
       />
     </div>
   );
@@ -163,6 +174,7 @@ function PromoteDialog({
           <DialogTitle>Move students up a grade</DialogTitle>
           <DialogDescription>
             Run this once at the end of the school year. Choose where each grade goes next.
+            Students who move or graduate leave their class, so you can sort next year’s classes afterwards.
           </DialogDescription>
         </DialogHeader>
 

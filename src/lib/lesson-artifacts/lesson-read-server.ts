@@ -4,6 +4,9 @@ import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { getUserSchoolId, inActiveSchool } from '@/lib/school';
 
+import { inClassAudience } from '@/lib/school-classes';
+import { studentClassId } from '@/lib/school-classes.server';
+
 import { canManageLesson } from './access';
 import { LessonArtifactHttpError } from './server';
 
@@ -14,7 +17,7 @@ export async function requireLessonViewer(lessonId: string) {
   const supabase = createServerSupabase();
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
-    .select('id,gradelevel,teacher_id,organization_id')
+    .select('id,gradelevel,teacher_id,organization_id,audience_class_ids')
     .eq('id', lessonId)
     .maybeSingle();
   if (lessonError) throw lessonError;
@@ -37,6 +40,9 @@ export async function requireLessonViewer(lessonId: string) {
     const studentGrade = student?.grade?.trim().toLowerCase();
     if (!lessonGrade || !studentGrade || lessonGrade !== studentGrade) {
       throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your grade');
+    }
+    if (lesson.audience_class_ids?.length && !inClassAudience(lesson.audience_class_ids, await studentClassId(supabase, session.user.id))) {
+      throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your class');
     }
     return { session, supabase, lesson };
   }

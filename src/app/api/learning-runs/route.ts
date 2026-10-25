@@ -1,4 +1,6 @@
 import { prepareObjectiveIntroduction } from '@/lib/lesson-artifacts/introductions-server';
+import { inClassAudience } from '@/lib/school-classes';
+import { studentClassId } from '@/lib/school-classes.server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
     const input = schema.parse(await request.json());
     const supabase = createServerSupabase();
     const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
-      supabase.from('lessons').select('id,title,subject,gradelevel,current_publication_id,organization_id,archived_at').eq('id', input.lessonId).maybeSingle(),
+      supabase.from('lessons').select('id,title,subject,gradelevel,current_publication_id,organization_id,archived_at,audience_class_ids').eq('id', input.lessonId).maybeSingle(),
       supabase.from('students').select('grade').eq('user_id', session.user.id).maybeSingle(),
       getUserSchoolId(supabase, session.user.id),
     ]);
@@ -36,6 +38,9 @@ export async function POST(request: Request) {
     if (!lesson?.current_publication_id) throw new LessonArtifactHttpError(409, 'This lesson has not been published yet');
     if (lesson.gradelevel && (!student?.grade || lesson.gradelevel.trim().toLowerCase() !== student.grade.trim().toLowerCase())) {
       throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your grade');
+    }
+    if (lesson.audience_class_ids?.length && !inClassAudience(lesson.audience_class_ids, await studentClassId(supabase, session.user.id))) {
+      throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your class');
     }
     const { data: publication, error: publicationError } = await supabase
       .from('lesson_publications')
