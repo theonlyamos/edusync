@@ -4,14 +4,14 @@ import { peopleErrorResponse } from '@/lib/school-people.server'
 import { validateSubject } from '@/lib/school-subjects'
 import { createSubjects, listSubjects, standardSubjects } from '@/lib/school-subjects.server'
 
-/** The school's subjects, archived ones included, with how many lessons use each. */
+/** The school's subjects, archived ones included, with how many lessons use each (archived lessons included, as they block a delete). */
 export async function GET() {
   try {
     const guard = await requireSchoolRole(SCHOOL_MANAGER_ROLES)
     if (!guard.ok) return guard.response
     const { supabase, membership } = guard.context
     const subjects = await listSubjects(supabase, membership.school.id, { includeArchived: true })
-    const { data, error } = await supabase.from('lessons').select('subject_id').eq('organization_id', membership.school.id).not('subject_id', 'is', null).is('archived_at', null).limit(20000)
+    const { data, error } = await supabase.from('lessons').select('subject_id').eq('organization_id', membership.school.id).not('subject_id', 'is', null).limit(20000)
     if (error) throw error
     const lessons = new Map<string, number>()
     for (const l of data ?? []) lessons.set(l.subject_id as string, (lessons.get(l.subject_id as string) ?? 0) + 1)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSchoolRole, SCHOOL_MANAGER_ROLES } from '@/lib/school-access.server'
 import { peopleErrorResponse } from '@/lib/school-people.server'
-import { mapTypedSubject, typedSubjects } from '@/lib/school-subjects.server'
+import { mapTypedSubjects, typedSubjects } from '@/lib/school-subjects.server'
 
 /** Subjects typed on lessons, timetables and teachers that aren't on the list yet. */
 export async function GET() {
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     const matches = Array.isArray(body?.matches) ? body.matches.slice(0, 100) : []
     if (matches.length === 0) return NextResponse.json({ error: 'Pick at least one subject to match' }, { status: 400 })
-    for (const m of matches) await mapTypedSubject(guard.context.supabase, guard.context.membership.school.id, m?.text, m?.subjectId)
+    await mapTypedSubjects(guard.context.supabase, guard.context.membership.school.id, matches)
     return NextResponse.json({ ok: true, matched: matches.length })
   } catch (error) {
     const { body, status } = peopleErrorResponse(error, 'Failed to match subjects', 'POST /api/schools/current/subjects/typed')

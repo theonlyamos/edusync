@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { matchSubject, subjectInGrade, teacherFor, validateSubject, type SubjectTeacherAssignment } from '@/lib/school-subjects'
-import { setAssignment } from '@/lib/school-subjects.server'
+import { mapTypedSubjects, setAssignment, updateSubject } from '@/lib/school-subjects.server'
 import { subjectActivity } from '@/lib/school-reports.server'
 import { fakeSupabase } from './helpers/fake-supabase'
 
@@ -130,5 +130,63 @@ describe('report by subject', () => {
     expect(rows.map((r) => r.name)).toEqual(['English Language', 'Mathematics', 'Other'])
     expect(rows[1]).toMatchObject({ lessons: 2, lessonsPublished: 1, studentsStudying: 1, homeworkSet: 1, homeworkSubmitted: 2 })
     expect(rows[2]).toMatchObject({ subjectId: null, lessons: 1, studentsStudying: 1 })
+  })
+})
+
+describe('mapTypedSubjects', () => {
+  const MATH = '55555555-5555-4555-8555-555555555555'
+  const SCI = '66666666-6666-4666-8666-666666666666'
+  it('links lessons and renames homework, timetables and teachers in one pass', async () => {
+    const fake = fakeSupabase({
+      school_subjects: [
+        { id: MATH, organization_id: 'school', name: 'Mathematics', code: null, color: null, grades: [], archived_at: null },
+        { id: SCI, organization_id: 'school', name: 'Integrated Science', code: null, color: null, grades: [], archived_at: null },
+      ],
+      lessons: [
+        { id: 'l1', organization_id: 'school', subject: 'Core  maths', subject_id: null },
+        { id: 'l2', organization_id: 'school', subject: 'Biology', subject_id: null },
+        { id: 'l3', organization_id: 'other', subject: 'Core maths', subject_id: null },
+      ],
+      homeworks: [{ id: 'h1', organization_id: 'school', subject: 'core maths' }],
+      timetables: [{ id: 't1', organization_id: 'school', schedule: { Monday: { '1': { subject: 'Biology' } } } }],
+      teachers: [{ id: 'tr1', organization_id: 'school', subjects: ['Core Maths', 'Biology', 'Drama'] }],
+    })
+    await mapTypedSubjects(fake.client as never, 'school', [
+      { text: 'Core Maths', subjectId: MATH },
+      { text: 'Biology', subjectId: SCI },
+    ])
+    // Lesson text is kept so approvals aren't reset.
+    expect(fake.tables.lessons[0]).toMatchObject({ subject: 'Core  maths', subject_id: MATH })
+    expect(fake.tables.lessons[1]).toMatchObject({ subject: 'Biology', subject_id: SCI })
+    expect(fake.tables.lessons[2].subject_id).toBeNull()
+    expect(fake.tables.homeworks[0].subject).toBe('Mathematics')
+    expect(fake.tables.timetables[0].schedule.Monday['1'].subject).toBe('Integrated Science')
+    expect(fake.tables.teachers[0].subjects).toEqual(['Mathematics', 'Integrated Science', 'Drama'])
+  })
+
+  it('refuses a subject from another school', async () => {
+    const fake = fakeSupabase({ school_subjects: [{ id: MATH, organization_id: 'other', name: 'Mathematics', grades: [], archived_at: null }] })
+    await expect(mapTypedSubjects(fake.client as never, 'school', [{ text: 'Maths', subjectId: MATH }])).rejects.toThrow('Subject not found')
+  })
+})
+
+describe('updateSubject', () => {
+  const SUBJ = '77777777-7777-4777-8777-777777777777'
+  it('drops who-teaches-what in grades the subject is no longer taught in', async () => {
+    const fake = fakeSupabase({
+      school_subjects: [{ id: SUBJ, organization_id: 'school', name: 'Physics', code: null, color: null, grades: [], archived_at: null }],
+      school_subject_teachers: [
+        { id: 'a1', organization_id: 'school', subject_id: SUBJ, grade: 'jhs 1', class_id: null, teacher_id: 'tea1' },
+        { id: 'a2', organization_id: 'school', subject_id: SUBJ, grade: 'jhs 2', class_id: null, teacher_id: 'tea2' },
+      ],
+      teachers: [
+        { user_id: 'tea1', organization_id: 'school', subjects: ['Physics'], grades: ['jhs 1'] },
+        { user_id: 'tea2', organization_id: 'school', subjects: ['Physics'], grades: ['jhs 2'] },
+      ],
+    })
+    await updateSubject(fake.client as never, 'school', SUBJ, { grades: ['jhs 1'] })
+    expect(fake.tables.school_subject_teachers.map((a) => a.id)).toEqual(['a1'])
+    expect(fake.tables.teachers[1].subjects).toEqual([])
+    expect(fake.tables.teachers[0].subjects).toEqual(['Physics'])
   })
 })

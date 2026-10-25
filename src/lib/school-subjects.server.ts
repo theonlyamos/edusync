@@ -46,17 +46,6 @@ async function findSubject(supabase: ServiceSupabase, schoolId: string, subjectI
   return data as SubjectRow
 }
 
-/** Links lessons whose typed subject is exactly this subject's name. */
-async function linkLessons(supabase: ServiceSupabase, schoolId: string, subject: { id: string; name: string }) {
-  const { error } = await supabase
-    .from('lessons')
-    .update({ subject_id: subject.id })
-    .eq('organization_id', schoolId)
-    .is('subject_id', null)
-    .ilike('subject', subject.name.replace(/[\\%_]/g, (c) => `\\${c}`))
-  if (error) throw error
-}
-
 /** Adds subjects; names the school already has are skipped. Returns how many were added. */
 export async function createSubjects(supabase: ServiceSupabase, school: Pick<SchoolRecord, 'id'>, subjects: CleanSubject[]): Promise<number> {
   const existing = await listSubjects(supabase, school.id, { includeArchived: true })
@@ -77,7 +66,9 @@ export async function createSubjects(supabase: ServiceSupabase, school: Pick<Sch
     if (error.code === '23505') throw new PeopleError('Your school already has a subject with this name', 409)
     throw error
   }
-  for (const s of (data ?? []) as Array<{ id: string; name: string }>) await linkLessons(supabase, school.id, s)
+  // Link lessons (and tidy homework, timetables and teachers) typed with the same name.
+  const added = (data ?? []) as Array<{ id: string; name: string }>
+  if (added.length) await renameEverywhere(supabase, school.id, added.map((s) => ({ from: s.name, to: s.name, subjectId: s.id })))
   return rows.length
 }
 
@@ -97,7 +88,17 @@ export async function updateSubject(supabase: ServiceSupabase, schoolId: string,
     if (error.code === '23505') throw new PeopleError('Your school already has a subject with this name', 409)
     throw error
   }
-  if (update.name !== undefined && update.name !== row.name) await renameEverywhere(supabase, schoolId, row.name, update.name, row.id)
+  if (update.name !== undefined && update.name !== row.name) await renameEverywhere(supabase, schoolId, [{ from: row.name, to: update.name, subjectId: row.id }])
+  if (update.grades !== undefined && update.grades.length > 0) await dropAssignmentsOutside(supabase, schoolId, row.id, update.grades)
+}
+
+/** Removes who-teaches-what entries in grades a subject is no longer taught in. */
+async function dropAssignmentsOutside(supabase: ServiceSupabase, schoolId: string, subjectId: string, grades: string[]) {
+  const stale = (await listAssignments(supabase, schoolId)).filter((a) => a.subjectId === subjectId && !grades.includes(a.grade))
+  if (stale.length === 0) return
+  const { error } = await supabase.from('school_subject_teachers').delete().in('id', stale.map((a) => a.id))
+  if (error) throw error
+  await syncTeacherProfiles(supabase, schoolId, stale.map((a) => a.teacherId))
 }
 
 /** Deletes a subject nobody uses yet; otherwise it should be archived. */
@@ -180,7 +181,10 @@ export async function setAssignment(
     const { error } = await supabase
       .from('school_subject_teachers')
       .insert({ organization_id: school.id, subject_id: subject.id, grade, class_id: classId, teacher_id: teacherId })
-    if (error) throw error
+    if (error) {
+      if (error.code === '23505') throw new PeopleError('Someone just changed this. Refresh and try again.', 409)
+      throw error
+    }
   }
   await syncTeacherProfiles(supabase, school.id, [previousTeacher, teacherId].filter((id): id is string => Boolean(id)))
 }
@@ -251,32 +255,83 @@ export async function typedSubjects(supabase: ServiceSupabase, schoolId: string)
   return [...out.values()].sort((a, b) => b.lessons + b.timetableSlots + b.teachers - (a.lessons + a.timetableSlots + a.teachers))
 }
 
-/** Replaces a typed subject with a listed one on lessons, homework, timetables and teachers. */
-export async function mapTypedSubject(supabase: ServiceSupabase, schoolId: string, text: unknown, subjectId: unknown) {
-  if (typeof text !== 'string' || !key(text)) throw new PeopleError('Say which typed subject to replace', 400)
-  const subject = await findSubject(supabase, schoolId, String(subjectId))
-  await renameEverywhere(supabase, schoolId, text, subject.name, subject.id)
+/**
+ * Replaces typed subjects with listed ones on lessons, homework, timetables
+ * and teachers, in one pass however many there are.
+ */
+export async function mapTypedSubjects(supabase: ServiceSupabase, schoolId: string, matches: Array<{ text: unknown; subjectId: unknown }>) {
+  const subjects = await listSubjects(supabase, schoolId, { includeArchived: true })
+  const byId = new Map(subjects.map((s) => [s.id, s]))
+  const renames: Rename[] = []
+  for (const m of matches) {
+    if (typeof m?.text !== 'string' || !key(m.text)) throw new PeopleError('Say which typed subject to replace', 400)
+    const subject = isUuid(m.subjectId) ? byId.get(m.subjectId) : undefined
+    if (!subject) throw new PeopleError('Subject not found', 404)
+    renames.push({ from: m.text, to: subject.name, subjectId: subject.id })
+  }
+  await renameEverywhere(supabase, schoolId, renames)
 }
 
-async function renameEverywhere(supabase: ServiceSupabase, schoolId: string, from: string, to: string, subjectId: string) {
-  const k = key(from)
-  const like = from.trim().replace(/[\\%_]/g, (c) => `\\${c}`)
+type Rename = { from: string; to: string; subjectId: string }
+
+/** Ids of rows grouped by the value they should be set to. */
+function groupIds<T>(rows: T[], pick: (row: T) => string | null): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const row of rows) {
+    const value = pick(row)
+    if (value === null) continue
+    const ids = out.get(value) ?? []
+    ids.push((row as { id: string }).id)
+    out.set(value, ids)
+  }
+  return out
+}
+
+async function updateInChunks(supabase: ServiceSupabase, table: 'lessons' | 'homeworks', ids: string[], patch: Record<string, unknown>) {
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await supabase.from(table).update(patch).in('id', ids.slice(i, i + 200))
+    if (error) throw error
+  }
+}
+
+async function renameEverywhere(supabase: ServiceSupabase, schoolId: string, renames: Rename[]) {
+  // Matched by name, any case and spacing.
+  const target = new Map(renames.map((r) => [key(r.from), r]))
+  const find = (text: unknown) => (typeof text === 'string' ? target.get(key(text)) : undefined)
+
+  const [lessons, homeworks, timetables, teachers] = await Promise.all([
+    supabase.from('lessons').select('id, subject, subject_id').eq('organization_id', schoolId).limit(20000),
+    supabase.from('homeworks').select('id, subject').eq('organization_id', schoolId).limit(20000),
+    supabase.from('timetables').select('id, schedule').eq('organization_id', schoolId).limit(500),
+    supabase.from('teachers').select('id, subjects').eq('organization_id', schoolId).limit(5000),
+  ])
+  if (lessons.error) throw lessons.error
+  if (homeworks.error) throw homeworks.error
+  if (timetables.error) throw timetables.error
+  if (teachers.error) throw teachers.error
+
   // Lessons keep the text their teacher typed (changing it would send their
   // approved materials back for review); they are linked to the subject instead.
-  const { error: lessonError } = await supabase.from('lessons').update({ subject_id: subjectId }).eq('organization_id', schoolId).ilike('subject', like)
-  if (lessonError) throw lessonError
-  const { error: homeworkError } = await supabase.from('homeworks').update({ subject: to }).eq('organization_id', schoolId).ilike('subject', like)
-  if (homeworkError) throw homeworkError
+  const lessonGroups = groupIds(lessons.data ?? [], (l) => {
+    const r = find(l.subject)
+    return r && l.subject_id !== r.subjectId ? r.subjectId : null
+  })
+  for (const [subjectId, ids] of lessonGroups) await updateInChunks(supabase, 'lessons', ids, { subject_id: subjectId })
 
-  const { data: timetables, error: ttError } = await supabase.from('timetables').select('id, schedule').eq('organization_id', schoolId).limit(500)
-  if (ttError) throw ttError
-  for (const t of (timetables ?? []) as TimetableRow[]) {
+  const homeworkGroups = groupIds(homeworks.data ?? [], (h) => {
+    const r = find(h.subject)
+    return r && h.subject !== r.to ? r.to : null
+  })
+  for (const [name, ids] of homeworkGroups) await updateInChunks(supabase, 'homeworks', ids, { subject: name })
+
+  for (const t of (timetables.data ?? []) as TimetableRow[]) {
     let changed = false
     const schedule = structuredClone(t.schedule ?? {})
     for (const cells of Object.values(schedule)) {
       for (const cell of Object.values(cells ?? {})) {
-        if (cell && typeof cell.subject === 'string' && key(cell.subject) === k) {
-          cell.subject = to
+        const r = cell ? find(cell.subject) : undefined
+        if (cell && r && cell.subject !== r.to) {
+          cell.subject = r.to
           changed = true
         }
       }
@@ -287,12 +342,10 @@ async function renameEverywhere(supabase: ServiceSupabase, schoolId: string, fro
     }
   }
 
-  const { data: teachers, error: teacherError } = await supabase.from('teachers').select('id, subjects').eq('organization_id', schoolId).limit(5000)
-  if (teacherError) throw teacherError
-  for (const t of teachers ?? []) {
+  for (const t of teachers.data ?? []) {
     const list = (t.subjects as string[] | null) ?? []
-    if (!list.some((s) => key(s) === k)) continue
-    const next = [...new Set(list.map((s) => (key(s) === k ? to : s)))]
+    if (!list.some((s) => find(s))) continue
+    const next = [...new Set(list.map((s) => find(s)?.to ?? s))]
     const { error } = await supabase.from('teachers').update({ subjects: next }).eq('id', t.id)
     if (error) throw error
   }
