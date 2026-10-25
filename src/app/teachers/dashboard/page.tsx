@@ -19,6 +19,7 @@ import {
   WeakObjectivesSection,
 } from '@/components/dashboard/TeacherInsights';
 import type { TeacherDashboardData } from '@/lib/dashboard-server';
+import { TeacherSubjectsSection, type MySubject } from '@/components/dashboard/TeacherSubjectsSection';
 import { SchoolCreditsCard } from '@/components/dashboard/CreditWidgets';
 import type { CreditSummary } from '@/lib/school-billing.server';
 import { useLiveClassJoinTick } from '@/hooks/useLiveClassJoinTick';
@@ -43,6 +44,7 @@ export default function TeacherDashboard() {
   const live = useHomeworkData<{ items: DashboardLiveClass[] }>('/api/live-classes');
   const insights = useHomeworkData<TeacherDashboardData>('/api/dashboard/teacher');
   const credits = useHomeworkData<CreditSummary>('/api/credits/summary');
+  const subjects = useHomeworkData<{ mine: MySubject[] }>('/api/teachers/subjects');
   const joinTick = useLiveClassJoinTick();
   const lobbyMinutes = getClientLiveClassLobbyMinutes();
   const userId = session?.user?.id;
@@ -183,6 +185,7 @@ export default function TeacherDashboard() {
           <StudentsBehindSection request={insights} />
           <WeakObjectivesSection request={insights} />
           <LessonPipelineSection request={insights} />
+          <TeacherSubjectsSection request={subjects} />
         </div>
 
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,18 @@ export default function StudentLessonsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [subject, setSubject] = useState<string | null>(null);
+
+  // One chip per subject, in name order.
+  const subjects = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const l of lessons) {
+      const name = l.subject?.trim();
+      if (name && !byKey.has(name.toLowerCase())) byKey.set(name.toLowerCase(), name);
+    }
+    return [...byKey.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [lessons]);
+  const shown = subject ? lessons.filter((l) => l.subject?.trim().toLowerCase() === subject) : lessons;
 
   const fetchLessons = useCallback(async () => {
     setLoading(true);
@@ -69,8 +81,21 @@ export default function StudentLessonsPage() {
             <p className="text-muted-foreground">When your teacher publishes a lesson for your class, it will appear here.</p>
           </div>
         ) : (
+          <>
+          {subjects.length > 1 && (
+            <div role="group" aria-label="Filter by subject" className="mb-4 flex flex-wrap gap-2">
+              <Button size="sm" className="min-h-11 sm:min-h-0" variant={subject === null ? 'default' : 'outline'} aria-pressed={subject === null} onClick={() => setSubject(null)}>
+                All subjects
+              </Button>
+              {subjects.map(([key, name]) => (
+                <Button key={key} size="sm" className="min-h-11 sm:min-h-0" variant={subject === key ? 'default' : 'outline'} aria-pressed={subject === key} onClick={() => setSubject(key)}>
+                  {name}
+                </Button>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {lessons.map((lesson) => {
+            {shown.map((lesson) => {
               const objectives = Array.isArray(lesson.objectives) ? lesson.objectives : [];
               const more = objectives.length - PREVIEW_OBJECTIVES;
               return (
@@ -107,6 +132,7 @@ export default function StudentLessonsPage() {
               );
             })}
           </div>
+          </>
         )}
       </div>
     </DashboardLayout>

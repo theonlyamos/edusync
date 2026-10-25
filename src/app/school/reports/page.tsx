@@ -10,6 +10,7 @@ import { DashboardStats } from '@/components/dashboard/DashboardParts';
 import { useHomeworkData } from '@/components/homework/shared';
 import { ActivityChart } from '@/components/school-portal/ActivityChart';
 import { NATIVE_SELECT_CLASS } from '@/components/school-portal/PersonFormDialog';
+import { SubjectDot } from '@/components/school-portal/SubjectDot';
 import { SchoolPageHeader } from '@/components/school-portal/SchoolPortalProvider';
 import { gradeLevelLabel } from '@/lib/school-registration';
 import {
@@ -148,6 +149,7 @@ function ReportBody({ data }: { data: SchoolReport }) {
         </CardContent>
       </Card>
 
+      <SubjectsTable data={data} />
       <TeachingTable data={data} />
       <PeopleTable data={data} />
     </div>
@@ -160,6 +162,52 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-medium">{value}</p>
     </div>
+  );
+}
+
+function SubjectsTable({ data }: { data: SchoolReport }) {
+  const subjects = data.subjects ?? [];
+  if (subjects.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg">By subject</CardTitle>
+        <CardDescription>Lessons and homework in each subject. Published, set, studying and handed in count this period only.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[36rem] text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="py-2 pr-3 font-medium">Subject</th>
+                <th className="px-3 py-2 text-right font-medium">Lessons</th>
+                <th className="px-3 py-2 text-right font-medium">Published</th>
+                <th className="px-3 py-2 text-right font-medium">Students studying</th>
+                <th className="px-3 py-2 text-right font-medium">Homework set</th>
+                <th className="py-2 pl-3 text-right font-medium">Handed in</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {subjects.map((s) => (
+                <tr key={s.subjectId ?? 'other'} className={cn(!s.subjectId && 'text-muted-foreground')}>
+                  <td className="py-2 pr-3">
+                    <span className="flex items-center gap-2">
+                      <SubjectDot color={s.color} />
+                      <span className="break-words">{s.name}</span>
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n(s.lessons)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n(s.lessonsPublished)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n(s.studentsStudying)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n(s.homeworkSet)}</td>
+                  <td className="py-2 pl-3 text-right tabular-nums">{n(s.homeworkSubmitted)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

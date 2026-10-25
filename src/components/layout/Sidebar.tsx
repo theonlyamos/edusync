@@ -30,6 +30,7 @@ import {
   ClipboardCheck,
   Layers,
   School,
+  BookMarked,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -110,6 +111,7 @@ const schoolLinks: SidebarLink[] = [
   { label: 'Administrators', icon: <ShieldCheck className="h-5 w-5" />, href: '/school/administrators' },
   { label: 'Grades', icon: <Layers className="h-5 w-5" />, href: '/school/grades' },
   { label: 'Classes', icon: <School className="h-5 w-5" />, href: '/school/classes' },
+  { label: 'Subjects', icon: <BookMarked className="h-5 w-5" />, href: '/school/subjects' },
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/school/lessons' },
   { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
   { label: 'Reports', icon: <BarChart2 className="h-5 w-5" />, href: '/school/reports' },

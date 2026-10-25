@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         // lesson page). Only the columns the list shows: never the full content.
         const { data: lessons, error } = await supabase
             .from('lessons')
-            .select('id,title,subject,gradelevel,created_at,current_publication_id,audience_class_ids')
+            .select('id,title,subject,subject_id,gradelevel,created_at,current_publication_id,audience_class_ids')
             .ilike('gradelevel', student.grade.trim())
             // Students only see lessons their teacher has published and not archived.
             .not('current_publication_id', 'is', null)
@@ -65,13 +65,21 @@ export async function GET(request: Request) {
         if (publicationError) throw publicationError;
         const byId = new Map((publications ?? []).map((p: any) => [p.id as string, p]));
 
+        // Lessons linked to the school's subject list show the listed name,
+        // so "Maths" and "Mathematics" filter together.
+        const subjectIds = [...new Set(visibleLessons.map((lesson) => lesson.subject_id).filter(Boolean))] as string[];
+        const { data: subjectRows } = subjectIds.length
+            ? await createServerSupabase().from('school_subjects').select('id,name').in('id', subjectIds)
+            : { data: [] };
+        const subjectName = new Map((subjectRows ?? []).map((s: { id: string; name: string }) => [s.id, s.name]));
+
         return NextResponse.json(visibleLessons.map((lesson) => {
             const published = byId.get(lesson.current_publication_id as string);
             const objectives = normalizePublishedObjectives(published?.objectives ?? []) ?? [];
             return {
                 id: lesson.id,
                 title: published?.lesson?.title ?? lesson.title,
-                subject: published?.lesson?.subject ?? lesson.subject,
+                subject: (lesson.subject_id && subjectName.get(lesson.subject_id)) || published?.lesson?.subject || lesson.subject,
                 gradelevel: lesson.gradelevel,
                 created_at: lesson.created_at,
                 objectives: objectives.map((objective) => objective.text).filter(Boolean),

@@ -19,6 +19,7 @@ import {
 import { Loader2, Plus, Trash2, Wand2 } from "lucide-react";
 import { SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
+import { subjectInGrade, type SchoolSubject } from '@/lib/school-subjects';
 import { formatGradeLevel, orderGradeLevels } from '@/lib/lesson-record';
 import { buildLessonSubmissionPayload, mergeGeneratedLessonDraft } from '@/lib/lesson-artifacts/authoring-ui';
 
@@ -78,12 +79,36 @@ export function CreateLessonForm({ onClose, onSaved, lesson }: CreateLessonFormP
   const isEditing = !!lesson;
 
   // Get available subjects and grades from teacher's profile
+  // The school's subject list wins when it has one: subjects taught in the
+  // chosen grade, the teacher's own first. Otherwise the teacher's profile.
+  const [schoolSubjects, setSchoolSubjects] = useState<SchoolSubject[]>([]);
+  const [mySubjectIds, setMySubjectIds] = useState<string[]>([]);
   const availableSubjects = useMemo(() => {
+    const listed = schoolSubjects.filter((s) => !s.archived && subjectInGrade(s, gradeLevel || null));
+    if (listed.length) {
+      const mine = listed.filter((s) => mySubjectIds.includes(s.id));
+      const rest = listed.filter((s) => !mySubjectIds.includes(s.id));
+      return [...mine, ...rest].map((s) => s.name);
+    }
     if (teacherData?.subjects?.length) {
       return teacherData.subjects;
     }
     return SUBJECTS;
-  }, [teacherData]);
+  }, [teacherData, schoolSubjects, mySubjectIds, gradeLevel]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+    fetch('/api/teachers/subjects')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setSchoolSubjects(data.subjects ?? []);
+        setMySubjectIds([...new Set<string>((data.mine ?? []).map((m: { subjectId: string }) => m.subjectId))]);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   const currentGrade = lesson?.gradeLevel;
   const availableGrades = useMemo(() => {
@@ -254,7 +279,7 @@ export function CreateLessonForm({ onClose, onSaved, lesson }: CreateLessonFormP
                 <Select value={subject} onValueChange={setSubject}>
                   <SelectTrigger id="subject" aria-label="Subject"><SelectValue placeholder={loadingTeacher ? 'Loading…' : 'Select subject'} /></SelectTrigger>
                   <SelectContent>
-                    {[...new Set([...availableSubjects, ...(lesson?.subject ? [lesson.subject] : [])])].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {[...new Set([...availableSubjects, ...(lesson?.subject ? [lesson.subject] : []), ...(subject ? [subject] : [])])].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

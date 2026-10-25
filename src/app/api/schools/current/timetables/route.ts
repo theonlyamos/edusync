@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { listAssignments, listSubjects } from '@/lib/school-subjects.server';
 import { GRADE_LEVELS } from '@/lib/constants';
 import { requireSchoolRole, SCHOOL_MANAGER_ROLES, type ServiceSupabase } from '@/lib/school-access.server';
 import { normalizeGradeLevel } from '@/lib/school-people';
@@ -80,9 +81,14 @@ export async function GET(request: NextRequest) {
     const school = membership.school;
 
     const grades = schoolGrades(school.grade_levels);
-    const [teachers, classes] = await Promise.all([schoolTeachers(supabase, school.id), schoolClasses(supabase, school.id)]);
+    const [teachers, classes, subjects, assignments] = await Promise.all([
+      schoolTeachers(supabase, school.id),
+      schoolClasses(supabase, school.id),
+      listSubjects(supabase, school.id),
+      listAssignments(supabase, school.id),
+    ]);
     const requested = request.nextUrl.searchParams.get('grade');
-    if (!requested) return NextResponse.json({ grades, teachers, classes });
+    if (!requested) return NextResponse.json({ grades, teachers, classes, subjects, assignments });
 
     const grade = normalizeGradeLevel(requested);
     if (!grade || !grades.includes(grade)) {
@@ -95,7 +101,7 @@ export async function GET(request: NextRequest) {
     const data = await findTimetable(supabase, school.id, grade, classId);
     const timetable = readTimetable(data);
     const clashes = await clashesFor(supabase, school.id, grade, classId, classes, timetable, teachers);
-    return NextResponse.json({ grades, teachers, classes, grade, classId, timetable, clashes, updatedAt: data?.updated_at ?? null });
+    return NextResponse.json({ grades, teachers, classes, subjects, assignments, grade, classId, timetable, clashes, updatedAt: data?.updated_at ?? null });
   } catch (error) {
     console.error('Error in GET /api/schools/current/timetables:', error);
     return NextResponse.json({ error: 'Failed to load the timetable' }, { status: 500 });
