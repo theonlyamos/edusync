@@ -75,6 +75,19 @@ export function PersonFormDialog({ role, open, onOpenChange, person, schoolGrade
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<{ email: string; link: LinkResult } | null>(null);
   const [emailLink, setEmailLink] = useState<LinkResult | null>(null);
+  const [listedSubjects, setListedSubjects] = useState<string[]>([]);
+
+  // Suggest the school's own subjects when it has a list.
+  useEffect(() => {
+    if (!open || role !== 'teacher') return;
+    let cancelled = false;
+    axios.get('/api/schools/current/subjects')
+      .then(({ data }) => {
+        if (!cancelled) setListedSubjects((data.subjects ?? []).filter((s: { archived?: boolean }) => !s.archived).map((s: { name: string }) => s.name));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, role]);
 
   useEffect(() => {
     if (!open) return;
@@ -217,8 +230,12 @@ export function PersonFormDialog({ role, open, onOpenChange, person, schoolGrade
                 <div className="space-y-1.5">
                   <Label htmlFor="person-subjects">Subjects <span className="font-normal text-muted-foreground">(optional)</span></Label>
                   <Input id="person-subjects" list="subject-suggestions" value={form.subjects} onChange={(e) => set('subjects', e.target.value)} placeholder="e.g. Mathematics, Science" autoComplete="off" />
-                  <datalist id="subject-suggestions">{SUBJECTS.map((s) => <option key={s} value={s} />)}</datalist>
-                  <p className="text-xs text-muted-foreground">Separate subjects with commas.</p>
+                  <datalist id="subject-suggestions">{(listedSubjects.length ? listedSubjects : SUBJECTS).map((s) => <option key={s} value={s} />)}</datalist>
+                  <p className="text-xs text-muted-foreground">
+                    {listedSubjects.length
+                      ? 'Separate subjects with commas. Subjects on your list are set from who teaches what on the Subjects page.'
+                      : 'Separate subjects with commas.'}
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Grades they teach <span className="font-normal text-muted-foreground">(optional)</span></Label>

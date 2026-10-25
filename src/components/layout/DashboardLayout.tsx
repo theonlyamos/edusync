@@ -31,6 +31,7 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/administrators', 'Administrators'],
   ['/school/grades', 'Grades'],
   ['/school/classes', 'Classes'],
+  ['/school/subjects', 'Subjects'],
   ['/school/timetables', 'Timetables'],
   ['/school/lessons', 'Lessons'],
   ['/school/reports', 'Reports'],

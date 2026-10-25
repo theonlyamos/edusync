@@ -10,8 +10,11 @@ import {
   type ReportPersonRole,
   type SchoolReport,
   type TeacherActivity,
+  type SubjectActivity,
   type UsageKind,
 } from '@/lib/school-reports'
+import { matchSubject } from '@/lib/school-subjects'
+import { listSubjects } from '@/lib/school-subjects.server'
 
 const DAY = 24 * 60 * 60 * 1000
 const CHUNK = 200
@@ -57,7 +60,8 @@ export async function getSchoolReport(
   const timezone = school.timezone || 'UTC'
   const schoolId = school.id
 
-  const [members, students, credits, aiUsage, homeworks, lessons, liveClasses] = await Promise.all([
+  const [subjectList, members, students, credits, aiUsage, homeworks, lessons, liveClasses] = await Promise.all([
+    listSubjects(supabase, schoolId, { includeArchived: true }),
     all(supabase.from('organization_members').select('user_id, role, is_active').eq('organization_id', schoolId).limit(20000)),
     all(supabase.from('students').select('user_id, grade').eq('organization_id', schoolId).limit(20000)),
     all(
@@ -78,8 +82,8 @@ export async function getSchoolReport(
         .lt('created_at', toIso)
         .limit(100000),
     ),
-    all(supabase.from('homeworks').select('id, owner_id, status, published_at').eq('organization_id', schoolId).limit(20000)),
-    all(supabase.from('lessons').select('id, teacher_id, created_at').eq('organization_id', schoolId).limit(20000)),
+    all(supabase.from('homeworks').select('id, owner_id, status, published_at, subject').eq('organization_id', schoolId).limit(20000)),
+    all(supabase.from('lessons').select('id, teacher_id, created_at, subject, subject_id').eq('organization_id', schoolId).limit(20000)),
     all(
       supabase
         .from('live_class_events')
@@ -98,7 +102,7 @@ export async function getSchoolReport(
 
   const [attempts, runs, sessions, publications, teacherRows] = await Promise.all([
     byChunks(homeworks.map((h) => h.id as string), (ids) =>
-      supabase.from('homework_attempts').select('student_id, submitted_at').in('homework_id', ids).gte('submitted_at', fromIso).lt('submitted_at', toIso).limit(50000),
+      supabase.from('homework_attempts').select('homework_id, student_id, submitted_at').in('homework_id', ids).gte('submitted_at', fromIso).lt('submitted_at', toIso).limit(50000),
     ),
     byChunks(studentIds, (ids) =>
       supabase.from('learning_runs').select('student_id, lesson_id, created_at').in('student_id', ids).gte('created_at', fromIso).lt('created_at', toIso).limit(50000),
@@ -260,6 +264,8 @@ export async function getSchoolReport(
   }
   for (const t of teaching.values()) t.creditsUsed = people.get(t.userId)?.credits.total ?? 0
 
+  const subjects = subjectActivity(subjectList, { lessons, homeworks, publications, runs, attempts, fromIso, toIso })
+
   // Names for everyone mentioned.
   const ids = [...new Set([...people.keys(), ...teaching.keys()])]
   const users = await byChunks(ids, (part) => supabase.from('users').select('id, name, email').in('id', part))
@@ -320,5 +326,60 @@ export async function getSchoolReport(
     daily: dayList.map(({ students: set, ...d }) => ({ ...d, activeStudents: set.size })),
     people: peopleList,
     teachers: teacherList,
+    subjects,
   }
+}
+
+/**
+ * Lessons, homework and studying per subject on the school's list. Lessons
+ * and homework whose typed subject isn't on the list count under "Other".
+ */
+export function subjectActivity(
+  list: Awaited<ReturnType<typeof listSubjects>>,
+  rows: { lessons: Row[]; homeworks: Row[]; publications: Row[]; runs: Row[]; attempts: Row[]; fromIso: string; toIso: string },
+): SubjectActivity[] {
+  if (list.length === 0) return []
+  const byId = new Map(list.map((s) => [s.id, s]))
+  const out = new Map<string, SubjectActivity & { students: Set<string> }>()
+  const entry = (subjectId: string | null) => {
+    const k = subjectId ?? 'other'
+    let e = out.get(k)
+    if (!e) {
+      const s = subjectId ? byId.get(subjectId) : null
+      e = { subjectId, name: s?.name ?? 'Other', color: s?.color ?? null, lessons: 0, lessonsPublished: 0, homeworkSet: 0, studentsStudying: 0, homeworkSubmitted: 0, students: new Set() }
+      out.set(k, e)
+    }
+    return e
+  }
+  const subjectOf = (id: unknown, text: unknown) =>
+    (typeof id === 'string' && byId.has(id) ? id : null) ?? matchSubject(typeof text === 'string' ? text : null, list)?.id ?? null
+
+  for (const s of list) if (!s.archived) entry(s.id)
+  const lessonSubject = new Map<string, string | null>()
+  for (const l of rows.lessons) {
+    const id = subjectOf(l.subject_id, l.subject)
+    lessonSubject.set(l.id as string, id)
+    entry(id).lessons += 1
+  }
+  for (const id of new Set(rows.publications.map((p) => p.lesson_id as string))) {
+    if (lessonSubject.has(id)) entry(lessonSubject.get(id)!).lessonsPublished += 1
+  }
+  for (const r of rows.runs) {
+    if (lessonSubject.has(r.lesson_id as string)) entry(lessonSubject.get(r.lesson_id as string)!).students.add(r.student_id as string)
+  }
+  const homeworkSubject = new Map<string, string | null>()
+  for (const h of rows.homeworks) {
+    const id = subjectOf(null, h.subject)
+    homeworkSubject.set(h.id as string, id)
+    if (h.status !== 'published' || !h.published_at) continue
+    if (String(h.published_at) < rows.fromIso || String(h.published_at) >= rows.toIso) continue
+    entry(id).homeworkSet += 1
+  }
+  for (const a of rows.attempts) {
+    if (homeworkSubject.has(a.homework_id as string)) entry(homeworkSubject.get(a.homework_id as string)!).homeworkSubmitted += 1
+  }
+  return [...out.values()]
+    .map(({ students, ...e }) => ({ ...e, studentsStudying: students.size }))
+    .filter((e) => e.subjectId || e.lessons + e.homeworkSet + e.homeworkSubmitted + e.studentsStudying > 0)
+    .sort((a, b) => (a.subjectId ? 0 : 1) - (b.subjectId ? 0 : 1) || a.name.localeCompare(b.name))
 }

@@ -96,6 +96,19 @@ export type TeacherActivity = {
   creditsUsed: number
 }
 
+/** One subject's lessons, homework and studying. subjectId null is "Other". */
+export type SubjectActivity = {
+  subjectId: string | null
+  name: string
+  color: string | null
+  /** Lessons on the subject, all time. */
+  lessons: number
+  lessonsPublished: number
+  homeworkSet: number
+  studentsStudying: number
+  homeworkSubmitted: number
+}
+
 export type DailyActivity = { date: string; activeStudents: number; creditsUsed: number; submissions: number }
 
 export type WeekStats = { activeStudents: number; creditsUsed: number; submissions: number }
@@ -123,6 +136,8 @@ export type SchoolReport = {
   daily: DailyActivity[]
   people: PersonUsage[]
   teachers: TeacherActivity[]
+  /** Empty when the school has no subject list. */
+  subjects: SubjectActivity[]
 }
 
 const ROLE_LABEL: Record<ReportPersonRole, string> = {

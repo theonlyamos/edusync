@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SUBJECTS } from '@/lib/constants';
+import { matchSubject, subjectInGrade, teacherFor, type SchoolSubject, type SubjectTeacherAssignment } from '@/lib/school-subjects';
+import { SubjectDot } from '@/components/school-portal/SubjectDot';
 import { gradeLevelLabel } from '@/lib/school-registration';
 import { classLabel } from '@/lib/school-classes';
 import {
@@ -38,6 +40,8 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
   const [grades, setGrades] = useState<string[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
+  const [subjects, setSubjects] = useState<SchoolSubject[]>([]);
+  const [assignments, setAssignments] = useState<SubjectTeacherAssignment[]>([]);
   const [grade, setGrade] = useState('');
   const [classId, setClassId] = useState<string>(WHOLE_GRADE);
   const [clashes, setClashes] = useState<Clash[]>([]);
@@ -59,6 +63,8 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
         setGrades(data.grades ?? []);
         setTeachers(data.teachers ?? []);
         setClasses(data.classes ?? []);
+        setSubjects(data.subjects ?? []);
+        setAssignments(data.assignments ?? []);
         if (initialGrade && (data.grades ?? []).includes(initialGrade)) void load(initialGrade, initialClassId ?? WHOLE_GRADE);
       })
       .catch((err) => setError(errorText(err, 'Could not load timetables.')))
@@ -86,6 +92,8 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
       setClashes(data.clashes ?? []);
       if (data.teachers) setTeachers(data.teachers);
       if (data.classes) setClasses(data.classes);
+      if (data.subjects) setSubjects(data.subjects);
+      if (data.assignments) setAssignments(data.assignments);
     } catch (err) {
       setError(errorText(err, 'Could not load this timetable.'));
       setTimetable(EMPTY);
@@ -93,6 +101,39 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
     } finally {
       setLoadingGrade(false);
     }
+  };
+
+  const gradeSubjects = subjects.filter((s) => subjectInGrade(s, grade));
+
+  // Picking a listed subject uses its name as listed and fills in who teaches it here.
+  const pickSubject = (cell: EditingCell, text: string) => {
+    const match = matchSubject(text, gradeSubjects);
+    const exact = match && match.name.toLowerCase() === text.trim().toLowerCase();
+    const teacher = match && !cell.teacherId ? teacherFor(assignments, match.id, grade, selectedClass?.id ?? null) : null;
+    setEditing({ ...cell, subject: exact ? match.name : text, teacherId: teacher ?? cell.teacherId });
+  };
+
+  // Slots with a listed subject but no teacher, where Subjects says who teaches it.
+  const fillable = () => {
+    const out: Array<{ day: string; periodId: string; teacherId: string }> = [];
+    for (const [day, cells] of Object.entries(timetable.schedule)) {
+      for (const [periodId, cell] of Object.entries(cells)) {
+        if (cell.teacherId) continue;
+        const match = matchSubject(cell.subject, gradeSubjects);
+        const teacherId = match ? teacherFor(assignments, match.id, grade, selectedClass?.id ?? null) : null;
+        if (teacherId) out.push({ day, periodId, teacherId });
+      }
+    }
+    return out;
+  };
+  const missingTeachers = fillable().length;
+  const fillTeachers = () => {
+    const fills = fillable();
+    setTimetable((t) => {
+      const schedule = structuredClone(t.schedule);
+      for (const f of fills) schedule[f.day][f.periodId] = { ...schedule[f.day][f.periodId], teacherId: f.teacherId };
+      return { ...t, schedule };
+    });
   };
 
   const confirmLeave = () => !dirty || window.confirm('You have unsaved changes. Switch and lose them?');
@@ -206,6 +247,11 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
               <Button variant="outline" onClick={addPeriod} disabled={loadingGrade || timetable.periods.length >= MAX_PERIODS}>
                 <Plus className="mr-1 h-4 w-4" />Add period
               </Button>
+              {missingTeachers > 0 && (
+                <Button variant="outline" onClick={fillTeachers} disabled={loadingGrade}>
+                  Fill {missingTeachers} {missingTeachers === 1 ? 'teacher' : 'teachers'} from Subjects
+                </Button>
+              )}
               <Button onClick={save} disabled={!dirty || saving || loadingGrade}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : dirty ? 'Save timetable' : 'Saved'}
               </Button>
@@ -285,7 +331,10 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
                           >
                             {cell ? (
                               <>
-                                <span className="block font-medium">{cell.subject || 'No subject'}</span>
+                                <span className="flex items-center gap-1.5 font-medium">
+                                  {matchSubject(cell.subject, subjects) && <SubjectDot color={matchSubject(cell.subject, subjects)?.color} className="h-2.5 w-2.5" />}
+                                  {cell.subject || 'No subject'}
+                                </span>
                                 <span className="block text-muted-foreground">
                                   {cell.teacherId ? teacherNames.get(cell.teacherId) ?? 'Teacher left the school' : 'No teacher'}
                                 </span>
@@ -318,10 +367,15 @@ export function SchoolTimetablesPanel({ initialGrade, initialClassId }: { initia
               <div className="space-y-1">
                 <Label htmlFor="cell-subject">Subject</Label>
                 <Input id="cell-subject" list="timetable-subjects" maxLength={MAX_SUBJECT_LENGTH} value={editing.subject}
-                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })} placeholder="e.g. Mathematics" autoFocus />
+                  onChange={(e) => pickSubject(editing, e.target.value)} placeholder="e.g. Mathematics" autoFocus />
                 <datalist id="timetable-subjects">
-                  {SUBJECTS.map((s) => <option key={s} value={s} />)}
+                  {gradeSubjects.length > 0
+                    ? gradeSubjects.map((s) => <option key={s.id} value={s.name} />)
+                    : SUBJECTS.map((s) => <option key={s} value={s} />)}
                 </datalist>
+                {gradeSubjects.length > 0 && editing.subject.trim() && !matchSubject(editing.subject, gradeSubjects) && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Not on your subject list, so it won’t count in subject reports.</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="cell-teacher">Teacher</Label>
