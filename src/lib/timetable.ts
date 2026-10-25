@@ -136,3 +136,31 @@ export function formatPeriodTime(period: { startTime: string; endTime: string })
       : time
   return `${fmt(period.startTime)} – ${fmt(period.endTime)}`
 }
+
+export type TeacherClash = { day: string; teacherId: string; time: string; otherLabel: string }
+
+/**
+ * Slots where a teacher in this timetable is also teaching somewhere else at
+ * an overlapping time on the same day. Saving still works; the school sees a warning.
+ */
+export function findTeacherClashes(current: Timetable, others: Array<{ label: string; timetable: Timetable }>): TeacherClash[] {
+  const clashes: TeacherClash[] = []
+  const periodById = (t: Timetable) => new Map(t.periods.map((p) => [p.id, p]))
+  const mine = periodById(current)
+  for (const [day, cells] of Object.entries(current.schedule)) {
+    for (const [periodId, cell] of Object.entries(cells)) {
+      const period = mine.get(periodId)
+      if (!cell.teacherId || !period) continue
+      for (const other of others) {
+        const theirs = periodById(other.timetable)
+        const hit = Object.entries(other.timetable.schedule[day] ?? {}).some(([otherId, otherCell]) => {
+          const p = theirs.get(otherId)
+          return otherCell.teacherId === cell.teacherId && p
+            && minutes(p.startTime) < minutes(period.endTime) && minutes(period.startTime) < minutes(p.endTime)
+        })
+        if (hit) clashes.push({ day, teacherId: cell.teacherId, time: `${period.startTime}–${period.endTime}`, otherLabel: other.label })
+      }
+    }
+  }
+  return clashes
+}

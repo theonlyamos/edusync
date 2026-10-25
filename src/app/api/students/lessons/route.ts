@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server';
 import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
+import { inClassAudience } from '@/lib/school-classes';
+import { studentClassId } from '@/lib/school-classes.server';
 
 export async function GET(request: Request) {
     // The study companion passes ?withContent=1 to give the voice tutor lesson context.
@@ -38,17 +40,22 @@ export async function GET(request: Request) {
         // lesson page). Only the columns the list shows: never the full content.
         const { data: lessons, error } = await supabase
             .from('lessons')
-            .select('id,title,subject,gradelevel,created_at,current_publication_id')
+            .select('id,title,subject,gradelevel,created_at,current_publication_id,audience_class_ids')
             .ilike('gradelevel', student.grade.trim())
             // Students only see lessons their teacher has published and not archived.
             .not('current_publication_id', 'is', null)
             .is('archived_at', null)
             .order('created_at', { ascending: false });
         if (error) throw error;
+        // Lessons set for particular classes only show to students in them.
+        const classId = (lessons ?? []).some((lesson) => lesson.audience_class_ids?.length)
+            ? await studentClassId(createServerSupabase(), user.id)
+            : null;
+        const visibleLessons = (lessons ?? []).filter((lesson) => inClassAudience(lesson.audience_class_ids, classId));
 
         // Show what students will see when they open the lesson: the published
         // snapshot's title and objectives, not unpublished edits.
-        const publicationIds = (lessons ?? []).map((lesson) => lesson.current_publication_id as string);
+        const publicationIds = visibleLessons.map((lesson) => lesson.current_publication_id as string);
         const { data: publications, error: publicationError } = publicationIds.length
             ? await createServerSupabase()
                 .from('lesson_publications')
@@ -58,7 +65,7 @@ export async function GET(request: Request) {
         if (publicationError) throw publicationError;
         const byId = new Map((publications ?? []).map((p: any) => [p.id as string, p]));
 
-        return NextResponse.json((lessons ?? []).map((lesson) => {
+        return NextResponse.json(visibleLessons.map((lesson) => {
             const published = byId.get(lesson.current_publication_id as string);
             const objectives = normalizePublishedObjectives(published?.objectives ?? []) ?? [];
             return {

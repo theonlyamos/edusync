@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
+import { classLabel } from '@/lib/school-classes';
+import { gradeLevelLabel } from '@/lib/school-registration';
 import { readTimetable, teacherSlots } from '@/lib/timetable';
 
 /**
@@ -18,11 +20,20 @@ export async function GET() {
         }
 
         // Row level security limits this to the teacher's own school.
-        const { data: rows, error } = await supabase.from('timetables').select('grade, periods, schedule');
+        const [{ data: rows, error }, { data: classes, error: classError }] = await Promise.all([
+            supabase.from('timetables').select('grade, class_id, periods, schedule'),
+            supabase.from('school_classes').select('id, grade, name'),
+        ]);
         if (error) throw error;
+        if (classError) throw classError;
+        const classById = new Map((classes ?? []).map((c: any) => [c.id as string, c]));
 
+        // Each slot is labelled with its class ("JHS 1 A") or, for a grade-wide timetable, the grade.
         const { periods, schedule } = teacherSlots(
-            (rows ?? []).map((row: any) => ({ grade: row.grade as string, timetable: readTimetable(row) })),
+            (rows ?? []).map((row: any) => {
+                const c = row.class_id ? classById.get(row.class_id) : null;
+                return { grade: c ? classLabel(gradeLevelLabel(c.grade), c.name) : (row.grade as string), timetable: readTimetable(row) };
+            }),
             user.id,
         );
         return NextResponse.json({ timeTable: schedule, periods });

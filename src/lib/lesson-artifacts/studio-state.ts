@@ -124,10 +124,20 @@ export function nextReviewStep(order: ReviewStep[], current: { objectiveId: stri
 }
 
 /** "All 42 JHS 1 students at Hillside School", for the publish step. */
-export function audienceSummary(audience: { schoolName: string | null; gradeLevel: string; students: number | null } | null | undefined, formatGrade: (grade: string) => string) {
+export function audienceSummary(
+  audience: { schoolName: string | null; gradeLevel: string; students: number | null; classes?: { id: string; name: string }[]; classIds?: string[] } | null | undefined,
+  formatGrade: (grade: string) => string,
+) {
   if (!audience?.gradeLevel) return null;
   const grade = formatGrade(audience.gradeLevel);
   const where = audience.schoolName ? ` at ${audience.schoolName}` : '';
+  const chosen = (audience.classes ?? []).filter((c) => audience.classIds?.includes(c.id));
+  if (chosen.length > 0) {
+    const names = chosen.map((c) => (c.name.toLowerCase().startsWith(grade.toLowerCase()) ? c.name : `${grade} ${c.name}`));
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    if (!audience.students) return `Students in ${list}${where}. No one is in ${names.length === 1 ? 'it' : 'them'} yet`;
+    return `${audience.students === 1 ? 'The 1 student' : `The ${audience.students} students`} in ${list}${where}`;
+  }
   if (audience.students === null) return `Every ${grade} student${where}`;
   if (audience.students === 0) return `${grade} students${where}. None have joined yet, so new ${grade} students will see it when they join`;
   return `${audience.students === 1 ? 'The 1' : `All ${audience.students}`} ${grade} student${audience.students === 1 ? '' : 's'}${where}`;

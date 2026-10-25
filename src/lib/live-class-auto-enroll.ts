@@ -16,6 +16,8 @@ export async function enrollAllStudentsForGradeLevel(
     organizationId: string | null
     organizerId: string
     maxAttendees: number | null | undefined
+    /** Only students in these classes; empty or missing means the whole grade. */
+    classIds?: string[]
   }
 ): Promise<{ enrolled: number; rpcFailed?: boolean }> {
   const grade = normalizeLiveClassGrade(
@@ -40,7 +42,23 @@ export async function enrollAllStudentsForGradeLevel(
     ? raw.filter((id): id is string => typeof id === 'string' && id.length > 0)
     : []
 
-  const filtered = userIds.filter((id) => id !== params.organizerId).sort((a, b) => a.localeCompare(b))
+  let inClasses: Set<string> | null = null
+  if (params.classIds?.length) {
+    const { data: links, error: linkErr } = await supabase
+      .from('school_class_students')
+      .select('student_id')
+      .in('class_id', params.classIds)
+      .limit(20000)
+    if (linkErr) {
+      console.error('[live-class auto-enroll] class lookup', linkErr)
+      return { enrolled: 0, rpcFailed: true }
+    }
+    inClasses = new Set((links || []).map((l: { student_id: string }) => l.student_id))
+  }
+
+  const filtered = userIds
+    .filter((id) => id !== params.organizerId && (!inClasses || inClasses.has(id)))
+    .sort((a, b) => a.localeCompare(b))
 
   let cap = filtered.length
   if (params.maxAttendees != null && Number.isFinite(params.maxAttendees) && params.maxAttendees >= 0) {

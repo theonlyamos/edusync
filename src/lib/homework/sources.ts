@@ -19,7 +19,11 @@ export interface HomeworkSource {
     revision: number;
     artifactIds?: string[];
   }[];
-  eligibleStudents: { id: string; name: string }[];
+  eligibleStudents: { id: string; name: string; classId: string | null }[];
+  /** The grade's classes, for picking recipients by class. */
+  classes: { id: string; name: string }[];
+  /** The classes the lesson is set for; empty means the whole grade. */
+  lessonClassIds: string[];
   importedQuestions: DraftQuestion[];
 }
 export async function listSources() {
@@ -144,11 +148,38 @@ export async function sourceForHomework(
           .eq("role", "student")
           .order("name");
         if (nameError) throw nameError;
-        eligibleStudents.push(...(names ?? []));
+        eligibleStudents.push(...(names ?? []).map((n) => ({ id: n.id as string, name: n.name as string, classId: null })));
       }
     }
   }
   eligibleStudents.sort((a, b) => a.name.localeCompare(b.name));
+  let classes: HomeworkSource["classes"] = [];
+  if (lesson.organization_id && eligibleStudents.length) {
+    const { data: classRows, error: classError } = await db
+      .from("school_classes")
+      .select("id,name")
+      .eq("organization_id", lesson.organization_id)
+      .ilike("grade", publication.manifest.lesson.gradeLevel?.trim() ?? "");
+    if (classError) throw classError;
+    classes = (classRows ?? [])
+      .map((c) => ({ id: c.id as string, name: c.name as string }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (classes.length) {
+      const links = await readAll(
+        (from, to) =>
+          db
+            .from("school_class_students")
+            .select("class_id,student_id")
+            .in("class_id", classes.map((c) => c.id))
+            .order("student_id")
+            .range(from, to),
+        5000,
+      );
+      const byStudent = new Map(links.map((l) => [l.student_id as string, l.class_id as string]));
+      for (const s of eligibleStudents) s.classId = byStudent.get(s.id) ?? null;
+    }
+  }
+  const lessonClassIds = ((lesson.audience_class_ids as string[] | null) ?? []).filter((id) => classes.some((c) => c.id === id));
   let schoolTimezone: string | null = null;
   if (lesson.organization_id) {
     const { data: school, error: schoolError } = await db
@@ -170,6 +201,8 @@ export async function sourceForHomework(
     publicationVersion: publication.version,
     objectives,
     eligibleStudents,
+    classes,
+    lessonClassIds,
     importedQuestions,
   };
 }

@@ -5,6 +5,10 @@ import { validateLiveClassGradeAndLesson } from '@/lib/live-class-lesson-validat
 import { fetchStudentPlacement, liveClassGradesEqual, normalizeLiveClassGrade } from '@/lib/live-class-attendance'
 import { inActiveSchool } from '@/lib/school'
 import { enrollAllStudentsForGradeLevel } from '@/lib/live-class-auto-enroll'
+import { eventClassIds, studentClassOf } from '@/lib/live-class-attendance'
+import { inClassAudience } from '@/lib/school-classes'
+import { getUserSchoolId } from '@/lib/school'
+import { validAudienceClasses } from '@/lib/lesson-artifacts/audience.server'
 
 function canOrganize(role: string | null | undefined) {
   return role === 'teacher' || role === 'admin'
@@ -72,6 +76,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const myClass = me.isStudent ? await studentClassOf(supabase, auth.userId) : null
   const enrolledSet = new Set(enrolledIds)
   const merged = Array.from(byId.values()).map((e) =>
     e.enrolled === false ? e : { ...e, enrolled: enrolledSet.has(e.id as string) || e.organizer_id === auth.userId }
@@ -80,7 +85,7 @@ export async function GET(request: NextRequest) {
     const orgId = e.organizer_id as string
     if (orgId === auth.userId) return true
     if (!me.isStudent || !inActiveSchool(me.organizationId, e.organization_id as string | null | undefined)) return false
-    return liveClassGradesEqual(e.grade_level as string | null | undefined, me.grade)
+    return liveClassGradesEqual(e.grade_level as string | null | undefined, me.grade) && inClassAudience(eventClassIds(e), myClass)
   })
 
   return NextResponse.json({ items })
@@ -106,6 +111,7 @@ export async function POST(request: NextRequest) {
     scheduled_end_at,
     timezone,
     max_attendees,
+    audience_class_ids,
   } = body
 
   if (!title || !scheduled_start_at || !scheduled_end_at) {
@@ -127,6 +133,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: v.message }, { status: v.status })
   }
 
+  const requestedClasses: string[] = Array.isArray(audience_class_ids)
+    ? audience_class_ids.filter((id: unknown): id is string => typeof id === 'string')
+    : []
+  const classIds = requestedClasses.length
+    ? await validAudienceClasses(
+        supabase,
+        await getUserSchoolId(supabase, auth.userId),
+        typeof grade_level === 'string' ? grade_level.trim().toLowerCase() : null,
+        requestedClasses,
+      )
+    : []
+  if (!classIds) {
+    return NextResponse.json({ error: 'Pick classes from this grade at your school' }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from('live_class_events')
     .insert({
@@ -139,6 +160,7 @@ export async function POST(request: NextRequest) {
       scheduled_end_at,
       timezone: timezone || 'UTC',
       max_attendees: max_attendees ?? null,
+      audience_class_ids: classIds,
       status: 'scheduled',
     })
     .select('id, organization_id')
@@ -159,6 +181,7 @@ export async function POST(request: NextRequest) {
     organizationId: (data as { organization_id?: string | null }).organization_id ?? null,
     organizerId: auth.userId,
     maxAttendees: maxCap,
+    classIds,
   })
 
   return NextResponse.json({

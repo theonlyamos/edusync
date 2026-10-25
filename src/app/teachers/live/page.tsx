@@ -41,6 +41,8 @@ import { formatDateTimeRange } from '@/lib/format-date'
 import { formatGrade } from '@/lib/grade'
 import { groupLiveClasses, startsInLabel, type LiveClassPhase } from '@/lib/live-class-phase'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { classLabel } from '@/lib/school-classes'
 
 type LessonOption = { _id: string; title: string; subject?: string }
 
@@ -55,6 +57,7 @@ type EventRow = {
   grade_level?: string | null
   lesson_id?: string | null
   lessons?: LessonsEmbed
+  audience_class_ids?: string[] | null
 }
 
 function lessonTitleFromEmbed(lessons: LessonsEmbed | undefined): string | null {
@@ -92,6 +95,9 @@ export default function TeachersLiveClassesPage() {
   const [teacherGrades, setTeacherGrades] = useState<string[] | null>(null)
   const prevGradeForLessonsRef = useRef('')
   const editLessonIdRef = useRef('')
+  const [gradeClassList, setGradeClassList] = useState<{ id: string; name: string; students: number }[]>([])
+  const [classIds, setClassIds] = useState<string[]>([])
+  const editClassIdsRef = useRef<string[] | null>(null)
   const joinTick = useLiveClassJoinTick()
   const [pastShown, setPastShown] = useState(PAST_PAGE)
   const now = useMemo(() => new Date(), [joinTick, items]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -189,6 +195,29 @@ export default function TeachersLiveClassesPage() {
     editLessonIdRef.current = ''
   }, [scheduleModalOpen, gradeLevel, lessons, lessonsLoading])
 
+  // The grade's classes, so a live class can be for only some of them.
+  useEffect(() => {
+    let cancelled = false
+    const keep = editClassIdsRef.current
+    editClassIdsRef.current = null
+    setClassIds(keep ?? [])
+    if (!gradeLevel) {
+      setGradeClassList([])
+      return
+    }
+    fetch(`/api/teachers/classes?grade=${encodeURIComponent(gradeLevel)}`)
+      .then((res) => (res.ok ? res.json() : { classes: [] }))
+      .then((data) => {
+        if (!cancelled) setGradeClassList(data.classes ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setGradeClassList([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [gradeLevel])
+
   const resetScheduleForm = () => {
     setTitle(DEFAULT_TITLE)
     setStart('')
@@ -196,6 +225,8 @@ export default function TeachersLiveClassesPage() {
     setGradeLevel('')
     setLessonId('')
     setLessons([])
+    setClassIds([])
+    editClassIdsRef.current = null
     setEditingEventId(null)
     prevGradeForLessonsRef.current = ''
     editLessonIdRef.current = ''
@@ -213,6 +244,8 @@ export default function TeachersLiveClassesPage() {
     setTitle(ev.title || DEFAULT_TITLE)
     setStart(toDatetimeLocalValue(ev.scheduled_start_at))
     setEnd(toDatetimeLocalValue(ev.scheduled_end_at))
+    editClassIdsRef.current = ev.audience_class_ids ?? []
+    setClassIds(ev.audience_class_ids ?? [])
     setGradeLevel(ev.grade_level || '')
     setLessonId('')
     setScheduleModalOpen(true)
@@ -252,6 +285,7 @@ export default function TeachersLiveClassesPage() {
           title: title.trim(),
           grade_level: gradeLevel,
           lesson_id: lessonId || null,
+          audience_class_ids: classIds,
           scheduled_start_at: new Date(start).toISOString(),
           scheduled_end_at: new Date(end).toISOString(),
         })
@@ -271,6 +305,7 @@ export default function TeachersLiveClassesPage() {
           title: title.trim(),
           grade_level: gradeLevel,
           lesson_id: lessonId || null,
+          audience_class_ids: classIds,
           scheduled_start_at: new Date(start).toISOString(),
           scheduled_end_at: new Date(end).toISOString(),
         })
@@ -285,7 +320,7 @@ export default function TeachersLiveClassesPage() {
           description =
             'We could not enroll students by grade automatically. Ask students to join from their live classes list, or contact support if this keeps happening.'
         } else if (n > 0) {
-          description = `We enrolled ${n} student${n === 1 ? '' : 's'} in ${gradeLabel}. ${description}`
+          description = `We enrolled ${n} student${n === 1 ? '' : 's'} in ${classIds.length ? 'the chosen classes' : gradeLabel}. ${description}`
         } else {
           description = `No students matched this grade in the roster yet. ${description} Students can still join from their list if you share the class with them.`
         }
@@ -466,6 +501,29 @@ export default function TeachersLiveClassesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {gradeClassList.length > 0 && (
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">Who it’s for</legend>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+                      <Checkbox checked={classIds.length === 0} onCheckedChange={(on) => on === true && setClassIds([])} />
+                      Whole grade
+                    </label>
+                    {gradeClassList.map((c) => (
+                      <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+                        <Checkbox
+                          checked={classIds.includes(c.id)}
+                          onCheckedChange={(on) =>
+                            setClassIds((ids) => (on === true ? [...ids, c.id] : ids.filter((x) => x !== c.id)))
+                          }
+                        />
+                        {classLabel(formatGrade(gradeLevel), c.name)}
+                        <span className="text-xs text-muted-foreground">({c.students})</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
               <div className="space-y-2">
                 <Label>Lesson (optional)</Label>
                 <p className="text-xs text-muted-foreground">

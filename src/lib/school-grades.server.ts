@@ -98,6 +98,9 @@ export async function promoteStudents(supabase: ServiceSupabase, schoolId: strin
     if (roleUpdate.error) throw roleUpdate.error
     const memberUpdate = await supabase.from('organization_members').update({ is_active: false }).in('id', part.map((s) => s.memberId))
     if (memberUpdate.error) throw memberUpdate.error
+    // Graduates leave their class so it is ready for next year's students.
+    const classUpdate = await supabase.from('school_class_students').delete().eq('organization_id', schoolId).in('student_id', userIds)
+    if (classUpdate.error) throw classUpdate.error
     const { data: users, error: usersError } = await supabase.from('users').select('email').in('id', userIds)
     if (usersError) throw usersError
     const emails = (users ?? []).map((u) => String(u.email ?? '').toLowerCase()).filter(Boolean)

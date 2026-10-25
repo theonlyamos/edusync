@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { inClassAudience } from '@/lib/school-classes';
+import { studentClassId } from '@/lib/school-classes.server';
 
 import { requireStudentSession } from '@/lib/lesson-artifacts/learning-server';
 import {
@@ -23,7 +25,7 @@ export async function GET(
     const [{ data: lesson, error: lessonError }, { data: student, error: studentError }, schoolId] = await Promise.all([
       supabase
         .from('lessons')
-        .select('id,gradelevel,current_publication_id,organization_id,archived_at')
+        .select('id,gradelevel,current_publication_id,organization_id,archived_at,audience_class_ids')
         .eq('id', lessonId)
         .maybeSingle(),
       supabase
@@ -45,6 +47,9 @@ export async function GET(
     const studentGrade = student?.grade?.trim().toLowerCase();
     if (!lessonGrade || !studentGrade || lessonGrade !== studentGrade) {
       throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your grade');
+    }
+    if (lesson.audience_class_ids?.length && !inClassAudience(lesson.audience_class_ids, await studentClassId(supabase, session.user.id))) {
+      throw new LessonArtifactHttpError(403, 'This lesson is not assigned to your class');
     }
 
     if (!lesson.current_publication_id) {

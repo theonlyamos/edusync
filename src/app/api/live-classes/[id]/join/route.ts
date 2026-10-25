@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
-import { isEligibleLiveClassAttendee, normalizeLiveClassGrade } from '@/lib/live-class-attendance'
+import { eventClassIds, isEligibleLiveClassAttendee, normalizeLiveClassGrade } from '@/lib/live-class-attendance'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -17,7 +17,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
 
   const { data: ev, error: evErr } = await supabase
     .from('live_class_events')
-    .select('id, organizer_id, max_attendees, status, grade_level, organization_id')
+    .select('id, organizer_id, max_attendees, status, grade_level, organization_id, audience_class_ids')
     .eq('id', eventId)
     .maybeSingle()
 
@@ -42,6 +42,7 @@ export async function POST(_request: NextRequest, ctx: Ctx) {
     attendeeUserId: auth.userId,
     eventGradeLevel: ev.grade_level as string | null,
     eventOrganizationId: (ev as { organization_id?: string | null }).organization_id ?? null,
+    eventClassIds: eventClassIds(ev),
   })
   if (!eligible) {
     return NextResponse.json({ error: 'Only students in this class grade can join' }, { status: 403 })

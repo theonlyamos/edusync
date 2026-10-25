@@ -30,6 +30,7 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/teachers', 'Teachers'],
   ['/school/administrators', 'Administrators'],
   ['/school/grades', 'Grades'],
+  ['/school/classes', 'Classes'],
   ['/school/timetables', 'Timetables'],
   ['/school/lessons', 'Lessons'],
   ['/school/reports', 'Reports'],
