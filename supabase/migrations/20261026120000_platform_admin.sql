@@ -96,3 +96,31 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- Only platform support (the server) can suspend or reactivate a school;
+-- its owner can't undo a suspension through the organizations API.
+CREATE OR REPLACE FUNCTION public.guard_school_credit_columns()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF current_user IN ('authenticated', 'anon')
+     AND (OLD.type = 'school' OR NEW.type = 'school')
+     AND (
+       NEW.credits IS DISTINCT FROM OLD.credits
+       OR NEW.trial_credits IS DISTINCT FROM OLD.trial_credits
+       OR NEW.trial_expires_at IS DISTINCT FROM OLD.trial_expires_at
+       OR NEW.total_credits_purchased IS DISTINCT FROM OLD.total_credits_purchased
+       OR NEW.total_credits_used IS DISTINCT FROM OLD.total_credits_used
+     ) THEN
+    RAISE EXCEPTION 'School credits can only change through billing' USING ERRCODE = '42501';
+  END IF;
+  IF current_user IN ('authenticated', 'anon')
+     AND (OLD.type = 'school' OR NEW.type = 'school')
+     AND NEW.is_active IS DISTINCT FROM OLD.is_active THEN
+    RAISE EXCEPTION 'Only InsyteAI support can suspend or reactivate a school' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;

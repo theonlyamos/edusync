@@ -336,3 +336,28 @@ await test('school admins cannot raise their own free allowance', async () => {
     await asUser(owner, () => db.query(`UPDATE public.organization_ai_quotas SET monthly_image_limit = 10 WHERE organization_id = $1`, [school]));
     assert.equal((await one('SELECT monthly_image_limit FROM public.organization_ai_quotas WHERE organization_id = $1', [school])).monthly_image_limit, 10);
 });
+
+await test('only support can suspend or reactivate a school', async () => {
+    // Production organizations have is_active; this fixture's copy did not need it until now.
+    await db.exec(`ALTER TABLE public.organizations ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true`);
+    const platformAdmin = (await readdir(migrations)).find((name) => name.endsWith('_platform_admin.sql'));
+    await db.exec(await readFile(path.join(migrations, platformAdmin), 'utf8'));
+    const active = async (org) => (await one('SELECT is_active FROM public.organizations WHERE id = $1', [org])).is_active;
+
+    await db.query(`UPDATE public.organizations SET is_active = false WHERE id = $1`, [school]);
+    await assert.rejects(
+        asUser(owner, () => db.query(`UPDATE public.organizations SET is_active = true WHERE id = $1`, [school])),
+        /Only InsyteAI support/,
+    );
+    assert.equal(await active(school), false);
+    // Credits stay guarded, and other edits still work.
+    await assert.rejects(
+        asUser(owner, () => db.query(`UPDATE public.organizations SET credits = 99999 WHERE id = $1`, [school])),
+        /only change through billing/,
+    );
+    await db.query(`UPDATE public.organizations SET is_active = true WHERE id = $1`, [school]);
+    assert.equal(await active(school), true);
+    // Developer organizations keep their old behavior.
+    await asUser(devOwner, () => db.query(`UPDATE public.organizations SET is_active = false WHERE id = $1`, [devOrg]));
+    assert.equal(await active(devOrg), false);
+});
