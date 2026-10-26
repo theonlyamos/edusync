@@ -55,11 +55,15 @@ export function ActivityChart({ data, label, unit }: { data: Point[]; label: str
       <figcaption className="sr-only">
         {label}: {unit(total)} in total over {data.length} days.
       </figcaption>
-      <table className="sr-only">
-        <caption>{label} by day</caption>
-        <thead><tr><th>Day</th><th>{label}</th></tr></thead>
-        <tbody>{data.map((p) => <tr key={p.date}><td>{shortDate(p.date)}</td><td>{p.value}</td></tr>)}</tbody>
-      </table>
+      {/* Tables ignore sr-only's 1px size, so the wrapper does the hiding.
+          Otherwise the full-height table stretches the page. */}
+      <div className="sr-only">
+        <table>
+          <caption>{label} by day</caption>
+          <thead><tr><th>Day</th><th>{label}</th></tr></thead>
+          <tbody>{data.map((p) => <tr key={p.date}><td>{shortDate(p.date)}</td><td>{p.value}</td></tr>)}</tbody>
+        </table>
+      </div>
     </figure>
   );
 }
