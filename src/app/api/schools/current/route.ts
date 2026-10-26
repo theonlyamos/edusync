@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { parseSchoolDetails, schoolSetupSteps } from '@/lib/school-registration';
-import { getActiveSchoolMembership as findMembership, schoolHasPurchasedCredits } from '@/lib/school-access.server';
+import { getActiveSchoolMembership as findMembership, inSuspendedSchool, schoolHasPurchasedCredits } from '@/lib/school-access.server';
 
 type Supabase = ReturnType<typeof createServerSupabase>;
 
@@ -27,7 +27,7 @@ export async function GET() {
     const supabase = createServerSupabase();
     const membership = await findMembership(supabase, session.user.id);
     if (!membership) {
-      return NextResponse.json({ school: null });
+      return NextResponse.json({ school: null, suspended: await inSuspendedSchool(supabase, session.user.id) });
     }
 
     const { school, role } = membership;

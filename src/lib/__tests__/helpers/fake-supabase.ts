@@ -10,11 +10,13 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
     let op: 'select' | 'insert' | 'update' | 'delete' = 'select'
     let payload: any
     let countOnly = false
+    let withCount = false
     let single = false
     const rows = () => (tables[table] ??= [])
     const builder: any = {
       select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
         if (opts?.head) countOnly = true
+        if (opts?.count) withCount = true
         return builder
       },
       eq: (col: string, value: unknown) => { filters.push((r) => r[col] === value); return builder },
@@ -24,6 +26,16 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
       ilike: (col: string, value: string) => { filters.push((r) => String(r[col] ?? '').toLowerCase() === value.toLowerCase()); return builder },
       order: () => builder,
       limit: () => builder,
+      range: () => builder,
+      // Only "col.ilike.%text%,col.ilike.%text%" (any one matching) is needed by the tests.
+      or: (expr: string) => {
+        const parts = expr.split(',').map((part) => {
+          const [col, , pattern] = part.split('.')
+          return { col, text: pattern.replace(/%/g, '').toLowerCase() }
+        })
+        filters.push((r) => parts.some(({ col, text }) => String(r[col] ?? '').toLowerCase().includes(text)))
+        return builder
+      },
       neq: (col: string, value: unknown) => { filters.push((r) => r[col] !== value); return builder },
       // Only `.not(col, 'is', null)` is needed by the tests.
       not: (col: string, _op: string, value: unknown) => { filters.push((r) => (r[col] ?? null) !== value); return builder },
@@ -58,7 +70,7 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
             return resolve({ data: matched, error: null })
           }
           if (countOnly) return resolve({ count: matched.length, error: null })
-          return resolve({ data: single ? matched[0] ?? null : matched, error: null })
+          return resolve({ data: single ? matched[0] ?? null : matched, error: null, ...(withCount ? { count: matched.length } : {}) })
         } catch (error) {
           reject(error)
         }

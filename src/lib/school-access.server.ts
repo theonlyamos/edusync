@@ -29,12 +29,27 @@ export async function getActiveSchoolMembership(supabase: ServiceSupabase, userI
     .eq('user_id', userId)
     .eq('is_active', true)
     .eq('organizations.type', 'school')
+    .eq('organizations.is_active', true)
     .limit(1)
     .maybeSingle()
   if (error) throw error
   if (!data) return null
   const school = (Array.isArray(data.organizations) ? data.organizations[0] : data.organizations) as SchoolRecord | undefined
   return school ? { role: data.role as string, school } : null
+}
+
+/** Whether the person belongs to a school that support has suspended. */
+export async function inSuspendedSchool(supabase: ServiceSupabase, userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('id, organizations!inner(type, is_active)')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .eq('organizations.type', 'school')
+    .eq('organizations.is_active', false)
+    .limit(1)
+  if (error) return false
+  return (data ?? []).length > 0
 }
 
 export function isSchoolManager(role: string | null | undefined): boolean {
@@ -75,7 +90,9 @@ export async function requireSchoolRole(
   const supabase = createServerSupabase()
   const membership = await getActiveSchoolMembership(supabase, session.user.id)
   if (!membership) {
-    return { ok: false, response: NextResponse.json({ error: 'You are not in a school' }, { status: 403 }) }
+    const suspended = await inSuspendedSchool(supabase, session.user.id)
+    const error = suspended ? 'Your school is suspended. Contact InsyteAI support.' : 'You are not in a school'
+    return { ok: false, response: NextResponse.json({ error, suspended }, { status: 403 }) }
   }
   if (!roles.includes(membership.role)) {
     return { ok: false, response: NextResponse.json({ error: 'Your school role cannot do this' }, { status: 403 }) }

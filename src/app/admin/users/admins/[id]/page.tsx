@@ -3,7 +3,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -171,11 +170,11 @@ export default function AdminDetailsPage({ params }: PageProps) {
 
   if (session === undefined || profileLoading || Boolean(profileError) || isLoading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="flex items-center justify-center min-h-screen">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
@@ -185,8 +184,8 @@ export default function AdminDetailsPage({ params }: PageProps) {
 
   if (!admin) {
     return (
-      <DashboardLayout>
-        <div className="p-6">
+      <>
+        <div>
           <div className="flex items-center gap-4 mb-6">
             <Button
               variant="outline"
@@ -203,13 +202,13 @@ export default function AdminDetailsPage({ params }: PageProps) {
             </div>
           </div>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="p-6">
+    <>
+      <div>
         <div className="flex items-center gap-4 mb-6">
           <Button
             variant="outline"
@@ -362,6 +361,6 @@ export default function AdminDetailsPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </>
   );
 } 

@@ -40,6 +40,19 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/account', 'Account settings'],
 ];
 
+const ADMIN_PAGE_TITLES: [string, string][] = [
+  ['/admin/dashboard', 'Overview'],
+  ['/admin/schools', 'Schools'],
+  ['/admin/users/admins', 'Admins'],
+  ['/admin/users', 'Users'],
+  ['/admin/billing', 'Billing'],
+  ['/admin/usage', 'AI usage'],
+  ['/admin/feedback', 'Feedback'],
+  ['/admin/organizations', 'Developers'],
+  ['/admin/activity', 'Activity log'],
+  ['/admin/settings', 'Settings'],
+];
+
 /** The page name shown in the phone header. */
 function pageTitle(titles: [string, string][], pathname: string | null, fallback: string) {
   const match = titles.find(([path]) => pathname === path || pathname?.startsWith(path + '/'));
@@ -117,7 +130,9 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
                 ? pageTitle(STUDENT_PAGE_TITLES, pathname, 'Student Portal')
                 : role === 'school'
                   ? pageTitle(SCHOOL_PAGE_TITLES, pathname, 'School Portal')
-                  : `${portalName} Portal`}
+                  : role === 'admin'
+                    ? pageTitle(ADMIN_PAGE_TITLES, pathname, 'Admin Portal')
+                    : `${portalName} Portal`}
             </span>
           </header>
           <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>

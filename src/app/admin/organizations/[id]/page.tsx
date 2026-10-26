@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -81,8 +80,8 @@ export default function OrganizationDetailsPage({ params }: PageProps) {
 
     if (!isLoading && !organization) {
         return (
-            <DashboardLayout>
-                <div className="p-6">
+            <>
+                <div>
                     <div className="flex items-center gap-4 mb-6">
                         <Button
                             variant="outline"
@@ -99,13 +98,13 @@ export default function OrganizationDetailsPage({ params }: PageProps) {
                         </div>
                     </div>
                 </div>
-            </DashboardLayout>
+            </>
         );
     }
 
     return (
-        <DashboardLayout>
-            <div className="p-6">
+        <>
+            <div>
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
                         <Button
@@ -303,6 +302,6 @@ export default function OrganizationDetailsPage({ params }: PageProps) {
                     onSuccess={fetchOrganizationData}
                 />
             </div>
-        </DashboardLayout>
+        </>
     );
 }
