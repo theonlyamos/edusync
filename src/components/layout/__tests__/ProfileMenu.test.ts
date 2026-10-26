@@ -22,7 +22,6 @@ describe('profileMenuLinks', () => {
     expect(labels(profileMenuLinks('admin', managed))).toEqual([
       'Billing /school/billing',
       'Settings /admin/settings',
-      'Organizations /admin/organizations',
       'School admin /school/dashboard',
     ]);
   });
@@ -40,8 +39,8 @@ describe('profileMenuLinks', () => {
     expect(labels(profileMenuLinks('student', undefined))).toEqual(['Settings /students/settings']);
   });
 
-  it('gives platform admins the organizations list', () => {
-    expect(labels(profileMenuLinks('admin', null))).toEqual(['Settings /admin/settings', 'Organizations /admin/organizations']);
+  it('gives platform admins their settings (everything else is in the sidebar)', () => {
+    expect(labels(profileMenuLinks('admin', null))).toEqual(['Settings /admin/settings']);
   });
 });
 

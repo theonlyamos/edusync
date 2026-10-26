@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server'
-import { requirePlatformAdmin } from '@/lib/platform-admin.server';
+import { logAdminAction, requirePlatformAdmin } from '@/lib/platform-admin.server';
 import { adminPromotionProblem } from '@/lib/platform-admin';
 import { isValidEmail, normalizeEmail } from '@/lib/school-people';
 export async function GET() {
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
             if (adminError) console.error('Could not add admin details row:', adminError);
         }
 
+        await logAdminAction(access.context, { action: 'admin.add', targetType: 'user', targetId: user.id, targetLabel: user.email });
         return NextResponse.json(updated);
     } catch (error) {
         console.error('Error adding admin:', error);

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { Building2, ChevronUp, CreditCard, LogOut, Monitor, Moon, School, Settings, Sun } from 'lucide-react';
+import { ChevronUp, CreditCard, LogOut, Monitor, Moon, School, Settings, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -57,9 +57,6 @@ export function profileMenuLinks(role: Role, school: SchoolInfo | null | undefin
     links.push({ label: 'Billing', href: '/learn/credits', icon: <CreditCard className={iconClass} /> });
   }
   links.push({ label: role === 'school' ? 'Account settings' : 'Settings', href: SETTINGS_HREF[role], icon: <Settings className={iconClass} /> });
-  if (role === 'admin') {
-    links.push({ label: 'Organizations', href: '/admin/organizations', icon: <Building2 className={iconClass} /> });
-  }
   if (role !== 'school' && school?.canManage) {
     links.push({ label: 'School admin', href: '/school/dashboard', icon: <School className={iconClass} /> });
   }

@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { createServerSupabase } from '@/lib/supabase.server';
-import { requirePlatformAdmin } from '@/lib/platform-admin.server';
+import { logAdminAction, requirePlatformAdmin } from '@/lib/platform-admin.server';
 
 export async function GET(
     req: NextRequest,
@@ -130,7 +130,7 @@ export async function DELETE(
             .update({ role: 'learner' })
             .eq('id', adminId)
             .eq('role', 'admin')
-            .select('id')
+            .select('id, email')
             .maybeSingle();
         if (error) throw error;
         if (!result) return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
@@ -143,6 +143,7 @@ export async function DELETE(
             throw adminRowError;
         }
 
+        await logAdminAction(access.context, { action: 'admin.remove', targetType: 'user', targetId: adminId, targetLabel: result.email ?? null });
         return NextResponse.json({ removed: true });
     } catch (error) {
         console.error('Error removing admin:', error);

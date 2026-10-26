@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from 'next/navigation';
 import { DataTable } from "@/components/ui/data-table";
 import { getColumns, Organization } from "./columns";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building2 } from "lucide-react";
@@ -34,9 +33,10 @@ export default function OrganizationsPage() {
         try {
             const response = await fetch('/api/admin/organizations');
             if (!response.ok) throw new Error('Failed to fetch organizations');
-            const data = await response.json();
-            setOrganizations(data ?? []);
-            setFilteredOrganizations(data ?? []);
+            // Schools have their own page; this one is for developer (API key) organizations.
+            const data = ((await response.json()) ?? []).filter((org: { type?: string }) => org.type !== 'school');
+            setOrganizations(data);
+            setFilteredOrganizations(data);
         } catch (error) {
             console.error("Error fetching organizations:", error);
             toast({
@@ -124,24 +124,24 @@ export default function OrganizationsPage() {
     });
 
     return (
-        <DashboardLayout>
-            <div className="container mx-auto py-10">
-                <div className="flex justify-between items-center mb-8">
+        <>
+            <div>
+                <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Organization Management</h1>
+                        <h1 className="text-2xl font-bold sm:text-3xl">Developers</h1>
                         <p className="text-muted-foreground">
-                            Manage and monitor all organizations in the system
+                            Organisations that embed the tutor with API keys. Schools are on the Schools page.
                         </p>
                     </div>
                     <Button onClick={handleCreate} className="whitespace-nowrap">
                         <Building2 className="mr-2 h-4 w-4" />
-                        Add Organization
+                        Add organisation
                     </Button>
                 </div>
 
                 <div className="flex items-center justify-end py-4">
                     <Input
-                        placeholder="Search organizations..."
+                        placeholder="Search organisations…"
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
                         className="max-w-sm"
@@ -179,6 +179,6 @@ export default function OrganizationsPage() {
                     isDeleting={isDeleting}
                 />
             </div>
-        </DashboardLayout>
+        </>
     );
 }

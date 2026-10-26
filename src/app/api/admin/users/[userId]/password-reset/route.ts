@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isEmailConfigured, sendEmail } from '@/lib/email'
 import { buildPasswordResetEmail } from '@/lib/password-reset-email'
 import { resetLinkFromTokenHash, RESET_PASSWORD_PATH } from '@/lib/password-reset'
-import { requirePlatformAdmin } from '@/lib/platform-admin.server'
+import { logAdminAction, requirePlatformAdmin } from '@/lib/platform-admin.server'
 import { appOrigin } from '@/lib/app-origin'
 
 /**
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ...buildPasswordResetEmail({ name: user.name ?? null, url: resetLinkFromTokenHash(origin, tokenHash) }),
   })
   if (!result.sent) return NextResponse.json({ error: 'The email did not send. Please try again.' }, { status: 502 })
+  await logAdminAction(access.context, { action: 'user.password_reset', targetType: 'user', targetId: user.id, targetLabel: user.email })
 
   return NextResponse.json({ sent: true, email: user.email })
 }

@@ -41,6 +41,7 @@ type Loaded =
   | { state: 'loading' }
   | { state: 'error'; message: string }
   | { state: 'none' }
+  | { state: 'suspended' }
   | { state: 'member' }
   | { state: 'ready'; data: Omit<SchoolPortalState, 'reload'> };
 
@@ -54,7 +55,7 @@ export function SchoolPortalProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/schools/current', { cache: 'no-store' });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? 'Could not load your school');
-      if (!body?.school) return setLoaded({ state: 'none' });
+      if (!body?.school) return setLoaded({ state: body?.suspended ? 'suspended' : 'none' });
       if (body.role !== 'owner' && body.role !== 'admin') return setLoaded({ state: 'member' });
       setLoaded({
         state: 'ready',

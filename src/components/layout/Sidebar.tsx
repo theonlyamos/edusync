@@ -21,16 +21,18 @@ import {
   BarChart2,
   ChevronLeft,
   ChevronRight,
-  Building2,
   CreditCard,
   Settings,
   ShieldCheck,
-  Users2,
   Video,
   ClipboardCheck,
   Layers,
   School,
   BookMarked,
+  Activity,
+  MessageSquare,
+  KeyRound,
+  History,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -40,54 +42,17 @@ interface SidebarLink {
   submenu?: SidebarLink[];
 }
 
+// The platform admin portal (InsyteAI staff). Schools run their own people and lessons.
 const adminLinks: SidebarLink[] = [
-  {
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />,
-    href: '/admin/dashboard'
-  },
-  {
-    label: 'Teachers',
-    icon: <Users className="h-5 w-5" />,
-    href: '/admin/users/teachers'
-  },
-  {
-    label: 'Students',
-    icon: <GraduationCap className="h-5 w-5" />,
-    href: '/admin/users/students'
-  },
-  {
-    label: 'Admins',
-    icon: <Users2 className="h-5 w-5" />,
-    href: '/admin/users/admins'
-  },
-  {
-    label: 'Schools & orgs',
-    icon: <Building2 className="h-5 w-5" />,
-    href: '/admin/organizations'
-  },
-  {
-    label: 'Lessons',
-    icon: <Book className="h-5 w-5" />,
-    href: '/admin/lessons'
-  },
-  {
-    label: 'Assessments',
-    icon: <FileCheck className="h-5 w-5" />,
-    href: '/admin/assessments',
-    submenu: [
-      {
-        label: 'All Assessments',
-        icon: <ListChecks className="h-5 w-5" />,
-        href: '/admin/assessments'
-      },
-      {
-        label: 'Results Overview',
-        icon: <BarChart2 className="h-5 w-5" />,
-        href: '/admin/assessments/results'
-      }
-    ]
-  }
+  { label: 'Overview', icon: <LayoutDashboard className="h-5 w-5" />, href: '/admin/dashboard' },
+  { label: 'Schools', icon: <School className="h-5 w-5" />, href: '/admin/schools' },
+  { label: 'Users', icon: <Users className="h-5 w-5" />, href: '/admin/users' },
+  { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/admin/billing' },
+  { label: 'AI usage', icon: <Activity className="h-5 w-5" />, href: '/admin/usage' },
+  { label: 'Feedback', icon: <MessageSquare className="h-5 w-5" />, href: '/admin/feedback' },
+  { label: 'Developers', icon: <KeyRound className="h-5 w-5" />, href: '/admin/organizations' },
+  { label: 'Admins', icon: <ShieldCheck className="h-5 w-5" />, href: '/admin/users/admins' },
+  { label: 'Activity log', icon: <History className="h-5 w-5" />, href: '/admin/activity' },
 ];
 
 const teacherLinks: SidebarLink[] = [

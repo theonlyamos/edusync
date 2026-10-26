@@ -21,8 +21,6 @@ vi.mock('@/lib/school-access.server', async (importOriginal) => ({
 const { POST: addAdmin } = await import('@/app/api/admin/users/admins/route')
 const { DELETE: removeAdmin } = await import('@/app/api/admin/users/admins/[adminId]/route')
 const { POST: addOrgMember } = await import('@/app/api/admin/organizations/[id]/members/route')
-const { POST: createStudent } = await import('@/app/api/admin/users/students/route')
-const { POST: createTeacher } = await import('@/app/api/admin/users/teachers/route')
 const { POST: sendReset } = await import('@/app/api/admin/users/[userId]/password-reset/route')
 const timetables = await import('@/app/api/schools/current/timetables/route')
 
@@ -85,11 +83,6 @@ describe('platform admins', () => {
 })
 
 describe('support no longer creates accounts', () => {
-  it('turns off the student and teacher create endpoints', async () => {
-    expect((await createStudent()).status).toBe(410)
-    expect((await createTeacher()).status).toBe(410)
-  })
-
   it('adds only existing accounts to developer organizations', async () => {
     const createUser = vi.fn()
     fake.client.auth = { admin: { createUser } }

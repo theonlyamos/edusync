@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from 'next/navigation';
 import { DataTable } from "@/components/ui/data-table";
 import { getColumns, Admin } from "./columns";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,8 +157,8 @@ export default function AdminsPage() {
   });
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto py-10">
+    <>
+      <div>
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Admin Users</h1>
@@ -238,6 +237,6 @@ export default function AdminsPage() {
           isDeleting={isDeleting}
         />
       </div>
-    </DashboardLayout>
+    </>
   );
 }

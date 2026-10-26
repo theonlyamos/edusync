@@ -466,3 +466,22 @@ await test('class codes refuse bad codes, staff and members of other schools', a
     await db.exec(`UPDATE public.school_join_codes SET revoked_at = now() WHERE code = 'HILL2345'`);
     await assert.rejects(request(otherPerson, 'HILL2345'), /not valid/);
 });
+
+await test('a suspended school stops counting, and new work stays in it', async () => {
+    await db.exec(await migrationNamed('_platform_admin.sql'));
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [teacherB])).s, schoolB);
+
+    await db.exec(`UPDATE public.organizations SET is_active = false WHERE id = '${schoolB}'`);
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [teacherB])).s, null, 'suspended school gives no access');
+    await db.exec(`INSERT INTO public.lessons (id, title, gradelevel, teacher_id) VALUES ('${id(49)}', 'Made while suspended', 'Grade 5', '${id(31)}')`);
+    assert.equal(
+        (await one('SELECT organization_id FROM public.lessons WHERE id = $1', [id(49)])).organization_id,
+        schoolB,
+        'not filed under the default school',
+    );
+
+    await db.exec(`UPDATE public.organizations SET is_active = true WHERE id = '${schoolB}'`);
+    assert.equal((await one('SELECT public.user_school_id($1) AS s', [teacherB])).s, schoolB);
+    // Only the server can read or write the admin activity log.
+    await assert.rejects(asUser(teacherB, () => rows('SELECT * FROM public.platform_admin_actions')), /permission denied/);
+});
