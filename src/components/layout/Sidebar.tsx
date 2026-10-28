@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
-import React, { ReactElement, useState, useEffect } from 'react';
+import React, { ReactElement, useState, useEffect, useRef } from 'react';
 import { ProfileMenu } from './ProfileMenu';
 import {
   Book,
@@ -19,8 +19,7 @@ import {
   FileCheck,
   ListChecks,
   BarChart2,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeft,
   CreditCard,
   Settings,
   ShieldCheck,
@@ -115,7 +114,17 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
     const initial = saved === 'true';
     setCollapsed(initial);
   }, []);
+  // The toggle moves between the header and the link list, so move keyboard focus with it.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const refocusToggle = useRef(false);
+  useEffect(() => {
+    if (refocusToggle.current) {
+      refocusToggle.current = false;
+      toggleRef.current?.focus();
+    }
+  }, [collapsed]);
   const toggleCollapse = () => {
+    refocusToggle.current = true;
     const next = !collapsed;
     setCollapsed(next);
     localStorage.setItem('sidebar-collapsed', String(next));
@@ -153,9 +162,25 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
     <div className={cn("h-full min-h-0 shrink-0 bg-card border-r flex flex-col transition-all duration-200 ease-in-out", mobile ? "w-full" : isCollapsed ? "w-16" : "w-64")}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className={cn('p-6', isCollapsed && 'px-2')}>
-          <Link href="/" aria-label="InsyteAI home" className={cn("flex", isCollapsed && "justify-center")}>
-            <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
-          </Link>
+          <div className={cn('flex items-center gap-2', isCollapsed ? 'justify-center' : 'justify-between')}>
+            <Link href="/" aria-label="InsyteAI home" className="flex min-w-0">
+              <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
+            </Link>
+            {!mobile && !isCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon"
+                ref={toggleRef}
+                onClick={toggleCollapse}
+                aria-label="Collapse navigation"
+                aria-expanded={true}
+                title="Collapse navigation"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <PanelLeft className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
           {!isCollapsed && (
             <p className="text-sm text-muted-foreground mt-1">
               {role.charAt(0).toUpperCase() + role.slice(1)} Portal
@@ -164,10 +189,20 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
         </div>
 
         <div className="px-3 py-2">
-          {/* collapse toggle */}
-          {!mobile && <Button variant="ghost" onClick={toggleCollapse} aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'} className={cn("w-full p-2 mb-2", isCollapsed ? "justify-center" : "justify-end")}>
-            {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
-          </Button>}
+          {/* Expand toggle: when collapsed it sits above the links; when expanded it lives in the header. */}
+          {!mobile && isCollapsed && (
+            <Button
+              variant="ghost"
+              ref={toggleRef}
+              onClick={toggleCollapse}
+              aria-label="Expand navigation"
+              aria-expanded={false}
+              title="Expand navigation"
+              className="w-full p-2 mb-2 justify-center"
+            >
+              <PanelLeft className="h-5 w-5 -scale-x-100" />
+            </Button>
+          )}
           <div className="space-y-1">
             {links.map((link: SidebarLink) => {
               const Icon = link.icon.type as React.FC<any>;
