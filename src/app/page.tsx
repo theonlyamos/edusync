@@ -612,9 +612,9 @@ function HomeContent() {
           <div className="border-t pt-8 mt-10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
             <div>© {new Date().getFullYear()} InsyteAI. All rights reserved.</div>
             <div className="flex items-center gap-6">
-              <span>Privacy</span>
-              <span>Terms</span>
-              <span>Support</span>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link href="/support" className="hover:text-foreground transition-colors">Support</Link>
             </div>
           </div>
         </div>

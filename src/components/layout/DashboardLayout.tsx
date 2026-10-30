@@ -22,6 +22,7 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/tutor', 'Study companion'],
   ['/students/collaborator', 'Collaborator'],
   ['/students/settings', 'Settings'],
+  ['/help', 'Help & feedback'],
 ];
 
 const SCHOOL_PAGE_TITLES: [string, string][] = [
@@ -38,6 +39,7 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/billing', 'Billing'],
   ['/school/settings', 'School settings'],
   ['/school/account', 'Account settings'],
+  ['/school/help', 'Help & feedback'],
 ];
 
 const ADMIN_PAGE_TITLES: [string, string][] = [
@@ -47,7 +49,8 @@ const ADMIN_PAGE_TITLES: [string, string][] = [
   ['/admin/users', 'Users'],
   ['/admin/billing', 'Billing'],
   ['/admin/usage', 'AI usage'],
-  ['/admin/feedback', 'Feedback'],
+  ['/admin/support', 'Support'],
+  ['/admin/feedback', 'Tutor ratings'],
   ['/admin/organizations', 'Developers'],
   ['/admin/activity', 'Activity log'],
   ['/admin/settings', 'Settings'],

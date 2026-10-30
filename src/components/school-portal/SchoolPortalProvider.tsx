@@ -77,7 +77,9 @@ export function SchoolPortalProvider({ children }: { children: ReactNode }) {
       ? loaded.message
       : loaded.state === 'none'
         ? 'Your account isn’t part of a school yet.'
-        : 'Only the school owner and administrators can open the school admin portal.';
+        : loaded.state === 'suspended'
+          ? 'Your school’s account is paused. Contact InsyteAI support to sort it out.'
+          : 'Only the school owner and administrators can open the school admin portal.';
     return (
       <div className="mx-auto max-w-md space-y-4 py-16 text-center">
         <h1 className="text-2xl font-semibold">School admin portal</h1>
@@ -85,6 +87,7 @@ export function SchoolPortalProvider({ children }: { children: ReactNode }) {
         <div className="flex flex-wrap justify-center gap-2">
           {loaded.state === 'error' && <Button onClick={() => { setLoaded({ state: 'loading' }); void load(); }}>Try again</Button>}
           {loaded.state === 'none' && <Button asChild><Link href="/register-school">Register a school</Link></Button>}
+          {loaded.state === 'suspended' && <Button asChild><Link href="/help">Contact support</Link></Button>}
           <Button asChild variant="outline"><Link href={home}>Go to my home page</Link></Button>
         </div>
       </div>
