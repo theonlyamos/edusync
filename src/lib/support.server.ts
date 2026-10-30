@@ -80,12 +80,22 @@ async function schoolOf(supabase: Supabase, userId: string): Promise<{ id: strin
   return org ? { id: org.id as string, name: org.name as string } : null
 }
 
+const PAGE = 1000
+
 async function messagesFor(supabase: Supabase, requestIds: string[]): Promise<Row[]> {
   if (requestIds.length === 0) return []
   const out: Row[] = []
   for (let i = 0; i < requestIds.length; i += 200) {
     const part = requestIds.slice(i, i + 200)
-    out.push(...(await must(supabase.from('support_messages').select('id, request_id, author_id, from_staff, body, created_at').in('request_id', part).order('created_at').limit(5000))))
+    // The API returns at most 1,000 rows per call, so page until every message is read.
+    for (let from = 0; ; from += PAGE) {
+      const page = await must(
+        supabase.from('support_messages').select('id, request_id, author_id, from_staff, body, created_at').in('request_id', part)
+          .order('created_at').order('id').range(from, from + PAGE - 1),
+      )
+      out.push(...page)
+      if (page.length < PAGE) break
+    }
   }
   return out
 }
@@ -230,7 +240,8 @@ export async function getMyRequest(supabase: Supabase, userId: string, requestId
   const row = await ownRequest(supabase, userId, requestId)
   const messages = await messagesFor(supabase, [row.id])
   if (row.user_unread) {
-    const { error } = await supabase.from('support_requests').update({ user_unread: false }).eq('id', row.id)
+    // Only if nothing newer arrived since we read it, so a reply sent meanwhile stays unread.
+    const { error } = await supabase.from('support_requests').update({ user_unread: false }).eq('id', row.id).eq('last_message_at', row.last_message_at)
     if (error) console.error('Could not mark support reply read:', error)
   }
   return detail(row, messages, false)
@@ -323,7 +334,8 @@ export async function getSupportRequest(supabase: Supabase, requestId: string): 
     schoolNames(supabase, [row.school_id]),
   ])
   if (row.staff_unread) {
-    const { error } = await supabase.from('support_requests').update({ staff_unread: false }).eq('id', row.id)
+    // Only if nothing newer arrived since we read it, so a follow-up sent meanwhile stays unread.
+    const { error } = await supabase.from('support_requests').update({ staff_unread: false }).eq('id', row.id).eq('last_message_at', row.last_message_at)
     if (error) console.error('Could not mark support request read:', error)
   }
   return {
@@ -357,11 +369,17 @@ export async function answerSupportRequest(
     .update({
       status,
       updated_at: now,
-      staff_unread: false,
       ...(input.message ? { user_unread: true, last_message_at: now } : {}),
     })
     .eq('id', row.id)
   if (error) throw error
+  // Support has seen everything up to what they answered, unless a follow-up arrived meanwhile.
+  const { error: readError } = await supabase
+    .from('support_requests')
+    .update({ staff_unread: false })
+    .eq('id', row.id)
+    .eq('last_message_at', input.message ? now : row.last_message_at)
+  if (readError) console.error('Could not mark support request read:', readError)
 
   let emailed: 'sent' | 'not_configured' | 'failed' | 'no_email' | null = null
   if (input.message) {
