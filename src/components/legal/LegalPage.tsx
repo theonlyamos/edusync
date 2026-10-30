@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
+import { publicSupportEmail } from '@/lib/support';
 
 export interface LegalSection {
   heading: string;
@@ -8,10 +9,11 @@ export interface LegalSection {
 
 export function LegalPage({ title, updated, intro, sections }: {
   title: string;
-  updated: string;
+  updated?: string;
   intro: React.ReactNode;
   sections: LegalSection[];
 }) {
+  const email = publicSupportEmail();
   return (
     <main className="min-h-screen bg-background">
       <header className="border-b">
@@ -20,13 +22,14 @@ export function LegalPage({ title, updated, intro, sections }: {
           <nav className="flex gap-5 text-sm text-muted-foreground">
             <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
             <Link href="/terms" className="hover:text-foreground">Terms</Link>
+            <Link href="/support" className="hover:text-foreground">Support</Link>
             <Link href="/login" className="hover:text-foreground">Sign in</Link>
           </nav>
         </div>
       </header>
       <article className="container mx-auto max-w-2xl px-4 py-10 sm:py-14">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Last updated {updated}</p>
+        {updated && <p className="mt-2 text-sm text-muted-foreground">Last updated {updated}</p>}
         <div className="mt-6 text-base leading-7 text-foreground/90">{intro}</div>
         <div className="mt-10 space-y-8">
           {sections.map((section) => (
@@ -38,7 +41,10 @@ export function LegalPage({ title, updated, intro, sections }: {
         </div>
       </article>
       <footer className="border-t">
-        <div className="container mx-auto px-4 py-6 text-xs text-muted-foreground">© {new Date().getFullYear()} InsyteAI</div>
+        <div className="container mx-auto flex flex-wrap justify-between gap-2 px-4 py-6 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} InsyteAI</span>
+          {email && <a href={`mailto:${email}`} className="hover:text-foreground">{email}</a>}
+        </div>
       </footer>
     </main>
   );

@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
 import React, { ReactElement, useState, useEffect, useRef } from 'react';
 import { ProfileMenu } from './ProfileMenu';
+import { useAdminSupportUnread } from '@/components/support/AdminSupportBadge';
 import {
   Book,
   GraduationCap,
@@ -29,7 +30,7 @@ import {
   School,
   BookMarked,
   Activity,
-  MessageSquare,
+  LifeBuoy,
   KeyRound,
   History,
 } from "lucide-react";
@@ -48,7 +49,7 @@ const adminLinks: SidebarLink[] = [
   { label: 'Users', icon: <Users className="h-5 w-5" />, href: '/admin/users' },
   { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/admin/billing' },
   { label: 'AI usage', icon: <Activity className="h-5 w-5" />, href: '/admin/usage' },
-  { label: 'Feedback', icon: <MessageSquare className="h-5 w-5" />, href: '/admin/feedback' },
+  { label: 'Support', icon: <LifeBuoy className="h-5 w-5" />, href: '/admin/support' },
   { label: 'Developers', icon: <KeyRound className="h-5 w-5" />, href: '/admin/organizations' },
   { label: 'Admins', icon: <ShieldCheck className="h-5 w-5" />, href: '/admin/users/admins' },
   { label: 'Activity log', icon: <History className="h-5 w-5" />, href: '/admin/activity' },
@@ -107,6 +108,7 @@ interface SidebarProps {
 
 export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const supportUnread = useAdminSupportUnread(role === 'admin');
   // Sidebar collapse state
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
@@ -150,7 +152,8 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
 
   // Highlight only the most specific matching link, so My performance and
   // Homework aren't both active. The AI tutor counts as part of Lessons.
-  const currentPath = pathname.startsWith('/students/learn') ? '/students/lessons' : pathname;
+  const currentPath = pathname.startsWith('/students/learn') ? '/students/lessons'
+    : pathname.startsWith('/admin/feedback') ? '/admin/support' : pathname;
   const allHrefs = links.flatMap((link) => [link.href, ...(link.submenu ?? []).map((sub) => sub.href)]);
   const activeHref = allHrefs
     .filter((href) => currentPath === href || currentPath.startsWith(href + '/'))
@@ -206,6 +209,8 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
           <div className="space-y-1">
             {links.map((link: SidebarLink) => {
               const Icon = link.icon.type as React.FC<any>;
+              const badge = link.href === '/admin/support' && supportUnread > 0 ? supportUnread : 0;
+              const label = badge ? `${link.label}, ${badge} unread` : link.label;
               return (
                 <div key={link.href}>
                   <Button
@@ -218,9 +223,12 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
                       'mb-1': link.submenu
                     })}
                   >
-                    <Link href={link.href} prefetch={false} onClick={onNavigate} aria-label={link.label} aria-current={isActive(link.href) ? 'page' : undefined} className="flex items-center w-full">
+                    <Link href={link.href} prefetch={false} onClick={onNavigate} aria-label={label} title={isCollapsed ? label : undefined} aria-current={isActive(link.href) ? 'page' : undefined} className="relative flex items-center w-full">
                       <Icon className={isCollapsed ? 'h-8 w-8 p-1' : 'h-5 w-5 mr-3'} />
                       {!isCollapsed && <span className="ml-3">{link.label}</span>}
+                      {badge > 0 && (isCollapsed
+                        ? <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-primary" aria-hidden />
+                        : <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-foreground" aria-hidden>{badge > 99 ? '99+' : badge}</span>)}
                     </Link>
                   </Button>
                   {!isCollapsed && link.submenu && (

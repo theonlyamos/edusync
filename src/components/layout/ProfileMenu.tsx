@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { ChevronUp, CreditCard, LogOut, Monitor, Moon, School, Settings, Sun } from 'lucide-react';
+import { ChevronUp, CreditCard, LifeBuoy, LogOut, Monitor, Moon, School, Settings, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ import {
   watchSystemTheme,
   type ThemePreference,
 } from '@/lib/theme';
+import { SUPPORT_READ_EVENT } from '@/lib/support';
 
 type Role = 'admin' | 'teacher' | 'student' | 'school';
 
@@ -45,6 +46,45 @@ const SETTINGS_HREF: Record<Role, string> = {
   student: '/students/settings',
   school: '/school/account',
 };
+
+/** Help & feedback for this portal, remembering the page the person came from. Platform admins answer requests instead. */
+export function helpMenuHref(role: Role, from: string | null | undefined): string | null {
+  if (role === 'admin') return null;
+  const base = role === 'school' ? '/school/help' : '/help';
+  const onHelp = from === base || from?.startsWith(`${base}?`);
+  return from && !onHelp ? `${base}?from=${encodeURIComponent(from)}` : base;
+}
+
+let supportUnreadCache: { unread: number; at: number } | null = null;
+
+/** Replies from support the person hasn't read. */
+function useSupportUnread(enabled: boolean) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const load = (force = false) => {
+      // The menu remounts on every page, so reuse a recent count instead of asking again.
+      if (!force && supportUnreadCache && Date.now() - supportUnreadCache.at < 60_000) {
+        setUnread(supportUnreadCache.unread);
+        return;
+      }
+      fetch('/api/support/summary', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          if (typeof body?.unread !== 'number') return;
+          supportUnreadCache = { unread: body.unread, at: Date.now() };
+          if (active) setUnread(body.unread);
+        })
+        .catch(() => { /* leave the count as it was */ });
+    };
+    const refresh = () => load(true);
+    load();
+    window.addEventListener(SUPPORT_READ_EVENT, refresh);
+    return () => { active = false; window.removeEventListener(SUPPORT_READ_EVENT, refresh); };
+  }, [enabled]);
+  return enabled ? unread : 0;
+}
 
 /** The menu links a role can actually open. School billing and the school portal are for school owners and admins only. */
 export function profileMenuLinks(role: Role, school: SchoolInfo | null | undefined): MenuLink[] {
@@ -119,6 +159,9 @@ export function ProfileMenu({ role, collapsed = false, onNavigate }: ProfileMenu
     return () => { active = false; };
   }, []);
 
+  const pathname = usePathname();
+  const helpHref = helpMenuHref(role, pathname);
+  const supportUnread = useSupportUnread(helpHref !== null);
   const name = user?.name?.trim() || session?.user?.user_metadata?.name || user?.email || 'Your account';
   const links = profileMenuLinks(role, school);
 
@@ -130,14 +173,15 @@ export function ProfileMenu({ role, collapsed = false, onNavigate }: ProfileMenu
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={`${name}, account menu`}
+        aria-label={`${name}, account menu${supportUnread ? `, ${supportUnread} new ${supportUnread === 1 ? 'reply' : 'replies'} from support` : ''}`}
         className={cn(
           'group flex w-full items-center gap-3 rounded-lg border bg-muted/40 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-muted',
           collapsed ? 'justify-center p-2' : 'min-h-14 px-3 py-2',
         )}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-sm font-semibold text-primary" aria-hidden>
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-sm font-semibold text-primary" aria-hidden>
           {initials(name)}
+          {supportUnread > 0 && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card" />}
         </span>
         {!collapsed && (
           <>
@@ -165,6 +209,19 @@ export function ProfileMenu({ role, collapsed = false, onNavigate }: ProfileMenu
                 </Link>
               </DropdownMenuItem>
             ))}
+            {helpHref && (
+              <DropdownMenuItem asChild className="min-h-10 gap-3 rounded-md px-3 text-sm">
+                <Link href={helpHref} prefetch={false} onClick={onNavigate}>
+                  <LifeBuoy className="h-4 w-4" />
+                  <span className="flex-1">Help &amp; feedback</span>
+                  {supportUnread > 0 && (
+                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary-foreground">
+                      {supportUnread} new
+                    </span>
+                  )}
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator className="my-1.5" />
           </>
         )}

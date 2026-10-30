@@ -17,8 +17,9 @@ export default function AdminFeedbackPage() {
   return (
     <div>
       <AdminPageHeader
-        title="Feedback"
-        description="What people said after AI tutor sessions. The latest 200 are shown."
+        title="Tutor ratings"
+        back={{ href: '/admin/support', label: 'Support' }}
+        description="What people said in the rating form after AI tutor sessions (shown on the demo). The latest 200 are shown."
         actions={
           <select aria-label="Rating" className={cn(NATIVE_SELECT_CLASS, 'w-44')} value={rating} onChange={(e) => setRating(e.target.value)}>
             <option value="">All ratings</option>

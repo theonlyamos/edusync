@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LegalPage } from '@/components/legal/LegalPage';
 
 export const metadata: Metadata = { title: 'Privacy | InsyteAI' };
@@ -62,7 +63,7 @@ export default function PrivacyPage() {
         },
         {
           heading: 'Your choices',
-          body: <p>You can ask to see, correct or delete your information through your school administrator. If you are not part of a school, contact us through the InsyteAI website.</p>,
+          body: <p>You can ask to see, correct or delete your information through your school administrator. If you are not part of a school, or have any other question about your information, contact us from <strong>Help &amp; feedback</strong> in your account menu or through our <Link href="/support" className="underline underline-offset-2">support page</Link>.</p>,
         },
         {
           heading: 'Changes',

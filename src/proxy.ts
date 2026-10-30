@@ -115,10 +115,11 @@ export async function proxy(request: NextRequest) {
   const isTeacherArea = pathname.startsWith('/teachers');
   const isStudentArea = pathname.startsWith('/students');
   const isSessionArea = pathname.startsWith('/learn');
+  const isHelpArea = pathname === '/help' || pathname.startsWith('/help/');
   // The school admin portal checks the school role itself; here it just needs a session.
   const isSchoolArea = pathname === '/school' || pathname.startsWith('/school/');
   const isUnprotectedPath = pathname.startsWith('/learn/embed/new');
-  const isProtected = (isAdminArea || isTeacherArea || isStudentArea || isSessionArea || isSchoolArea) && !isUnprotectedPath;
+  const isProtected = (isAdminArea || isTeacherArea || isStudentArea || isSessionArea || isSchoolArea || isHelpArea) && !isUnprotectedPath;
 
   if (!isProtected) {
     return response;
@@ -169,6 +170,8 @@ export const config = {
     '/students/:path*',
     '/school',
     '/school/:path*',
+    '/help',
+    '/help/:path*',
     '/api/:path*',
   ],
 };
