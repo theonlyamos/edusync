@@ -44,6 +44,8 @@ export type TutorExperienceProps = {
   objectiveLearning?: ObjectiveLearningController;
   onSessionStarted?: (sessionId: string) => void;
   onSessionEnded?: (sessionId: string | null) => void;
+  /** Where "back" goes, when not the student lesson page (e.g. a teacher rehearsing). */
+  back?: { href: string; label: string };
 };
 
 export const TutorExperience = ({
@@ -56,6 +58,7 @@ export const TutorExperience = ({
   objectiveLearning,
   onSessionStarted,
   onSessionEnded,
+  back,
 }: TutorExperienceProps) => {
   const creditsEnabled = variant === 'embed';
   const authHeaders: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
@@ -672,10 +675,10 @@ export const TutorExperience = ({
 
   const currentObjectiveArtifact = objectiveLearning?.artifacts.at(-1);
   const preparingActivity = generatingVisualization || Boolean(objectiveLearning?.activityLoading);
-  const studentBackHref = variant === 'student'
+  const studentBackHref = back?.href ?? (variant === 'student'
     ? (lessonContext?.lessonId ? `/students/lessons/${lessonContext.lessonId}` : '/students/dashboard')
-    : undefined;
-  const studentBackLabel = lessonContext?.lessonId ? 'Back to lesson' : 'Back to dashboard';
+    : undefined);
+  const studentBackLabel = back?.label ?? (lessonContext?.lessonId ? 'Back to lesson' : 'Back to dashboard');
   const startOverlayVisible = (!voiceActive || connectionStatus !== 'connected') && !showFeedbackForm;
   // The start overlay already shows voice errors; don't repeat them behind it.
   const activityError = objectiveLearning?.error || (startOverlayVisible ? '' : error);

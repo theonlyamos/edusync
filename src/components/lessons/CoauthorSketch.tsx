@@ -1,6 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +13,25 @@ function SketchView({ sketch, onError }: { sketch: SketchResult; onError?: (mess
   return sketch.library === 'react'
     ? <ReactRenderer code={sketch.code} onError={error => onError?.(String(error))} />
     : <SafeCodeRunner code={sketch.code} library={sketch.library} onError={error => onError?.(String(error))} />;
+}
+
+const SKETCH_WIDTH = 720;
+const SKETCH_HEIGHT = 480;
+
+/** Renders at the size the sketch was drawn for, then scales it down to the panel, so nothing gets squeezed. */
+function ScaledFrame({ children }: { children: ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.45);
+  useEffect(() => {
+    const node = outer.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => { if (entry) setScale(Math.min(1, entry.contentRect.width / SKETCH_WIDTH)); });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={outer} className="relative w-full overflow-hidden rounded-xl border bg-white" style={{ height: SKETCH_HEIGHT * scale }}>
+    <div className="absolute left-0 top-0 origin-top-left" style={{ width: SKETCH_WIDTH, height: SKETCH_HEIGHT, transform: `scale(${scale})` }}>{children}</div>
+  </div>;
 }
 
 /**
@@ -65,9 +84,9 @@ export function CoauthorSketch({ lessonId, objectiveId, objectiveLabel, role, de
   const changed = !sketch || text.trim() !== sketch.taskDescription;
   const canDraw = text.trim().length >= 10 && !drawing;
   return <div className="space-y-2">
-    {sketch && <div className="h-56 overflow-hidden rounded-lg border bg-white">
+    {sketch && <ScaledFrame>
       <SketchView key={sketch.signature} sketch={sketch} onError={setRenderError} />
-    </div>}
+    </ScaledFrame>}
     {renderError && <p role="alert" className="text-xs text-destructive">This sketch has an error. Redraw it, maybe with a simpler description.</p>}
     {(editing || !sketch)
       ? <><label className="sr-only" htmlFor={`sketch-${objectiveId}-${role}`}>Describe the sketch</label><Textarea id={`sketch-${objectiveId}-${role}`} rows={4} maxLength={4000} value={text} onChange={event => setText(event.target.value)} className="resize-y bg-background text-xs" /></>

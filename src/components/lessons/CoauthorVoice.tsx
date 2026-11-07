@@ -82,13 +82,13 @@ export function CoauthorVoice({ lesson, onRequest, onStop }: {
     ?.replace('You can also type your questions in the Study Companion.', 'You can still type to the co-author.')
     .replace('The voice tutor could not connect', 'Voice could not connect');
   const connecting = voice.connectionStatus === 'connecting' || (!voice.isStreaming && !error);
-  return <div role="region" aria-label="Voice mode" className="space-y-2 rounded-xl border border-primary/40 bg-primary/5 p-3 text-sm">
+  return <div role="region" aria-label="Voice mode" className="space-y-2 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-3.5 text-sm shadow-sm">
     <div className="flex items-center justify-between gap-3">
       <span className="flex items-center gap-2 font-medium">
         {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={voice.isSpeaking ? 'h-4 w-4 text-primary' : 'h-4 w-4 animate-pulse text-primary'} />}
         {error ? 'Voice stopped' : connecting ? 'Connecting…' : working ? 'Working on it…' : voice.isSpeaking ? 'Speaking' : 'Listening'}
       </span>
-      <Button type="button" size="sm" variant="outline" onClick={() => { stopStreaming(); onStop(); }}><Square className="mr-2 h-3.5 w-3.5" />End voice</Button>
+      <Button type="button" size="sm" variant="outline" className="h-8 rounded-full bg-background" onClick={() => { stopStreaming(); onStop(); }}><Square className="mr-2 h-3.5 w-3.5" />End voice</Button>
     </div>
     {caption?.text && !error && <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground"><span className="font-medium text-foreground">{caption.role === 'user' ? 'You: ' : 'Co-author: '}</span>{caption.text}</p>}
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}

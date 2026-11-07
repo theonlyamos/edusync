@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, ChevronDown, CircleHelp, Eye, Loader2, Presentation, Target } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CircleHelp, Eye, Loader2, Mic, Presentation, Target } from 'lucide-react';
 
 import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -55,6 +55,7 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
           <p className="flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /><span><strong>Student preview.</strong> This is what students get when you publish now: approved materials only. Nothing here is saved.</span></p>
           <div className="flex flex-wrap gap-2">
             {!rehearsing && <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}/preview?rehearse=1`}>Rehearse as a student</Link></Button>}
+            <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}/rehearse`}><Mic className="mr-2 h-4 w-4" />Rehearse by voice</Link></Button>
             <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}?tab=studio`}><ArrowLeft className="mr-2 h-4 w-4" />Back to Studio</Link></Button>
           </div>
         </div>
