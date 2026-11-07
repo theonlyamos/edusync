@@ -163,13 +163,14 @@ export function CoauthorPanel({ lessonId, lesson, focus, focusLabel, starters, b
     }
   };
 
+  /** Resolves true once the co-author has answered. */
   const send = async (text: string, shown?: string) => {
     const message = text.trim();
-    if (!message || sending) return;
+    if (!message || sending) return false;
     setDraft('');
-    try { await ask(message, { shown }); }
+    try { await ask(message, { shown }); return true; }
     // Only typed messages go back into the box; built-in prompts can simply be tapped again.
-    catch { if (!shown) setDraft(current => current || message); }
+    catch { if (!shown) setDraft(current => current || message); return false; }
     finally { inputRef.current?.focus(); }
   };
 
@@ -190,14 +191,16 @@ export function CoauthorPanel({ lessonId, lesson, focus, focusLabel, starters, b
   useEffect(() => { sendRef.current = send; });
   const handledQueue = useRef('');
   useEffect(() => {
-    if (!queued || handledQueue.current === queued.id) return;
+    // Wait for the current answer, or a pinned comment sent mid-turn would be dropped.
+    if (!queued || sending || handledQueue.current === queued.id) return;
     handledQueue.current = queued.id;
     queueMicrotask(() => { void sendRef.current(queued.text, queued.shown); onQueuedHandled(queued.id); });
-  }, [queued, onQueuedHandled]);
+  }, [queued, sending, onQueuedHandled]);
 
-  const sendNotes = () => {
+  const sendNotes = async () => {
     if (!notes.length || sending) return;
-    void send(rehearsalNotesMessage(notes));
+    // Keep the notes if the co-author could not answer, so they can be sent again.
+    if (!await send(rehearsalNotesMessage(notes), `Here are ${notes.length} note${notes.length === 1 ? '' : 's'} from my rehearsal`)) return;
     clearRehearsalNotes(lessonId);
     setNotes([]);
   };
@@ -224,7 +227,7 @@ export function CoauthorPanel({ lessonId, lesson, focus, focusLabel, starters, b
     </div>
     <div className="space-y-2 border-b px-4 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-1.5"><Drama aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-muted-foreground">Rehearse as a student:</span>{REHEARSAL_PROFILES.map(profile => <button key={profile.key} type="button" disabled={sending} className="rounded-full border bg-background px-2.5 py-1 hover:bg-muted disabled:opacity-50" onClick={() => void send(rehearsalPrompt(profile), `Rehearse this lesson as a ${profile.label.toLowerCase()} student`)}>{profile.label}</button>)}<Link href={`/teachers/lessons/${lessonId}/preview?rehearse=1`} target="_blank" rel="noopener noreferrer" className="ml-auto text-primary underline-offset-2 hover:underline">Try it yourself</Link></div>
-      {notes.length > 0 && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2"><span>{notes.length} {notes.length === 1 ? 'note' : 'notes'} from your rehearsal</span><span className="flex gap-1.5"><Button type="button" size="sm" className="h-8" disabled={sending} onClick={sendNotes}>Send to co-author</Button><Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => { clearRehearsalNotes(lessonId); setNotes([]); }}>Clear</Button></span></div>}
+      {notes.length > 0 && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-primary/10 px-3 py-2"><span>{notes.length} {notes.length === 1 ? 'note' : 'notes'} from your rehearsal</span><span className="flex gap-1.5"><Button type="button" size="sm" className="h-8" disabled={sending} onClick={() => void sendNotes()}>Send to co-author</Button><Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => { clearRehearsalNotes(lessonId); setNotes([]); }}>Clear</Button></span></div>}
     </div>
     <div ref={listRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
       {entries.length === 0 && <div className="space-y-3 text-sm text-muted-foreground"><MessageSquare className="h-6 w-6 text-primary/60" /><p className="leading-relaxed">Plan, rewrite or check this lesson by chatting. Try one of these, or ask in your own words.</p></div>}
@@ -237,7 +240,7 @@ export function CoauthorPanel({ lessonId, lesson, focus, focusLabel, starters, b
               <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Live sketch · {SKETCH_ROLE_LABELS[proposal.role]} · {objectiveLabel(proposal.objectiveId)}</span>{state === 'applied' && <span className="flex items-center gap-1 text-xs font-medium text-primary"><Check className="h-3.5 w-3.5" />Kept</span>}</div>
               <p className="font-medium leading-snug">{proposal.summary}</p>
               <CoauthorSketch lessonId={lessonId} objectiveId={proposal.objectiveId} objectiveLabel={objectiveLabel(proposal.objectiveId)} role={proposal.role} description={proposal.taskDescription} sketch={sketch} kept={state === 'applied'} keepBlocked={sketch ? keepSketchBlocked(sketch) : undefined}
-                onSketch={next => updateProposal(entry.id, index, { sketch: next })}
+                onSketch={next => updateProposal(entry.id, index, { sketch: next, state: 'pending' })}
                 onKeep={async next => { const ok = await onKeepSketch(next).catch(() => false); if (ok) setProposalState(entry.id, index, 'applied'); return ok; }} />
             </div>;
             const blocked = state === 'pending' ? blockedReason(proposal) : undefined;
