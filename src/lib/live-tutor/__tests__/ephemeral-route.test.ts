@@ -119,6 +119,19 @@ describe('POST /api/genai/ephemeral', () => {
         });
     });
 
+    it('keeps the lesson co-author voice for signed-in teachers and admins', async () => {
+        for (const auth of [{ role: 'student' }, {}, { role: 'teacher', apiKey: true }]) {
+            const refused = await POST(tokenRequest({ variant: 'coauthor' }, auth));
+            expect(refused.status).toBe(403);
+        }
+        expect(rpcs.some(({ name }) => name.startsWith('grant_voice_minutes'))).toBe(false);
+        expect(genai.create).not.toHaveBeenCalled();
+
+        const response = await POST(tokenRequest({ variant: 'coauthor', lesson: { title: 'Fractions' } }, { role: 'teacher' }));
+        expect(response.status).toBe(200);
+        expect(lockedConstraints().liveConnectConstraints.config.tools).toEqual([{ functionDeclarations: [expect.objectContaining({ name: 'ask_coauthor' })] }]);
+    });
+
     it('refuses a token when the user has no credits', async () => {
         grantRow = { status: 'insufficient_credits', grant_id: null, expires_at: null, minutes_charged: 0, remaining_credits: 0 };
         const response = await POST(tokenRequest({}));

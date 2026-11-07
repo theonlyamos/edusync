@@ -2,13 +2,14 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, CheckCircle2, FileUp, Loader2, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, Crosshair, FileUp, Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { StudioArtifact } from '@/lib/lesson-artifacts/studio-state';
 import { cn } from '@/lib/utils';
 import { StructuredQuizEditor } from './StructuredQuizEditor';
+import { regionName, type MaterialPoint } from '@/lib/lesson-artifacts/point-comment';
 
 const ReactRenderer = dynamic(() => import('./ReactRenderer').then(module => module.ReactRenderer), { ssr: false });
 const SafeCodeRunner = dynamic(() => import('./SafeCodeRunner').then(module => module.SafeCodeRunner), { ssr: false });
@@ -64,7 +65,24 @@ function Preview({ artifact, onValidation }: { artifact: StudioArtifact; onValid
   })}</div>;
 }
 
-export function StudioArtifactReview({ artifact, versions, revision, disabled, generating, feedback, historicalId, onHistory, onFeedback, onReview, onRegenerate, onEditQuiz, onValidation, onContinue }: {
+/** Point and comment: click a spot on the preview, say what should change, and hand it to the co-author. */
+function PointLayer({ artifactId, onPoint, onDone }: { artifactId: string; onPoint: (point: MaterialPoint) => void; onDone: () => void }) {
+  const [pin, setPin] = useState<{ x: number; y: number }>();
+  const [comment, setComment] = useState('');
+  const place = (x: number, y: number) => setPin({ x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) });
+  return <>
+    {!pin && <button type="button" aria-label="Click the spot you want changed, or press Enter for the whole material" className="absolute inset-0 z-20 cursor-crosshair bg-primary/5 ring-2 ring-inset ring-primary/60 focus-visible:outline-none"
+      onClick={event => { const box = event.currentTarget.getBoundingClientRect(); if (event.detail === 0) place(0.5, 0.5); else place((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height); }} />}
+    {pin && <span aria-hidden="true" className="pointer-events-none absolute z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-primary text-xs font-bold text-primary-foreground shadow-lg" style={{ left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }}>1</span>}
+    {pin && <form className="absolute inset-x-3 bottom-3 z-30 space-y-2 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur" onSubmit={event => { event.preventDefault(); if (!comment.trim()) return; onPoint({ artifactId, ...pin, comment }); onDone(); }}>
+      <label htmlFor={`point-${artifactId}`} className="block text-sm font-medium">What should change at the {regionName(pin.x, pin.y)}?</label>
+      <Textarea id={`point-${artifactId}`} autoFocus rows={2} maxLength={2000} value={comment} onChange={event => setComment(event.target.value)} placeholder="e.g. This label overlaps the arrow. Make it bigger and move it up." className="resize-none" />
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="ghost" onClick={() => setPin(undefined)}>Move pin</Button><Button type="button" size="sm" variant="outline" onClick={onDone}>Cancel</Button><Button type="submit" size="sm" disabled={!comment.trim()}>Send to co-author</Button></div>
+    </form>}
+  </>;
+}
+
+export function StudioArtifactReview({ artifact, versions, revision, disabled, generating, feedback, historicalId, onHistory, onFeedback, onReview, onRegenerate, onEditQuiz, onValidation, onContinue, onPoint }: {
   artifact: StudioArtifact;
   versions: StudioArtifact[];
   revision: number;
@@ -79,8 +97,11 @@ export function StudioArtifactReview({ artifact, versions, revision, disabled, g
   onEditQuiz: (id: string, payload: Extract<StudioArtifact['payload'], { kind: 'structured_quiz' }>) => Promise<boolean>;
   onValidation: (id: string, status: 'passed' | 'failed', error?: string) => void;
   onContinue: () => void;
+  /** When set, the teacher can pin a comment on the preview for the co-author. */
+  onPoint?: (point: MaterialPoint) => void;
 }) {
   const [revising, setRevising] = useState(false);
+  const [pointing, setPointing] = useState(false);
   const [editingQuiz, setEditingQuiz] = useState(false);
   const [savingQuiz, setSavingQuiz] = useState(false);
   const displayed = versions.find(item => item.id === historicalId) ?? artifact;
@@ -94,7 +115,7 @@ export function StudioArtifactReview({ artifact, versions, revision, disabled, g
       {versions.length > 1 && <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Version history</summary><label className="mt-2 block">Preview version<select disabled={disabled} aria-label="Preview version" className="ml-2 rounded-md border bg-background p-2 text-foreground" value={displayed.id} onChange={event => onHistory(event.target.value)}>{[...versions].sort((a, b) => b.version - a.version).map(item => <option key={item.id} value={item.id}>Version {item.version} · {item.status}{item.id === artifact.id ? ' · latest' : ''}</option>)}</select></label></details>}
     </div>
     {historical && <p className="border-b bg-muted/50 px-5 py-3 text-sm text-muted-foreground">Viewing an earlier version. Select the latest version to request changes or approve.</p>}
-    <div className="p-3 sm:p-6">{editingQuiz && !historical && artifact.payload.kind === 'structured_quiz'
+    <div className="relative p-3 sm:p-6">{pointing && !historical && onPoint && <PointLayer artifactId={artifact.id} onPoint={onPoint} onDone={() => setPointing(false)} />}{editingQuiz && !historical && artifact.payload.kind === 'structured_quiz'
       ? <StructuredQuizEditor quiz={artifact.payload} saving={savingQuiz} onCancel={() => setEditingQuiz(false)} onSave={async (quiz) => { setSavingQuiz(true); const saved = await onEditQuiz(artifact.id, quiz); setSavingQuiz(false); if (saved) setEditingQuiz(false); }} />
       : <Preview key={displayed.id} artifact={displayed} onValidation={(status, error) => { if (!historical) onValidation(displayed.id, status, error); }} />}</div>
     {!historical && !editingQuiz && <>
@@ -102,7 +123,7 @@ export function StudioArtifactReview({ artifact, versions, revision, disabled, g
       {outdated && <p className="px-5 pb-3 text-sm text-amber-700 dark:text-amber-300">Directions have changed. Generate a new version before approving this material.</p>}
       {revising && <div className="space-y-3 border-t bg-muted/30 p-5"><label className="text-sm font-medium" htmlFor={`feedback-${artifact.id}`}>What should change?</label><Textarea id={`feedback-${artifact.id}`} value={feedback} maxLength={4000} onChange={event => onFeedback(event.target.value)} placeholder="Try a different setting, make the labels clearer, or change how students interact…" className="min-h-28" /><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Approved versions stay available while you review the replacement.</p><Button variant="outline" onClick={() => onRegenerate(artifact.id)} disabled={disabled || generating}><RefreshCw className="mr-2 h-4 w-4" />Generate revision</Button></div></div>}
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t bg-card/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:px-5">
-        <div className="flex flex-wrap gap-2">{artifact.kind === 'structured_quiz' && <Button variant="outline" disabled={disabled} onClick={() => { setRevising(false); setEditingQuiz(true); }}><Pencil className="mr-2 h-4 w-4" />Edit questions</Button>}{artifact.kind !== 'uploaded_media' && <Button variant="outline" disabled={disabled} onClick={() => setRevising(value => !value)}>{revising ? 'Close feedback' : artifact.kind === 'structured_quiz' ? 'Ask AI for changes' : 'Request changes'}</Button>}{artifact.status === 'draft' && <Button variant="ghost" disabled={disabled} onClick={() => void onReview(artifact.id, 'reject')}>Reject</Button>}</div>
+        <div className="flex flex-wrap gap-2">{artifact.kind === 'structured_quiz' && <Button variant="outline" disabled={disabled} onClick={() => { setRevising(false); setEditingQuiz(true); }}><Pencil className="mr-2 h-4 w-4" />Edit questions</Button>}{onPoint && artifact.kind !== 'uploaded_media' && <Button variant="outline" aria-pressed={pointing} disabled={disabled || editingQuiz} onClick={() => { setRevising(false); setPointing(value => !value); }}><Crosshair className="mr-2 h-4 w-4" />{pointing ? 'Stop pointing' : 'Point to change'}</Button>}{artifact.kind !== 'uploaded_media' && <Button variant="outline" disabled={disabled} onClick={() => setRevising(value => !value)}>{revising ? 'Close feedback' : artifact.kind === 'structured_quiz' ? 'Ask AI for changes' : 'Request changes'}</Button>}{artifact.status === 'draft' && <Button variant="ghost" disabled={disabled} onClick={() => void onReview(artifact.id, 'reject')}>Reject</Button>}</div>
         {artifact.status === 'draft' ? <Button disabled={disabled || outdated || !ready} onClick={async () => { if (await onReview(artifact.id, 'approve')) onContinue(); }}><Check className="mr-2 h-4 w-4" />Approve & continue</Button> : <Button onClick={onContinue} disabled={disabled}>Continue<ArrowRight className="ml-2 h-4 w-4" /></Button>}
       </div>
     </>}
