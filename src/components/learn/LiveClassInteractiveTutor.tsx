@@ -22,7 +22,9 @@ import { vizReducer, initialVizState, Visualization } from '@/reducers/visualiza
 import { ParticipantSidebar } from './ParticipantSidebar'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { handRaisedAt } from '@/lib/live-class-hand'
 import {
+  Hand,
   AlertTriangle,
   ArrowLeft,
   Headphones,
@@ -101,6 +103,7 @@ export function LiveClassInteractiveTutor({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [micOn, setMicOn] = useState(true)
   const [showParticipants, setShowParticipants] = useState(true)
+  const [handUp, setHandUp] = useState(false)
   const [currentTopic, setCurrentTopic] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
   const audioMountRef = useRef<HTMLDivElement>(null)
@@ -238,6 +241,11 @@ export function LiveClassInteractiveTutor({
         track.detach().forEach((el) => el.remove())
       })
 
+      // The server owns hand state (the host can lower it), so follow what it says.
+      room.on(RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
+        if (participant.identity === room.localParticipant.identity) setHandUp(handRaisedAt(participant.attributes) !== null)
+      })
+
       room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
         if (topic !== 'agent') return
         try {
@@ -303,6 +311,16 @@ export function LiveClassInteractiveTutor({
     await room.localParticipant.setMicrophoneEnabled(next)
     setMicOn(next)
   }, [micOn])
+
+  const toggleHand = useCallback(async () => {
+    const next = !handUp
+    setHandUp(next)
+    try {
+      await axios.post(`/api/live-classes/${liveClassEventId}/hand`, { raised: next })
+    } catch {
+      setHandUp(!next)
+    }
+  }, [handUp, liveClassEventId])
 
   const boardContent = useMemo(() => {
     if (library === 'react' && code) return <ReactRenderer code={code} />
@@ -524,6 +542,20 @@ export function LiveClassInteractiveTutor({
               <MicOff className="h-4 w-4" />
             )}
           </Button>
+          {!isHost && (
+            <Button
+              variant={handUp ? 'default' : 'ghost'}
+              size="sm"
+              className="min-h-11 min-w-11 gap-1.5"
+              onClick={() => void toggleHand()}
+              aria-pressed={handUp}
+              title={handUp ? 'Lower your hand' : 'Raise your hand to ask something'}
+            >
+              <Hand className="h-4 w-4" />
+              <span className="hidden sm:inline">{handUp ? 'Lower hand' : 'Raise hand'}</span>
+              <span className="sr-only sm:hidden">{handUp ? 'Lower hand' : 'Raise hand'}</span>
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-1">

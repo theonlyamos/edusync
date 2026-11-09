@@ -11,6 +11,7 @@ import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAut
 import { formatDate } from '@/lib/format-date';
 import { formatGrade } from '@/lib/grade';
 import { ChangePasswordCard } from './ChangePasswordCard';
+import { TwoStepCard } from './TwoStepCard';
 
 interface Account {
   name: string;
@@ -141,6 +142,7 @@ export function AccountSettings() {
           </Card>
 
           <ChangePasswordCard />
+          <TwoStepCard />
         </>
       )}
     </div>

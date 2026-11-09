@@ -4,8 +4,9 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { Room, RemoteParticipant, Participant, LocalParticipant } from 'livekit-client'
 import { RoomEvent } from 'livekit-client'
 import axios from 'axios'
-import { Bot, Crown, Mic, MicOff, Users } from 'lucide-react'
+import { Bot, Crown, Hand, Mic, MicOff, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { compareHands, handRaisedAt } from '@/lib/live-class-hand'
 
 export type ParticipantEntry = {
   identity: string
@@ -13,6 +14,8 @@ export type ParticipantEntry = {
   isSpeaking: boolean
   isMicrophoneEnabled: boolean
   isLocal: boolean
+  /** When their hand went up, or null. */
+  handAt: number | null
 }
 
 const AVATAR_COLORS = [
@@ -55,6 +58,7 @@ function buildSnapshot(room: Room): Map<string, ParticipantEntry> {
       isSpeaking: p.isSpeaking,
       isMicrophoneEnabled: p.isMicrophoneEnabled,
       isLocal,
+      handAt: handRaisedAt(p.attributes),
     })
   }
   add(room.localParticipant, true)
@@ -125,6 +129,7 @@ function ParticipantSidebarInner({
     room.on(RoomEvent.ActiveSpeakersChanged, onSpeakersChanged)
     room.on(RoomEvent.TrackMuted, onTrackMuted)
     room.on(RoomEvent.TrackUnmuted, onTrackUnmuted)
+    room.on(RoomEvent.ParticipantAttributesChanged, refresh)
 
     return () => {
       room.off(RoomEvent.ParticipantConnected, onConnect)
@@ -132,6 +137,7 @@ function ParticipantSidebarInner({
       room.off(RoomEvent.ActiveSpeakersChanged, onSpeakersChanged)
       room.off(RoomEvent.TrackMuted, onTrackMuted)
       room.off(RoomEvent.TrackUnmuted, onTrackUnmuted)
+      room.off(RoomEvent.ParticipantAttributesChanged, refresh)
       if (speakerRafRef.current) cancelAnimationFrame(speakerRafRef.current)
     }
   }, [room, refresh])
@@ -173,6 +179,14 @@ function ParticipantSidebarInner({
     [isHost, room, liveClassEventId],
   )
 
+  const lowerHand = useCallback(
+    (entry: ParticipantEntry) => {
+      void axios.post(`/api/live-classes/${liveClassEventId}/hand`, { raised: false, participantIdentity: entry.identity }).catch(() => {})
+    },
+    [liveClassEventId],
+  )
+  const handsUp = Array.from(participants.values()).filter((entry) => entry.handAt !== null).length
+
   const sorted = Array.from(participants.values()).sort((a, b) => {
     const aHost = a.identity === hostIdentity ? 0 : 1
     const bHost = b.identity === hostIdentity ? 0 : 1
@@ -180,6 +194,9 @@ function ParticipantSidebarInner({
     const aAgent = isAgentParticipant(a) ? 0 : 1
     const bAgent = isAgentParticipant(b) ? 0 : 1
     if (aAgent !== bAgent) return aAgent - bAgent
+    // Raised hands next, in the order they went up.
+    const hands = compareHands(a.handAt, b.handAt)
+    if (hands !== 0) return hands
     return a.name.localeCompare(b.name)
   })
 
@@ -197,6 +214,11 @@ function ParticipantSidebarInner({
             <span className="text-sm font-medium">
               {participants.size} participant{participants.size !== 1 ? 's' : ''}
             </span>
+            {handsUp > 0 && (
+              <span className="ml-auto flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400" aria-live="polite">
+                <Hand className="h-3.5 w-3.5" aria-hidden /> {handsUp} <span className="sr-only">{handsUp === 1 ? 'hand raised' : 'hands raised'}</span>
+              </span>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
             {sorted.map((entry, i) => {
@@ -238,6 +260,23 @@ function ParticipantSidebarInner({
                       )}
                     </div>
                   </div>
+                  {entry.handAt !== null && (
+                    isHost && !entry.isLocal ? (
+                      <button
+                        type="button"
+                        onClick={() => lowerHand(entry)}
+                        className="shrink-0 rounded p-1 text-amber-600 transition-colors hover:bg-muted dark:text-amber-400"
+                        title="Lower this hand"
+                        aria-label={`${entry.name} has a hand up. Lower it`}
+                      >
+                        <Hand className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <span className="shrink-0 p-1 text-amber-600 dark:text-amber-400" title="Hand raised">
+                        <Hand className="h-3.5 w-3.5" aria-label="Hand raised" />
+                      </span>
+                    )
+                  )}
                   {!isAgent && (
                     <button
                       type="button"

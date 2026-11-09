@@ -89,32 +89,4 @@ export async function GET(request: Request) {
     }
 }
 
-export async function POST(request: Request) {
-    try {
-        const session = await getServerSession();
-        if (!session || !session.user.role || !['admin', 'teacher'].includes(session.user.role)) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 }
-            );
-        }
-
-        const supabase = createServerSupabase();
-
-        const body = await request.json();
-        const insert = { ...body, teacher: session.user.id, status: 'draft' } as any;
-        const { data, error } = await supabase
-            .from('lessons')
-            .insert(insert)
-            .select('*, teacher:users(name)')
-            .single();
-        if (error) throw error;
-        return NextResponse.json(data);
-    } catch (error) {
-        console.error("Error creating lesson:", error);
-        return NextResponse.json(
-            { error: "Failed to create lesson" },
-            { status: 500 }
-        );
-    }
-}
+// Lessons are created through POST /api/lessons/create, which checks every field.

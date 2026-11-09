@@ -9,7 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, Check, X } from 'lucide-react';
+import { Loader2, Check, X, Layers } from 'lucide-react';
+import { homeworkRequest } from '@/components/homework/shared';
+import { FLASHCARD_BATCH, cardFromQuestion } from '@/lib/flashcards';
 
 interface Question {
   id: string;
@@ -50,6 +52,7 @@ export function PracticeExercise({
     questions.map(q => (q.type === 'multiple_select' ? [] : ''))
   );
   const [submitting, setSubmitting] = useState(false);
+  const [cardsSaved, setCardsSaved] = useState<'no' | 'saving' | 'yes'>('no');
   const [completed, setCompleted] = useState(false);
   const [results, setResults] = useState<{
     correctCount: number;
@@ -314,6 +317,20 @@ export function PracticeExercise({
 
     const incorrectQuestions = results.questionResults.filter(r => !r.isCorrect);
 
+    // The questions that went wrong can be kept as revision cards.
+    const missed = incorrectQuestions.slice(0, FLASHCARD_BATCH).flatMap((result) => cardFromQuestion(result.question, subject) ?? []);
+    const saveMissed = async () => {
+      setCardsSaved('saving');
+      try {
+        const out = await homeworkRequest<{ added: number; skipped: number }>('/api/students/flashcards', { method: 'POST', body: JSON.stringify({ cards: missed }) });
+        setCardsSaved('yes');
+        toast({ title: out.added ? `${out.added} ${out.added === 1 ? 'card' : 'cards'} added to your flashcards` : 'These are already in your flashcards' });
+      } catch (error) {
+        setCardsSaved('no');
+        toast({ title: (error as Error).message || 'Could not save the cards.', variant: 'destructive' });
+      }
+    };
+
     // Toggle function
     const toggleRevealAnswer = (questionId: string) => {
       setRevealedAnswers(prev => {
@@ -403,6 +420,12 @@ export function PracticeExercise({
           )}
         </CardContent>
         <CardFooter className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-4 sm:px-6">
+          {missed.length > 0 && (
+            <Button onClick={saveMissed} variant="outline" disabled={cardsSaved !== 'no'} className="w-full sm:w-auto min-h-11 xl:min-h-0">
+              {cardsSaved === 'saving' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : cardsSaved === 'yes' ? <Check className="mr-2 h-4 w-4" aria-hidden /> : <Layers className="mr-2 h-4 w-4" aria-hidden />}
+              {cardsSaved === 'yes' ? 'Saved to flashcards' : `Save ${missed.length === 1 ? 'the one I missed' : `the ${missed.length} I missed`} as flashcards`}
+            </Button>
+          )}
           <Button onClick={onRetry} variant="outline" className="w-full sm:w-auto min-h-11 xl:min-h-0">Retry Practice</Button>
           <Button onClick={onGenerateNew} className="w-full sm:w-auto min-h-11 xl:min-h-0">Generate New Practice</Button>
         </CardFooter>

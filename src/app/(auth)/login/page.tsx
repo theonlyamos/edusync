@@ -11,6 +11,7 @@ import { AppUserContext, SupabaseBrowserClientContext, SupabaseSessionContext } 
 import { resolveAppRedirect } from '@/lib/app-user';
 import { Loader2 } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
+import { cleanCode } from '@/lib/mfa';
 
 function LoginContent() {
   const router = useRouter();
@@ -23,13 +24,56 @@ function LoginContent() {
   const redirectedFrom = searchParams.get('redirectedFrom');
   const code = searchParams.get('code');
 
+  // Accounts with an authenticator app must enter its code before they are let in.
+  const [secondStep, setSecondStep] = useState<'checking' | 'needed' | 'done'>('checking');
+  const [stepCode, setStepCode] = useState('');
+  const [stepError, setStepError] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const signedInId = session?.user?.id as string | undefined;
   useEffect(() => {
-    if (!code && session?.user && appUser && !profileLoading) {
+    if (!signedInId) return;
+    let live = true;
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      .then(({ data }: { data: { currentLevel: string | null; nextLevel: string | null } | null }) => {
+        if (live) setSecondStep(data?.nextLevel === 'aal2' && data.currentLevel !== 'aal2' ? 'needed' : 'done');
+      })
+      .catch(() => { if (live) setSecondStep('done'); });
+    return () => { live = false; };
+  }, [signedInId, supabase]);
+
+  const submitCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifying(true);
+    setStepError('');
+    try {
+      const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
+      const factor = (factors?.totp ?? []).find((item: { status: string }) => item.status === 'verified');
+      if (listError || !factor) throw new Error('missing');
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: stepCode });
+      if (error) throw error;
+      setSecondStep('done');
+    } catch {
+      setStepError('That code didn’t match. Check your authenticator app and try the newest code.');
+      setStepCode('');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const useAnotherAccount = async () => {
+    await supabase.auth.signOut().catch(() => {});
+    setSecondStep('checking');
+    setStepCode('');
+    setStepError('');
+  };
+
+  useEffect(() => {
+    if (!code && session?.user && appUser && !profileLoading && secondStep === 'done') {
       let cancelled = false;
       resolveAppRedirect(appUser.role, redirectedFrom).then((to) => { if (!cancelled) router.replace(to); });
       return () => { cancelled = true; };
     }
-  }, [code, session, appUser, profileLoading, router, redirectedFrom]);
+  }, [code, session, appUser, profileLoading, router, redirectedFrom, secondStep]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -80,6 +124,39 @@ function LoginContent() {
         </div>
       </main>
     )
+  }
+
+  if (session?.user && secondStep === 'needed') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-6">
+        <form onSubmit={submitCode} className="w-full max-w-sm space-y-6">
+          <div className="flex justify-center"><Logo markClassName="h-8 w-8" /></div>
+          <div className="space-y-2 text-center">
+            <h1 className="text-2xl font-bold tracking-tight font-display">Enter your code</h1>
+            <p className="text-muted-foreground">Open your authenticator app and type the six-digit code for InsyteAI.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sign-in-code">Code</Label>
+            <Input
+              id="sign-in-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              value={stepCode}
+              onChange={(e) => setStepCode(cleanCode(e.target.value))}
+              placeholder="123456"
+              disabled={verifying}
+              className="h-11 bg-transparent text-center text-lg tracking-widest"
+            />
+            {stepError && <p role="alert" className="text-sm text-destructive">{stepError}</p>}
+          </div>
+          <Button type="submit" className="w-full h-11" disabled={verifying || stepCode.length !== 6}>
+            {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}
+          </Button>
+          <Button type="button" variant="ghost" className="w-full h-11" onClick={useAnotherAccount}>Use a different account</Button>
+        </form>
+      </main>
+    );
   }
 
   if (profileLoading || session?.user) {
