@@ -48,6 +48,7 @@ export interface AssessmentResultRow {
   startedat: string | null;
   submittedat: string | null;
   timespent: number | null;
+  focus_losses?: number | null;
 }
 
 const questionSchema = z
@@ -130,22 +131,52 @@ function readQuestions(value: unknown): AssessmentQuestion[] {
   return Array.isArray(value) ? (value as AssessmentQuestion[]).filter((q) => q && typeof q === 'object') : [];
 }
 
+/** The most page exits recorded for one attempt. */
+export const FOCUS_LOSS_MAX = 999;
+
+/**
+ * Shuffles a copy of `items`, the same way every time for the same `seed`
+ * (a student and an assessment), so a reload keeps the student's order while
+ * neighbours get a different one.
+ */
+export function seededShuffle<T>(items: readonly T[], seed: string): T[] {
+  // FNV-1a hash of the seed, then a small xorshift generator.
+  let state = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) state = Math.imul(state ^ seed.charCodeAt(i), 16777619);
+  state = state >>> 0 || 1;
+  const next = () => {
+    state ^= state << 13; state >>>= 0;
+    state ^= state >>> 17;
+    state ^= state << 5; state >>>= 0;
+    return state / 4294967296;
+  };
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(next() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 /** API shape. Students never get correct answers or explanations. */
 export function mapAssessment(
   row: AssessmentRow,
-  options: { includeAnswers: boolean; creator?: { name?: string | null; email?: string | null } | null; myResult?: { status: string | null; percentage: number } | null },
+  options: { includeAnswers: boolean; /** Gives this taker their own question and option order. */ shuffleSeed?: string; creator?: { name?: string | null; email?: string | null } | null; myResult?: { status: string | null; percentage: number } | null },
 ) {
-  const questions = readQuestions(row.questions).map((question, index) => {
+  const seed = options.includeAnswers ? undefined : options.shuffleSeed;
+  const mapped = readQuestions(row.questions).map((question, index) => {
     const id = question._id || `q${index + 1}`;
     if (options.includeAnswers) return { ...question, _id: id };
+    const choices = seed && question.type === 'multiple_choice' && question.options ? seededShuffle(question.options, `${seed}:${id}`) : question.options;
     return {
       _id: id,
       question: question.question,
       type: question.type,
-      ...(question.options ? { options: question.options } : {}),
+      ...(choices ? { options: choices } : {}),
       points: question.points,
     };
   });
+  const questions = seed ? seededShuffle(mapped, seed) : mapped;
   return {
     _id: row.id,
     id: row.id,
@@ -203,6 +234,7 @@ export function mapResult(row: AssessmentResultRow, student?: { name?: string | 
     startedAt: row.startedat,
     submittedAt: row.submittedat,
     timeSpent: row.timespent ?? 0,
+    focusLosses: row.focus_losses ?? 0,
   };
 }
 

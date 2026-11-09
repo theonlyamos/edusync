@@ -52,6 +52,7 @@ interface AssessmentResult {
   startedAt: string;
   submittedAt: string;
   timeSpent: number;
+  focusLosses?: number;
 }
 
 interface Statistics {
@@ -195,7 +196,7 @@ export function AssessmentResults({
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 sm:px-6">
-              <Table className="min-w-[560px]" tabIndex={0} aria-label="Individual assessment results">
+              <Table className="min-w-[660px]" tabIndex={0} aria-label="Individual assessment results">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Student</TableHead>
@@ -203,6 +204,7 @@ export function AssessmentResults({
                     <TableHead>Percentage</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Time Spent</TableHead>
+                    <TableHead>Left the page</TableHead>
                     <TableHead>Submitted</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -226,6 +228,15 @@ export function AssessmentResults({
                         </span>
                       </TableCell>
                       <TableCell>{result.timeSpent} min</TableCell>
+                      <TableCell>
+                        {result.focusLosses ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900" title="Times the student switched to another tab or app during the assessment">
+                            {result.focusLosses === 1 ? 'Once' : `${result.focusLosses} times`}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">No</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {new Date(result.submittedAt).toLocaleDateString()}
                       </TableCell>

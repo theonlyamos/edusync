@@ -127,6 +127,10 @@ export default function TakeAssessmentPage({
                     Once you start, the timer will begin and you cannot pause or
                     restart the assessment.
                   </p>
+                  <p>
+                    Stay on this page until you submit. Switching to another tab or app is
+                    recorded and shown to your teacher.
+                  </p>
                 </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
