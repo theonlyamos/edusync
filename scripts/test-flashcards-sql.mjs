@@ -20,7 +20,7 @@ await db.exec(`
     INSERT INTO public.users VALUES ('${student}'), ('${other}');
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110000000_flashcards.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261109220629_flashcards.sql'), 'utf8');
 await db.exec(migration);
 
 const rejects = (statement, label) => assert.rejects(() => db.exec(statement), undefined, label);
