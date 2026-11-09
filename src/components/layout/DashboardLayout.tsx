@@ -20,6 +20,7 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/live', 'Live classes'],
   ['/students/timetable', 'Timetable'],
   ['/students/announcements', 'Announcements'],
+  ['/students/report-cards', 'Report cards'],
   ['/students/practice', 'Practice'],
   ['/students/tutor', 'Study companion'],
   ['/students/collaborator', 'Collaborator'],
@@ -37,6 +38,10 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/subjects', 'Subjects'],
   ['/school/timetables', 'Timetables'],
   ['/school/announcements', 'Announcements'],
+  ['/school/parents', 'Parents'],
+  ['/school/attendance', 'Attendance'],
+  ['/school/gradebook', 'Gradebook'],
+  ['/school/report-cards', 'Report cards'],
   ['/school/lessons', 'Lessons'],
   ['/school/reports', 'Reports'],
   ['/school/billing', 'Billing'],
@@ -70,7 +75,7 @@ export interface DashboardLayoutProps {
   role?: string;
   fullBleed?: boolean;
   /** Show a portal that doesn't follow the account role (the school admin portal). */
-  portal?: 'school';
+  portal?: 'school' | 'parent';
 }
 
 export function DashboardLayout({ children, fullBleed = false, portal }: DashboardLayoutProps) {
@@ -115,10 +120,10 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
   const portalName = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
 
   return (
-    <div className={cn('flex h-dvh min-h-0 bg-background', role && 'flex-col lg:flex-row')}>
+    <div className={cn('flex h-dvh min-h-0 bg-background print:block print:h-auto print:bg-white', role && 'flex-col lg:flex-row')}>
       {role && (
         <>
-          <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3 lg:hidden">
+          <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3 print:hidden lg:hidden">
             <Dialog open={navigationOpen} onOpenChange={setNavigationOpen}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Open ${portalName} navigation`}>
@@ -138,14 +143,16 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
                   ? pageTitle(SCHOOL_PAGE_TITLES, pathname, 'School Portal')
                   : role === 'admin'
                     ? pageTitle(ADMIN_PAGE_TITLES, pathname, 'Admin Portal')
+                    : role === 'parent'
+                      ? 'My children'
                     : `${portalName} Portal`}
             </span>
             {role !== 'admin' && <NotificationBell />}
           </header>
-          <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>
+          <div className="hidden h-full shrink-0 print:hidden lg:block"><Sidebar role={role} /></div>
         </>
       )}
-      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible">
         {role === 'student' && isStudentAiPage(pathname) && <HomeworkAiLockBanner />}
         {fullBleed ? (
           children

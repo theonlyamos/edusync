@@ -26,7 +26,7 @@ import {
 } from '@/lib/theme';
 import { SUPPORT_READ_EVENT } from '@/lib/support';
 
-type Role = 'admin' | 'teacher' | 'student' | 'school';
+type Role = 'admin' | 'teacher' | 'student' | 'school' | 'parent';
 
 interface SchoolInfo {
   id: string;
@@ -40,7 +40,7 @@ interface MenuLink {
   icon: ReactNode;
 }
 
-const SETTINGS_HREF: Record<Role, string> = {
+const SETTINGS_HREF: Record<Exclude<Role, 'parent'>, string> = {
   teacher: '/teachers/profile',
   admin: '/admin/settings',
   student: '/students/settings',
@@ -88,6 +88,8 @@ function useSupportUnread(enabled: boolean) {
 
 /** The menu links a role can actually open. School billing and the school portal are for school owners and admins only. */
 export function profileMenuLinks(role: Role, school: SchoolInfo | null | undefined): MenuLink[] {
+  // Parents only read their children's records: nothing to bill or set up.
+  if (role === 'parent') return [];
   const links: MenuLink[] = [];
   const iconClass = 'h-4 w-4';
   if (school?.canManage) {

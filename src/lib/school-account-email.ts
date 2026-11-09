@@ -18,6 +18,7 @@ const escapeHtml = (value: string) =>
 function roleText(role: string, gradeLevel: string | null): string {
   if (role === 'student') return gradeLevel ? `a student in ${gradeLevelLabel(gradeLevel)}` : 'a student'
   if (role === 'admin' || role === 'owner') return 'a school administrator'
+  if (role === 'member') return 'a parent or guardian'
   return 'a teacher'
 }
 

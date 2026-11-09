@@ -42,8 +42,25 @@ export async function fetchManagesSchool(): Promise<boolean> {
   }
 }
 
-/** getAppRedirect, first checking whether a plain account runs a school. */
+/** Whether the signed-in person is a parent following a student (browser only). */
+export async function fetchIsParent(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/parents/me?check=1');
+    if (!res.ok) return false;
+    return (await res.json())?.parent === true;
+  } catch {
+    return false;
+  }
+}
+
+export const PARENT_PORTAL_HOME = '/parents';
+
+/** getAppRedirect, first checking whether a plain account runs a school or is a parent. */
 export async function resolveAppRedirect(role: string | null, returnTo?: string | null): Promise<string> {
-  const managesSchool = !PORTAL_ROLES.includes(role ?? '') && (await fetchManagesSchool());
-  return getAppRedirect(role, returnTo, { managesSchool });
+  if (PORTAL_ROLES.includes(role ?? '')) return getAppRedirect(role, returnTo);
+  const managesSchool = await fetchManagesSchool();
+  const to = getAppRedirect(role, returnTo, { managesSchool });
+  // A parent with nowhere particular to go lands on their children's page, not the solo tutor.
+  if (!managesSchool && to === '/learn' && (await fetchIsParent())) return PARENT_PORTAL_HOME;
+  return to;
 }

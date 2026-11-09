@@ -7,6 +7,7 @@ export const NOTIFICATION_KINDS = [
   'homework_returned',
   'live_class_scheduled',
   'low_credits',
+  'report_card',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

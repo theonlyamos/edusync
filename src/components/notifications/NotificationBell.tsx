@@ -2,7 +2,7 @@
 
 import { useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CalendarClock, CheckCheck, CreditCard, FileCheck, Megaphone } from 'lucide-react';
+import { Bell, CalendarClock, CheckCheck, CreditCard, FileCheck, FileText, Megaphone } from 'lucide-react';
 import { AppUserContext } from '@/components/providers/SupabaseAuthProvider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -97,6 +97,7 @@ const KIND_ICON: Record<NotificationKind, typeof Bell> = {
   homework_returned: FileCheck,
   live_class_scheduled: CalendarClock,
   low_credits: CreditCard,
+  report_card: FileText,
 };
 
 /** The bell with an unread count, opening the person's latest notifications. */

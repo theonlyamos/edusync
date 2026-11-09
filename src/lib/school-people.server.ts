@@ -57,6 +57,9 @@ export type LinkResult = {
   linkFailed?: boolean
 }
 
+/** The invitation role that marks a parent's link (parents are not school members). */
+export const PARENT_LINK_ROLE = 'member'
+
 type LinkPerson = { email: string; name: string | null; role: string; gradeLevel: string | null }
 
 const chunk = <T,>(items: T[], size: number) =>
@@ -577,14 +580,28 @@ export async function completeAccountLink(supabase: ServiceSupabase, token: stri
   const { data: user, error: userError } = await supabase.from('users').select('id').eq('email', link.email).maybeSingle()
   if (userError) throw userError
   if (!user) throw new PeopleError('This account no longer exists.', 404)
-  const { data: member, error: memberError } = await supabase
-    .from('organization_members')
-    .select('role, is_active')
-    .eq('organization_id', link.schoolId)
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (memberError) throw memberError
-  if (!member?.is_active) throw new PeopleError('Your school has turned this account off. Ask them to turn it back on.', 403)
+  let role: string
+  if (link.role === PARENT_LINK_ROLE) {
+    // Parents are not school members: the link is good while they still follow a student there.
+    const { count, error: guardianError } = await supabase
+      .from('student_guardians')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', link.schoolId)
+      .eq('guardian_id', user.id)
+    if (guardianError) throw guardianError
+    if (!count) throw new PeopleError('Your school has removed this parent account. Ask them to add you again.', 403)
+    role = PARENT_LINK_ROLE
+  } else {
+    const { data: member, error: memberError } = await supabase
+      .from('organization_members')
+      .select('role, is_active')
+      .eq('organization_id', link.schoolId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (memberError) throw memberError
+    if (!member?.is_active) throw new PeopleError('Your school has turned this account off. Ask them to turn it back on.', 403)
+    role = member.role as string
+  }
 
   // Claim the link first so it can't be used twice at the same moment.
   const { data: claimed, error: claimError } = await supabase
@@ -603,7 +620,7 @@ export async function completeAccountLink(supabase: ServiceSupabase, token: stri
     if (/weak|short|password/i.test(passwordError.message)) throw new PeopleError(passwordError.message, 400)
     throw passwordError
   }
-  return { email: link.email, role: member.role as string }
+  return { email: link.email, role }
 }
 
 /** Turns a thrown error into the response a school people route returns. */
