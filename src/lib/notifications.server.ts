@@ -230,7 +230,7 @@ export async function postAnnouncement(supabase: ServiceSupabase, author: Author
   if (error || !data) throw error ?? new Error('Announcement was not saved');
 
   // Each person's link opens the announcements page of their own portal.
-  await notify(
+  const delivered = await notify(
     recipients.map((userId) => {
       const role = people.get(userId);
       return {
@@ -244,6 +244,14 @@ export async function postAnnouncement(supabase: ServiceSupabase, author: Author
     }),
     supabase,
   );
+  // Those notifications are also the record of who may read the announcement,
+  // so a partly delivered post is taken back (its notifications go with it)
+  // and the author is asked to post again.
+  if (delivered < recipients.length) {
+    const { error: undoError } = await supabase.from('announcements').delete().eq('id', data.id);
+    if (undoError) console.error('[announcements] could not undo a partly delivered post:', undoError.message);
+    throw new AnnouncementError('The announcement could not be delivered. Please post it again.', 503);
+  }
   return { id: data.id as string, recipients: recipients.length };
 }
 

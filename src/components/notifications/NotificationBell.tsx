@@ -17,6 +17,8 @@ let pending: Promise<void> | null = null;
 let lastLoaded = 0;
 /** Whose feed this is, so a different person signing in on this tab never sees it. */
 let owner: string | null = null;
+/** Goes up when the owner changes; a reply from an earlier request is then thrown away. */
+let generation = 0;
 const listeners = new Set<() => void>();
 
 function setFeed(next: NotificationFeed) {
@@ -31,11 +33,13 @@ function isFeed(body: unknown): body is NotificationFeed {
 function loadFeed(force = false): Promise<void> {
   if (pending) return pending;
   if (!force && Date.now() - lastLoaded < 15_000) return Promise.resolve();
-  pending = fetch('/api/notifications', { cache: 'no-store' })
+  const mine = generation;
+  const request: Promise<void> = fetch('/api/notifications', { cache: 'no-store' })
     .then((res) => (res.ok ? res.json() : null))
-    .then((body) => { if (isFeed(body)) { lastLoaded = Date.now(); setFeed(body); } })
+    .then((body) => { if (mine === generation && isFeed(body)) { lastLoaded = Date.now(); setFeed(body); } })
     .catch(() => { /* keep the last feed */ })
-    .finally(() => { pending = null; });
+    .finally(() => { if (pending === request) pending = null; });
+  pending = request;
   return pending;
 }
 
@@ -46,13 +50,15 @@ async function markRead(body: { all: true } | { ids: string[] }) {
   const notifications = feed.notifications.map((n) => (!n.readAt && (!ids || ids.has(n.id)) ? { ...n, readAt: now } : n));
   const cleared = feed.notifications.filter((n) => !n.readAt && (!ids || ids.has(n.id))).length;
   setFeed({ notifications, unread: ids ? Math.max(0, feed.unread - cleared) : 0 });
+  const mine = generation;
   try {
     const res = await fetch('/api/notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const fresh = res.ok ? await res.json() : null;
+    if (mine !== generation) return;
     if (isFeed(fresh)) setFeed(fresh);
     else void loadFeed(true);
   } catch {
-    void loadFeed(true);
+    if (mine === generation) void loadFeed(true);
   }
 }
 
@@ -67,6 +73,8 @@ function useNotificationFeed(): NotificationFeed {
     if (!userId) return;
     if (owner !== userId) {
       owner = userId;
+      generation += 1;
+      pending = null;
       lastLoaded = 0;
       setFeed(EMPTY);
     }

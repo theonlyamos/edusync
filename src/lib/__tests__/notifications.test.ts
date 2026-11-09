@@ -10,7 +10,7 @@ import { sendHomeworkNotices } from '@/lib/homework/notices';
 
 type Row = Record<string, unknown>;
 let tables: Record<string, Row[]>;
-let failInsert = false;
+let failInsert: boolean | string = false;
 
 /** A small in-memory stand-in for the parts of the Supabase client these functions use. */
 function fakeDb() {
@@ -27,13 +27,17 @@ function fakeDb() {
       gte: (column: string, value: string) => { rows = rows.filter((row) => String(row[column] ?? '') >= value); return query; },
       ilike: (column: string, value: string) => { rows = rows.filter((row) => String(row[column] ?? '').toLowerCase() === value.replace(/\\(.)/g, '$1').toLowerCase()); return query; },
       range: (from: number, to: number) => { rows = rows.slice(from, to + 1); return query; },
+      delete: () => {
+        const doomed = () => { tables[table] = tables[table].filter((row) => !rows.includes(row)); if (table === 'announcements') tables.notifications = tables.notifications.filter((n) => !rows.some((row) => row.id === n.announcement_id)); };
+        return { eq: (column: string, value: unknown) => { rows = tables[table].filter((row) => row[column] === value); doomed(); return Promise.resolve({ error: null }); } };
+      },
       order: () => query,
       limit: (n: number) => { limit = n; return query; },
       maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
       single: async () => ({ data: rows[0] ?? null, error: rows[0] ? null : { message: 'none' } }),
       then: (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve),
       insert: (added: Row | Row[]) => {
-        if (failInsert) return { ...query, then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'down' } }).then(resolve) };
+        if (failInsert === true || failInsert === table) return { ...query, then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, error: { message: 'down' } }).then(resolve) };
         const list = (Array.isArray(added) ? added : [added]).map((row, i) => ({ id: `${table}-${tables[table].length + i + 1}`, ...row }));
         tables[table].push(...list);
         rows = list;
@@ -115,6 +119,14 @@ describe('announcement audience', () => {
     expect(hrefOf('admin')).toBe('/school/announcements');
     expect((await listAnnouncements(fakeDb(), { userId: 's1', schoolId: school, schoolRole: 'student' })).map((a) => a.title)).toEqual(['Sports day']);
     expect((await listAnnouncements(fakeDb(), owner))[0]).toMatchObject({ authorName: 'Ama Owner', recipientCount: 6 });
+  });
+
+  it('takes the post back when its notifications could not be delivered', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    failInsert = 'notifications';
+    await expect(postAnnouncement(fakeDb(), owner, { ...base, audience: 'everyone' })).rejects.toMatchObject({ status: 503 });
+    expect(tables.announcements).toEqual([]);
+    log.mockRestore();
   });
 
   it('keeps a class post away from students outside the class', async () => {
