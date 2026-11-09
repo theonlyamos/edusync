@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase.server';
 
 // Hybrid rate limiter:
-// - Strict, low-volume buckets (auth/upload/admin) use a durable fixed-window
+// - Strict or costly buckets (auth/upload/admin/tutor) use a durable fixed-window
 //   counter in Postgres (hit_rate_limit, migration 0032) so limits hold across
 //   serverless instances and cold starts.
-// - High-volume buckets (api/tutor) stay in-memory as a best-effort guard to
+// - The high-volume api bucket stays in-memory as a best-effort guard to
 //   avoid a DB round-trip on every request.
 
 interface RateLimitEntry {
@@ -110,11 +110,13 @@ const DURABLE_BUCKETS: Partial<Record<RateLimitType, { max: number; windowSecond
     auth: { max: 5, windowSeconds: 900 },
     upload: { max: 10, windowSeconds: 3600 },
     admin: { max: 50, windowSeconds: 60 },
+    // AI calls cost money, so this limit must hold across serverless instances.
+    tutor: { max: 20, windowSeconds: 60 },
 };
 
 async function consumeDurable(
     type: RateLimitType,
-    ip: string
+    key: string
 ): Promise<{ allowed: boolean; msBeforeNext?: number; remainingPoints?: number } | null> {
     const bucket = DURABLE_BUCKETS[type];
     if (!bucket) return null;
@@ -125,7 +127,7 @@ async function consumeDurable(
         // (and any RPC error) as "fall back to the in-memory limiter".
         const supabase = createServerSupabase();
         const res = await supabase.rpc('hit_rate_limit', {
-            p_key: `${type}:${ip}`,
+            p_key: `${type}:${key}`,
             p_max: bucket.max,
             p_window_seconds: bucket.windowSeconds,
         });
@@ -148,7 +150,8 @@ async function consumeDurable(
 
 export async function rateLimit(
     request: NextRequest,
-    type: RateLimitType = 'api'
+    type: RateLimitType = 'api',
+    userId?: string | null
 ): Promise<NextResponse | null> {
     try {
         const limiter = rateLimiters[type];
@@ -156,7 +159,11 @@ export async function rateLimit(
             request.headers.get('x-forwarded-for')?.split(',')[0] ||
             'unknown';
 
-        const result = (await consumeDurable(type, ip)) ?? (await limiter.consume(ip));
+        // Callers that know the signed-in user pass their id, so a whole class
+        // behind one school network address doesn't share a single allowance.
+        const key = userId ? `user:${userId}` : ip;
+
+        const result = (await consumeDurable(type, key)) ?? (await limiter.consume(key));
 
         if (!result.allowed) {
             // Too many requests

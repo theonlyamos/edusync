@@ -53,10 +53,10 @@ export default function SignupPage() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       toast({
         title: 'Error',
-        description: 'Password must be at least 6 characters',
+        description: 'Password must be at least 8 characters',
         variant: 'destructive',
       });
       setIsLoading(false);
@@ -194,7 +194,7 @@ export default function SignupPage() {
                     placeholder="Create a password"
                     required
                     disabled={isLoading}
-                    minLength={6}
+                    minLength={8}
                     className="h-11 bg-transparent"
                   />
                 </div>
@@ -208,7 +208,7 @@ export default function SignupPage() {
                     placeholder="Confirm your password"
                     required
                     disabled={isLoading}
-                    minLength={6}
+                    minLength={8}
                     className="h-11 bg-transparent"
                   />
                 </div>

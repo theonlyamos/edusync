@@ -93,16 +93,16 @@ Use 2-3 suggestedActions at most.`;
 
 export async function POST(req: NextRequest) {
     try {
-        const rateLimitResponse = await rateLimit(req, 'tutor');
-        if (rateLimitResponse) {
-            return rateLimitResponse;
-        }
-
         const supabase = await createSSRUserSupabase();
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
             return new NextResponse('Unauthorized', { status: 401 });
+        }
+
+        const rateLimitResponse = await rateLimit(req, 'tutor', user.id);
+        if (rateLimitResponse) {
+            return rateLimitResponse;
         }
 
         // Verify user is a student
