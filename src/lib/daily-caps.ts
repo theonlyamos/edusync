@@ -42,6 +42,9 @@ export async function enforceDailyCap(feature: DailyCapFeature, userId: string):
       return null;
     }
     if (data === false) {
+      // The counter also counted this refused attempt. Take it back off so the
+      // counter only holds accepted uses and a later refund frees a real slot.
+      await refundDailyCap(feature, userId);
       const message = dailyCapMessage(feature);
       return NextResponse.json({ error: message, message, code: 'daily_cap_reached' }, { status: 429 });
     }
