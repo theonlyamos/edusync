@@ -1,3 +1,4 @@
+import { getServerSession } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -14,7 +15,8 @@ const schema = z.object({
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
-    const rateLimitResponse = await rateLimit(request, 'tutor');
+    const session = await getServerSession();
+    const rateLimitResponse = await rateLimit(request, 'tutor', session?.user?.id);
     if (rateLimitResponse) return rateLimitResponse;
     const { runId } = await params;
     const input = schema.parse(await request.json());

@@ -6,6 +6,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/lib/lesson-artifacts/learning-server', () => ({
   resolveNextLearningArtifact: resolveNextLearningArtifactMock,
 }));
+vi.mock('@/lib/auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'student-1' } }) }));
 vi.mock('@/lib/rate-limiter', () => ({ rateLimit: vi.fn().mockResolvedValue(null) }));
 
 describe('next learning artifact route', () => {

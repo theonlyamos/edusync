@@ -150,7 +150,8 @@ async function consumeDurable(
 
 export async function rateLimit(
     request: NextRequest,
-    type: RateLimitType = 'api'
+    type: RateLimitType = 'api',
+    userId?: string | null
 ): Promise<NextResponse | null> {
     try {
         const limiter = rateLimiters[type];
@@ -158,10 +159,8 @@ export async function rateLimit(
             request.headers.get('x-forwarded-for')?.split(',')[0] ||
             'unknown';
 
-        // AI calls are counted per signed-in user, so a whole class behind one
-        // school network address doesn't share a single allowance. The proxy
-        // strips any client-sent copy of this header.
-        const userId = type === 'tutor' ? request.headers.get('x-auth-user-id') : null;
+        // Callers that know the signed-in user pass their id, so a whole class
+        // behind one school network address doesn't share a single allowance.
         const key = userId ? `user:${userId}` : ip;
 
         const result = (await consumeDurable(type, key)) ?? (await limiter.consume(key));
