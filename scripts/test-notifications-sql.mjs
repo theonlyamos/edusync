@@ -25,7 +25,7 @@ await db.exec(`
     -- Supabase grants new tables to these roles by default.
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 `);
-const sql = await readFile(path.join(root, 'supabase/migrations/20261109210000_notifications.sql'), 'utf8');
+const sql = await readFile(path.join(root, 'supabase/migrations/20261109204708_notifications.sql'), 'utf8');
 await db.exec(sql);
 
 const rejects = (statement, label) => assert.rejects(() => db.exec(statement), undefined, label);
