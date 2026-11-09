@@ -29,8 +29,8 @@ await db.exec(`
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 `);
 const notifications = await read('20261109204708_notifications.sql');
-const records = await read('20261109220000_school_records.sql');
-const kinds = await read('20261109220100_report_card_notifications.sql');
+const records = await read('20261109211006_school_records.sql');
+const kinds = await read('20261109211014_report_card_notifications.sql');
 await db.exec(notifications);
 await db.exec(records);
 await db.exec(kinds);
