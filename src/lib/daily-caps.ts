@@ -28,10 +28,14 @@ export function dailyCapMessage(feature: DailyCapFeature): string {
  * today's cap, or null when the request may go ahead. Fails open if the
  * counter can't be reached, so a database hiccup never blocks studying.
  */
-export async function enforceDailyCap(feature: DailyCapFeature, userId: string): Promise<NextResponse | null> {
+export async function enforceDailyCap(
+  feature: DailyCapFeature,
+  userId: string,
+  now: Date = new Date(),
+): Promise<NextResponse | null> {
   try {
     const { data, error } = await createServerSupabase().rpc('hit_rate_limit', {
-      p_key: dailyCapKey(feature, userId),
+      p_key: dailyCapKey(feature, userId, now),
       p_max: DAILY_CAPS[feature].max,
       // The date in the key starts a fresh counter each day; the window only
       // needs to outlast it.
@@ -42,6 +46,9 @@ export async function enforceDailyCap(feature: DailyCapFeature, userId: string):
       return null;
     }
     if (data === false) {
+      // The counter also counted this refused attempt. Take it back off so the
+      // counter only holds accepted uses and a later refund frees a real slot.
+      await refundDailyCap(feature, userId, now);
       const message = dailyCapMessage(feature);
       return NextResponse.json({ error: message, message, code: 'daily_cap_reached' }, { status: 429 });
     }
@@ -49,5 +56,26 @@ export async function enforceDailyCap(feature: DailyCapFeature, userId: string):
   } catch (error) {
     console.error(`[daily-cap:${feature}]`, error);
     return null;
+  }
+}
+
+/**
+ * Gives back the use counted by enforceDailyCap when the AI call then failed,
+ * so a student never loses allowance to an error. Best effort: a failure here
+ * only means the use stays counted. Pass the same `now` used when counting,
+ * so a request that crosses midnight UTC refunds the day it was counted on.
+ */
+export async function refundDailyCap(
+  feature: DailyCapFeature,
+  userId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  try {
+    const { error } = await createServerSupabase().rpc('release_rate_limit', {
+      p_key: dailyCapKey(feature, userId, now),
+    });
+    if (error) console.error(`[daily-cap:${feature}] refund failed:`, error.message);
+  } catch (error) {
+    console.error(`[daily-cap:${feature}] refund failed:`, error);
   }
 }

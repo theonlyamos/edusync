@@ -15,7 +15,7 @@ vi.mock('@/lib/supabase.server', () => ({
   }),
 }));
 
-import { dailyCapKey, enforceDailyCap } from '@/lib/daily-caps';
+import { dailyCapKey, enforceDailyCap, refundDailyCap } from '@/lib/daily-caps';
 
 describe('daily caps', () => {
   beforeEach(() => {
@@ -40,6 +40,31 @@ describe('daily caps', () => {
     const body = await response!.json();
     expect(body.code).toBe('daily_cap_reached');
     expect(body.error).toContain('10 practice sets');
+  });
+
+  it('takes a refused attempt back off the counter so it only holds accepted uses', async () => {
+    rpcImpl = async (name) => ({ data: name === 'hit_rate_limit' ? false : null, error: null });
+    await enforceDailyCap('practice', 'u1');
+    expect(calls.map(([name]) => name)).toEqual(['hit_rate_limit', 'release_rate_limit']);
+    expect(calls[1][1]).toEqual({ p_key: calls[0][1].p_key });
+  });
+
+  it('refunds the day the use was counted on, even after midnight UTC', async () => {
+    rpcImpl = async () => ({ data: null, error: null });
+    await refundDailyCap('practice', 'u1', new Date('2026-10-22T23:59:30Z'));
+    expect(calls[0][1]).toEqual({ p_key: 'daily:practice:u1:2026-10-22' });
+  });
+
+  it('gives a use back when asked, and never throws', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    rpcImpl = async () => ({ data: null, error: null });
+    await refundDailyCap('companion', 'u1');
+    expect(calls[0][0]).toBe('release_rate_limit');
+    rpcImpl = async () => {
+      throw new Error('network down');
+    };
+    await expect(refundDailyCap('companion', 'u1')).resolves.toBeUndefined();
+    log.mockRestore();
   });
 
   it('fails open when the counter is unavailable', async () => {
