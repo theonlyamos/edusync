@@ -47,8 +47,10 @@ export function CommandPalette({ open, onOpenChange, links, portal }: { open: bo
 
   const needle = text.trim().toLowerCase();
   const pages = useMemo(() => (needle ? links.filter((link) => link.label.toLowerCase().includes(needle)) : links), [links, needle]);
-  const results = query && found ? found.results : [];
-  const searching = Boolean(query) && found?.for !== query;
+  // Answers for an earlier query are hidden as soon as the text changes, so Enter never opens a stale match.
+  const current = query && found?.for === query ? found : null;
+  const results = current ? current.results : [];
+  const searching = Boolean(query) && !current;
   const go = (href: string) => { onOpenChange(false); router.push(href); };
 
   // Keep the highlight on the top row as the list changes, so Enter opens the best match.
@@ -66,7 +68,7 @@ export function CommandPalette({ open, onOpenChange, links, portal }: { open: bo
           <CommandInput value={text} onValueChange={(value) => setText(value.slice(0, SEARCH_MAX))} placeholder={portal ? 'Search pages, students, lessons…' : 'Search pages…'} className="h-12 pr-10 text-base sm:text-sm" />
           <CommandList className="max-h-[min(60dvh,26rem)]">
             {!searching && pages.length === 0 && results.length === 0 && (
-              <CommandEmpty>{found?.failed ? 'Search isn’t available right now. Try again.' : `Nothing found for “${text.trim()}”.`}</CommandEmpty>
+              <CommandEmpty>{current?.failed ? 'Search isn’t available right now. Try again.' : `Nothing found for “${text.trim()}”.`}</CommandEmpty>
             )}
             {KINDS.map((kind) => {
               const group = results.filter((result) => result.kind === kind);

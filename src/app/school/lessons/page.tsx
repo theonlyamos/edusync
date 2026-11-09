@@ -42,12 +42,13 @@ function LessonsPage() {
   const lessons = useHomeworkData<{ lessons: SchoolLesson[] }>('/api/schools/current/lessons');
   const [query, setQuery] = useState(params.get('q') ?? '');
   const linkedQuery = params.get('q');
-  useEffect(() => { if (linkedQuery !== null) setQuery(linkedQuery); }, [linkedQuery]);
   const [teacher, setTeacher] = useState(params.get('teacher') ?? 'all');
   const [grade, setGrade] = useState(params.get('grade') ?? 'all');
   const [status, setStatus] = useState<StatusFilter>('current');
   const [page, setPage] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
+  // A search opened from the jump-to palette starts on the first page, like typing in the box does.
+  useEffect(() => { if (linkedQuery !== null) { setQuery(linkedQuery); setPage(0); } }, [linkedQuery]);
 
   const list = lessons.data?.lessons ?? [];
   const teachers = useMemo(() => {

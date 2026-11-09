@@ -32,9 +32,14 @@ export async function addCalendarEntry(supabase: ServiceSupabase, schoolId: stri
     .insert({ organization_id: schoolId, kind: input.kind, title: input.title, starts_on: input.startsOn, ends_on: input.endsOn, created_by: userId })
     .select(FIELDS)
     .single();
-  if (error) throw error;
+  if (error) throw writeError(error);
   return toEntry(data as Row);
 }
+
+/** The database refuses a term that overlaps another one, which also covers two people saving at once. */
+const OVERLAP = '23P01';
+const writeError = (error: { code?: string }) =>
+  error.code === OVERLAP ? new RecordsError('These dates overlap another term. Terms can’t overlap.', 409) : error;
 
 const requireId = (id: string) => {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new RecordsError('Calendar entry not found', 404);
@@ -52,7 +57,7 @@ export async function updateCalendarEntry(supabase: ServiceSupabase, schoolId: s
     .eq('organization_id', schoolId)
     .select(FIELDS)
     .maybeSingle();
-  if (error) throw error;
+  if (error) throw writeError(error);
   if (!data) throw new RecordsError('Calendar entry not found', 404);
   return toEntry(data as Row);
 }

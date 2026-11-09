@@ -21,7 +21,9 @@ await db.exec(`
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 `);
 const migration = await readFile(path.join(root, 'supabase/migrations/20261109213141_school_calendar.sql'), 'utf8');
+const overlapMigration = await readFile(path.join(root, 'supabase/migrations/20261109234000_calendar_term_overlap.sql'), 'utf8');
 await db.exec(migration);
+await db.exec(overlapMigration);
 
 const rejects = (statement, label) => assert.rejects(() => db.exec(statement), undefined, label);
 const add = (kind, title, from, to) =>
@@ -29,6 +31,7 @@ const add = (kind, title, from, to) =>
 
 test('the migration can run twice', async () => {
     await db.exec(migration);
+    await db.exec(overlapMigration);
 });
 
 test('only the server can touch the calendar', async () => {
@@ -52,8 +55,28 @@ test('entries need a known kind, a name and dates in order', async () => {
     await db.exec(add('holiday', 'Break', '2026-10-26', '2026-10-30'));
 });
 
+test('terms in one school cannot overlap, other entries can', async () => {
+    const other = '00000000-0000-4000-8000-0000000000a2';
+    await db.exec(`INSERT INTO public.organizations VALUES ('${other}')`);
+    await assert.rejects(() => db.exec(add('term', 'Clash', '2026-12-11', '2027-01-10')), (error) => error.code === '23P01');
+    await db.exec(add('term', 'Term 2', '2027-01-11', '2027-03-26'));
+    await db.exec(add('exam', 'Exams', '2026-12-01', '2026-12-11'));
+    await db.exec(add('term', 'Term 1', '2026-09-07', '2026-12-11').replace(school, other));
+    await assert.rejects(
+        () => db.exec(`UPDATE public.school_calendar_entries SET starts_on = '2026-12-01' WHERE title = 'Term 2'`),
+        (error) => error.code === '23P01',
+    );
+    await assert.rejects(
+        () => db.exec(`UPDATE public.school_calendar_entries SET kind = 'term' WHERE title = 'Exams'`),
+        (error) => error.code === '23P01',
+    );
+    await db.exec(`UPDATE public.school_calendar_entries SET title = 'Second term', ends_on = '2027-03-27' WHERE title = 'Term 2'`);
+    const fn = await db.query(`SELECT has_function_privilege('anon', 'public.school_calendar_terms_no_overlap()', 'execute') AS ok`);
+    assert.equal(fn.rows[0].ok, false);
+});
+
 test('a school takes its calendar with it', async () => {
     await db.exec(`DELETE FROM public.organizations WHERE id = '${school}'`);
-    const left = await db.query('SELECT count(*)::int AS n FROM public.school_calendar_entries');
+    const left = await db.query(`SELECT count(*)::int AS n FROM public.school_calendar_entries WHERE organization_id = '${school}'`);
     assert.equal(left.rows[0].n, 0);
 });
