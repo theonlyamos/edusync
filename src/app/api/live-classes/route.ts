@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { afterResponse } from '@/lib/after-response'
+import { notify } from '@/lib/notifications.server'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { validateLiveClassGradeAndLesson } from '@/lib/live-class-lesson-validation'
@@ -183,6 +185,23 @@ export async function POST(request: NextRequest) {
     maxAttendees: maxCap,
     classIds,
   })
+
+  if (enrolled > 0) {
+    const eventId = data.id as string
+    afterResponse(async () => {
+      const { data: rows } = await supabase.from('live_class_enrollments').select('user_id').eq('live_class_event_id', eventId).limit(5000)
+      await notify(
+        (rows ?? []).map((row: { user_id: string }) => ({
+          userId: row.user_id,
+          kind: 'live_class_scheduled' as const,
+          title: `Live class scheduled: ${String(title).slice(0, 120)}`,
+          body: 'Open Live classes to see when it starts and to join.',
+          href: '/students/live',
+        })),
+        supabase,
+      )
+    })
+  }
 
   return NextResponse.json({
     id: data.id,

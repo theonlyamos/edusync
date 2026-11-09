@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
 import React, { ReactElement, useState, useEffect, useRef } from 'react';
 import { ProfileMenu } from './ProfileMenu';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAdminSupportUnread } from '@/components/support/AdminSupportBadge';
 import {
   Book,
@@ -33,6 +34,7 @@ import {
   LifeBuoy,
   KeyRound,
   History,
+  Megaphone,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -62,6 +64,7 @@ const teacherLinks: SidebarLink[] = [
   { label: 'Students', icon: <Users className="h-5 w-5" />, href: '/teachers/students' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
+  { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/teachers/announcements' },
   // Library pages: everything here can also be reached from inside a lesson.
   { label: 'Content', icon: <FileText className="h-5 w-5" />, href: '/teachers/content' },
   { label: 'Resources', icon: <Library className="h-5 w-5" />, href: '/teachers/resources' },
@@ -79,6 +82,7 @@ const schoolLinks: SidebarLink[] = [
   { label: 'Subjects', icon: <BookMarked className="h-5 w-5" />, href: '/school/subjects' },
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/school/lessons' },
   { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
+  { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/school/announcements' },
   { label: 'Reports', icon: <BarChart2 className="h-5 w-5" />, href: '/school/reports' },
   { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/school/billing' },
   { label: 'Settings', icon: <Settings className="h-5 w-5" />, href: '/school/settings' },
@@ -91,6 +95,7 @@ const studentLinks: SidebarLink[] = [
   { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/students/homework' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/students/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/students/timetable' },
+  { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/students/announcements' },
   { label: 'Practice', icon: <FileText className="h-5 w-5" />, href: '/students/practice' },
   { label: 'Assessments', icon: <ClipboardCheck className="h-5 w-5" />, href: '/assessments' },
   { label: 'Study companion', icon: <MessagesSquare className="h-5 w-5" />, href: '/students/tutor' },
@@ -170,6 +175,8 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
               <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
             </Link>
             {!mobile && !isCollapsed && (
+              <div className="flex shrink-0 items-center">
+              {role !== 'admin' && <NotificationBell align="start" className="h-9 w-9" />}
               <Button
                 variant="ghost"
                 size="icon"
@@ -182,6 +189,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
               >
                 <PanelLeft className="h-5 w-5" />
               </Button>
+              </div>
             )}
           </div>
           {!isCollapsed && (
@@ -205,6 +213,9 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
             >
               <PanelLeft className="h-5 w-5 -scale-x-100" />
             </Button>
+          )}
+          {!mobile && isCollapsed && role !== 'admin' && (
+            <div className="mb-2 flex justify-center"><NotificationBell align="start" /></div>
           )}
           <div className="space-y-1">
             {links.map((link: SidebarLink) => {

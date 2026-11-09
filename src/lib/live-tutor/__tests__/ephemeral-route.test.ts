@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/lib/notifications.server', () => ({ warnLowCreditsForMember: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('@/lib/env', () => ({
     env: () => ({
         NEXT_PUBLIC_SUPABASE_URL: 'https://voice-test.invalid',
