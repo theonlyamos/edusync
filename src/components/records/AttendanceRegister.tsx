@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { homeworkRequest, useHomeworkData } from '@/components/homework/shared';
 import { ATTENDANCE_LABEL, ATTENDANCE_STATUSES, dayLabel, shiftDay, type AttendanceStatus, type Register } from '@/lib/school-records';
+import { holidayOn } from '@/lib/school-calendar';
 import { cn } from '@/lib/utils';
 import { ClassSelect, LoadError, Loading, Notice, WithClasses, type RecordsClasses } from './shared';
 
@@ -157,6 +158,7 @@ function Picker({ data }: { data: RecordsClasses }) {
     go();
   };
   const pickDay = (next: string) => leave(() => setDay(next));
+  const holiday = holidayOn(data.calendar ?? [], day);
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,18rem)_auto] sm:items-end">
@@ -175,6 +177,11 @@ function Picker({ data }: { data: RecordsClasses }) {
           </div>
         </div>
       </div>
+      {holiday && (
+        <p role="status" className="rounded-md border border-emerald-600/40 bg-emerald-600/10 px-4 py-3 text-sm">
+          The school calendar marks this day as a holiday: <span className="font-medium">{holiday.title}</span>. You can still take the register if the class met.
+        </p>
+      )}
       <RegisterSheet key={`${classId}:${day}`} classId={classId} day={day} onDirty={setDirty} />
     </div>
   );

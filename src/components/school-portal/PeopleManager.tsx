@@ -89,7 +89,10 @@ export function PeopleManager({ role }: { role: SchoolPersonRole }) {
   const [data, setData] = useState<ListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => searchParams?.get('q') ?? '');
+  // The jump-to search can send a new ?q= while this page is already open.
+  const linkedQuery = searchParams?.get('q') ?? null;
+  useEffect(() => { if (linkedQuery !== null) setQuery(linkedQuery); }, [linkedQuery]);
   const [status, setStatus] = useState<StatusFilter>(() => {
     const s = searchParams?.get('status');
     return s === 'active' || s === 'pending' || s === 'deactivated' ? s : 'all';

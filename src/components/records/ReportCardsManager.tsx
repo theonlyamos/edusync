@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { homeworkRequest, useHomeworkData } from '@/components/homework/shared';
 import { NATIVE_SELECT_CLASS } from '@/components/school-portal/PersonFormDialog';
 import { REPORT_COMMENT_MAX, REPORT_TERM_MAX, attendanceRate, dayLabel, shiftDay, type ReportCard } from '@/lib/school-records';
+import type { CalendarEntry } from '@/lib/school-calendar';
 import { ClassSelect, LoadError, Loading, WithClasses, type RecordsClasses } from './shared';
 
 type Term = { term: string; periodStart: string; periodEnd: string };
@@ -76,12 +77,19 @@ function CardRow({ card, basePath, onChange }: { card: ReportCard; basePath: str
   );
 }
 
-function ClassCards({ classId, today, basePath }: { classId: string; today: string; basePath: string }) {
+/** A calendar term as the new-term form: it can't run past today, since marks stop there. */
+const fromCalendar = (entry: CalendarEntry, today: string) => ({ term: entry.title.slice(0, REPORT_TERM_MAX), periodStart: entry.startsOn, periodEnd: entry.endsOn > today ? today : entry.endsOn });
+
+function ClassCards({ classId, today, basePath, calendarTerms }: { classId: string; today: string; basePath: string; calendarTerms: CalendarEntry[] }) {
   const { toast } = useToast();
   const [term, setTerm] = useState<string | null>(null);
   const loaded = useHomeworkData<Loaded>(`/api/records/report-cards?classId=${classId}${term ? `&term=${encodeURIComponent(term)}` : ''}`);
   const [cards, setCards] = useState<ReportCard[]>([]);
-  const [form, setForm] = useState({ term: '', periodStart: shiftDay(today, -90), periodEnd: today });
+  // Start from the newest term on the school calendar that has begun, when there is one.
+  const [form, setForm] = useState(() => {
+    const latest = calendarTerms[calendarTerms.length - 1];
+    return latest ? fromCalendar(latest, today) : { term: '', periodStart: shiftDay(today, -90), periodEnd: today };
+  });
   const [busy, setBusy] = useState<'make' | 'publish' | null>(null);
   useEffect(() => { if (loaded.data) setCards(loaded.data.cards); }, [loaded.data]);
 
@@ -167,6 +175,23 @@ function ClassCards({ classId, today, basePath }: { classId: string; today: stri
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4">
+            {calendarTerms.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="calendar-term">From the school calendar</Label>
+                <select
+                  id="calendar-term"
+                  className={NATIVE_SELECT_CLASS}
+                  value={calendarTerms.find((entry) => entry.title.slice(0, REPORT_TERM_MAX) === form.term && entry.startsOn === form.periodStart)?.id ?? ''}
+                  onChange={(e) => {
+                    const entry = calendarTerms.find((item) => item.id === e.target.value);
+                    if (entry) setForm(fromCalendar(entry, today));
+                  }}
+                >
+                  <option value="">Other dates</option>
+                  {calendarTerms.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="new-term">Term name</Label>
               <Input id="new-term" value={form.term} maxLength={REPORT_TERM_MAX} required placeholder="e.g. Term 1 2026/27" onChange={(e) => setForm({ ...form, term: e.target.value })} />
@@ -196,7 +221,7 @@ function Picker({ data, basePath }: { data: RecordsClasses; basePath: string }) 
   return (
     <div className="space-y-6">
       <div className="max-w-xs"><ClassSelect classes={data.classes} value={classId} onChange={setClassId} /></div>
-      <ClassCards key={classId} classId={classId} today={data.today} basePath={basePath} />
+      <ClassCards key={classId} classId={classId} today={data.today} basePath={basePath} calendarTerms={(data.calendar ?? []).filter((entry) => entry.kind === 'term' && entry.startsOn <= data.today)} />
     </div>
   );
 }

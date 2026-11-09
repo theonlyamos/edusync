@@ -38,6 +38,8 @@ import {
   CalendarCheck,
   Table2,
   ScrollText,
+  CalendarDays,
+  Search,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -70,6 +72,7 @@ const teacherLinks: SidebarLink[] = [
   { label: 'Report cards', icon: <ScrollText className="h-5 w-5" />, href: '/teachers/report-cards' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
+  { label: 'Calendar', icon: <CalendarDays className="h-5 w-5" />, href: '/teachers/calendar' },
   { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/teachers/announcements' },
   // Library pages: everything here can also be reached from inside a lesson.
   { label: 'Content', icon: <FileText className="h-5 w-5" />, href: '/teachers/content' },
@@ -89,6 +92,7 @@ const schoolLinks: SidebarLink[] = [
   { label: 'Subjects', icon: <BookMarked className="h-5 w-5" />, href: '/school/subjects' },
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/school/lessons' },
   { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
+  { label: 'Calendar', icon: <CalendarDays className="h-5 w-5" />, href: '/school/calendar' },
   { label: 'Attendance', icon: <CalendarCheck className="h-5 w-5" />, href: '/school/attendance' },
   { label: 'Gradebook', icon: <Table2 className="h-5 w-5" />, href: '/school/gradebook' },
   { label: 'Report cards', icon: <ScrollText className="h-5 w-5" />, href: '/school/report-cards' },
@@ -105,6 +109,7 @@ const studentLinks: SidebarLink[] = [
   { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/students/homework' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/students/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/students/timetable' },
+  { label: 'Calendar', icon: <CalendarDays className="h-5 w-5" />, href: '/students/calendar' },
   { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/students/announcements' },
   { label: 'Practice', icon: <FileText className="h-5 w-5" />, href: '/students/practice' },
   { label: 'Assessments', icon: <ClipboardCheck className="h-5 w-5" />, href: '/assessments' },
@@ -121,13 +126,20 @@ const parentLinks: SidebarLink[] = [
 
 export type PortalRole = 'admin' | 'teacher' | 'student' | 'school' | 'parent';
 
+const LINKS: Record<PortalRole, SidebarLink[]> = { admin: adminLinks, teacher: teacherLinks, student: studentLinks, school: schoolLinks, parent: parentLinks };
+
+/** The pages of a portal, for the jump-to search. */
+export const portalPages = (role: PortalRole) => LINKS[role].map(({ label, href }) => ({ label, href }));
+
 interface SidebarProps {
   role: PortalRole;
   mobile?: boolean;
   onNavigate?: () => void;
+  /** Opens the jump-to search. */
+  onSearch?: () => void;
 }
 
-export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
+export function Sidebar({ role, mobile = false, onNavigate, onSearch }: SidebarProps) {
   const pathname = usePathname();
   const supportUnread = useAdminSupportUnread(role === 'admin');
   // Sidebar collapse state
@@ -152,27 +164,7 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
     setCollapsed(next);
     localStorage.setItem('sidebar-collapsed', String(next));
   };
-  let links: SidebarLink[];
-
-  switch (role) {
-    case 'admin':
-      links = adminLinks;
-      break;
-    case 'teacher':
-      links = teacherLinks;
-      break;
-    case 'student':
-      links = studentLinks;
-      break;
-    case 'school':
-      links = schoolLinks;
-      break;
-    case 'parent':
-      links = parentLinks;
-      break;
-    default:
-      links = studentLinks;
-  }
+  const links = LINKS[role] ?? studentLinks;
 
   // Highlight only the most specific matching link, so My performance and
   // Homework aren't both active. The AI tutor counts as part of Lessons.
@@ -235,6 +227,20 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
           )}
           {!mobile && isCollapsed && role !== 'admin' && (
             <div className="mb-2 flex justify-center"><NotificationBell align="start" /></div>
+          )}
+          {onSearch && (
+            <Button
+              variant="outline"
+              size={isCollapsed ? 'icon' : 'default'}
+              onClick={onSearch}
+              aria-label="Search"
+              aria-keyshortcuts="Control+K Meta+K"
+              title={isCollapsed ? 'Search (Ctrl K)' : undefined}
+              className={cn('mb-2 min-h-11 w-full text-muted-foreground', isCollapsed ? 'justify-center' : 'justify-start')}
+            >
+              <Search className="h-5 w-5 shrink-0" />
+              {!isCollapsed && <><span className="ml-3 flex-1 text-left">Search</span><kbd className="hidden rounded border px-1.5 text-[11px] font-medium lg:inline">Ctrl K</kbd></>}
+            </Button>
           )}
           <div className="space-y-1">
             {links.map((link: SidebarLink) => {

@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { useHomeworkData } from '@/components/homework/shared';
 import { NATIVE_SELECT_CLASS } from '@/components/school-portal/PersonFormDialog';
 import { gradeLevelLabel } from '@/lib/school-registration';
+import type { CalendarEntry } from '@/lib/school-calendar';
 import type { RecordsClass } from '@/lib/school-records';
 
-export type RecordsClasses = { classes: RecordsClass[]; today: string; manager: boolean };
+export type RecordsClasses = { classes: RecordsClass[]; calendar: CalendarEntry[]; today: string; manager: boolean };
 
 export const useRecordsClasses = () => useHomeworkData<RecordsClasses>('/api/records/classes');
 
