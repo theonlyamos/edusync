@@ -15,9 +15,22 @@ const manrope = Manrope({
   variable: "--font-body",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://insyte.vercel.app';
+const siteTitle = "InsyteAI - AI Visual Learning Platform | Interactive Education with Voice & Visualizations";
+const siteDescription = "Transform learning with AI-powered visual explanations, interactive demos, and voice-guided education. Get personalized tutoring with real-time visualizations, quizzes, and collaborative tools for students and teachers.";
+
 export const metadata: Metadata = {
-  title: "InsyteAI - AI Visual Learning Platform | Interactive Education with Voice & Visualizations",
-  description: "Transform learning with AI-powered visual explanations, interactive demos, and voice-guided education. Get personalized tutoring with real-time visualizations, quizzes, and collaborative tools for students and teachers.",
+  metadataBase: new URL(siteUrl),
+  title: siteTitle,
+  description: siteDescription,
+  openGraph: {
+    type: 'website',
+    siteName: 'InsyteAI',
+    title: siteTitle,
+    description: siteDescription,
+    images: [{ url: '/hero_image.jpg' }],
+  },
+  twitter: { card: 'summary_large_image', title: siteTitle, description: siteDescription, images: ['/hero_image.jpg'] },
 };
 
 export default function RootLayout({

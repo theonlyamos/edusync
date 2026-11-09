@@ -62,7 +62,7 @@ function AccountStep() {
     const country = String(form.get('country') ?? '').trim();
 
     if (password !== confirmPassword) return setError('Passwords do not match.');
-    if (password.length < 6) return setError('Password must be at least 6 characters.');
+    if (password.length < 8) return setError('Password must be at least 8 characters.');
     if (schoolName.length < 2) return setError('Enter your school name.');
 
     setBusy(true);
@@ -133,11 +133,11 @@ function AccountStep() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" name="password" type="password" required minLength={6} className="h-11 bg-transparent" />
+          <Input id="password" name="password" type="password" required minLength={8} className="h-11 bg-transparent" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm password</Label>
-          <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={6} className="h-11 bg-transparent" />
+          <Input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} className="h-11 bg-transparent" />
         </div>
       </fieldset>
 

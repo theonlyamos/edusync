@@ -6,6 +6,7 @@ import { Logo } from '@/components/brand/Logo'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Mic, Code2, Play, ArrowRight, MessageSquare, Sun, Moon } from 'lucide-react'
+import { CREDIT_PRICE_CENTS, SCHOOL_TRIAL_CREDITS, SCHOOL_TRIAL_DAYS } from '@/lib/school-billing'
 import { applyThemePreference, readThemePreference, saveThemePreference, watchSystemTheme } from '@/lib/theme'
 
 function HomeContent() {
@@ -535,9 +536,26 @@ function HomeContent() {
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
             Everything you need to run modern lessons, with no credit card required to begin.
           </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-3 text-left">
+            <div className="rounded-xl border bg-background p-5">
+              <p className="text-sm text-muted-foreground">Learners</p>
+              <p className="mt-1 text-2xl font-semibold">60 free credits</p>
+              <p className="mt-2 text-sm text-muted-foreground">Enough for an hour with the voice tutor when you create an account.</p>
+            </div>
+            <div className="rounded-xl border bg-background p-5">
+              <p className="text-sm text-muted-foreground">Schools</p>
+              <p className="mt-1 text-2xl font-semibold">{SCHOOL_TRIAL_CREDITS} free credits</p>
+              <p className="mt-2 text-sm text-muted-foreground">A shared pool for your whole school to try in the first {SCHOOL_TRIAL_DAYS} days.</p>
+            </div>
+            <div className="rounded-xl border bg-background p-5">
+              <p className="text-sm text-muted-foreground">After that</p>
+              <p className="mt-1 text-2xl font-semibold">${(CREDIT_PRICE_CENTS / 100).toFixed(2)} per credit</p>
+              <p className="mt-2 text-sm text-muted-foreground">One credit is one minute of live AI tutoring. Buy only what you use.</p>
+            </div>
+          </div>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button asChild size="lg" className="px-8 py-6 text-base bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
-              <Link href="/learn" className="flex items-center gap-2">
+              <Link href="/demo" className="flex items-center gap-2">
                 <Play className="w-5 h-5" />
                 Try the live demo
                 <ArrowRight className="w-4 h-4" />
@@ -562,7 +580,7 @@ function HomeContent() {
                 A visual learning platform built for clarity, focus, and real student outcomes.
               </p>
               <Button asChild size="sm" className="bg-primary/10 text-foreground border border-primary/30 hover:bg-primary/20">
-                <Link href="/learn">Try Demo</Link>
+                <Link href="/demo">Try Demo</Link>
               </Button>
             </div>
 
@@ -584,14 +602,14 @@ function HomeContent() {
 
             <div className="space-y-3">
               <h3 className="font-semibold text-foreground">For Everyone</h3>
-              <Link href="/students/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Link href="/signup" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Students
               </Link>
-              <Link href="/teachers/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Teachers
+              <Link href="/register-school" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Schools and teachers
               </Link>
-              <Link href="/admin/dashboard" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Administrators
+              <Link href="/support" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Support
               </Link>
             </div>
 
