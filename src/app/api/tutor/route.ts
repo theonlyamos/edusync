@@ -92,13 +92,13 @@ Use 2-3 suggestedActions at most.`;
 };
 
 /** Set once the request has been counted against the student's daily allowance. */
-type CountedUse = { userId: string | null };
+type CountedUse = { userId: string | null; at: Date };
 
 export async function POST(req: NextRequest) {
-    const counted: CountedUse = { userId: null };
+    const counted: CountedUse = { userId: null, at: new Date() };
     const response = await handlePost(req, counted);
     // A server-side failure after counting should not cost the student a use.
-    if (counted.userId && response.status >= 500) await refundDailyCap('companion', counted.userId);
+    if (counted.userId && response.status >= 500) await refundDailyCap('companion', counted.userId, counted.at);
     return response;
 }
 
@@ -142,7 +142,7 @@ async function handlePost(req: NextRequest, counted: CountedUse) {
             );
         }
 
-        const capResponse = await enforceDailyCap('companion', user.id);
+        const capResponse = await enforceDailyCap('companion', user.id, counted.at);
         if (capResponse) return capResponse;
         counted.userId = user.id;
 
@@ -336,7 +336,7 @@ async function handlePost(req: NextRequest, counted: CountedUse) {
             });
         } catch (error) {
             console.error('AI provider unavailable:', error);
-            await refundDailyCap('companion', user.id);
+            await refundDailyCap('companion', user.id, counted.at);
             counted.userId = null;
             return NextResponse.json({
                 chatId: persistedChatId,

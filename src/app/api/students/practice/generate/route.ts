@@ -92,13 +92,13 @@ const exercisesSchema = z.object({
 });
 
 /** Set once the request has been counted against the student's daily allowance. */
-type CountedUse = { userId: string | null };
+type CountedUse = { userId: string | null; at: Date };
 
 export async function POST(req: Request) {
-    const counted: CountedUse = { userId: null };
+    const counted: CountedUse = { userId: null, at: new Date() };
     const response = await handlePost(req, counted);
     // A server-side failure after counting should not cost the student a use.
-    if (counted.userId && response.status >= 500) await refundDailyCap('practice', counted.userId);
+    if (counted.userId && response.status >= 500) await refundDailyCap('practice', counted.userId, counted.at);
     return response;
 }
 
@@ -159,7 +159,7 @@ async function handlePost(req: Request, counted: CountedUse) {
             return NextResponse.json({ message: 'Choose a subject and topic to practise.' }, { status: 400 });
         }
 
-        const capResponse = await enforceDailyCap('practice', user.id);
+        const capResponse = await enforceDailyCap('practice', user.id, counted.at);
         if (capResponse) return capResponse;
         counted.userId = user.id;
 

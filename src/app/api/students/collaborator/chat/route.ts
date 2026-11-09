@@ -16,13 +16,13 @@ if (!API_KEY) {
 }
 
 /** Set once the request has been counted against the student's daily allowance. */
-type CountedUse = { userId: string | null };
+type CountedUse = { userId: string | null; at: Date };
 
 export async function POST(request: NextRequest) {
-    const counted: CountedUse = { userId: null };
+    const counted: CountedUse = { userId: null, at: new Date() };
     const response = await handlePost(request, counted);
     // A server-side failure after counting should not cost the student a use.
-    if (counted.userId && response.status >= 500) await refundDailyCap('collaborator', counted.userId);
+    if (counted.userId && response.status >= 500) await refundDailyCap('collaborator', counted.userId, counted.at);
     return response;
 }
 
@@ -55,7 +55,7 @@ async function handlePost(request: NextRequest, counted: CountedUse) {
         }
         const base64Image = base64Match[1];
 
-        const capResponse = await enforceDailyCap('collaborator', user.id);
+        const capResponse = await enforceDailyCap('collaborator', user.id, counted.at);
         if (capResponse) return capResponse;
         counted.userId = user.id;
 

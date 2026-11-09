@@ -49,6 +49,12 @@ describe('daily caps', () => {
     expect(calls[1][1]).toEqual({ p_key: calls[0][1].p_key });
   });
 
+  it('refunds the day the use was counted on, even after midnight UTC', async () => {
+    rpcImpl = async () => ({ data: null, error: null });
+    await refundDailyCap('practice', 'u1', new Date('2026-10-22T23:59:30Z'));
+    expect(calls[0][1]).toEqual({ p_key: 'daily:practice:u1:2026-10-22' });
+  });
+
   it('gives a use back when asked, and never throws', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     rpcImpl = async () => ({ data: null, error: null });
