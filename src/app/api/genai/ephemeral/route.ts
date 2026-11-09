@@ -7,6 +7,8 @@ import {
     getLiveModel,
     liveTokenRequestSchema,
 } from '@/lib/live-tutor/live-connect-config';
+import { afterResponse } from '@/lib/after-response';
+import { warnLowCreditsForMember } from '@/lib/notifications.server';
 import { allowVoiceTokenRequest, finalizeVoiceTokenIssuance, grantVoiceMinutes } from '@/lib/live-tutor/voice-billing';
 
 /** A token must open its Live session within this window. */
@@ -95,6 +97,10 @@ export async function POST(request: NextRequest) {
             grantId: input.grantId ?? null,
             sessionId,
         });
+        if ((grant.status === 'charged' || grant.status === 'insufficient_credits') && grant.payer === 'school') {
+            const remaining = grant.remainingCredits;
+            afterResponse(() => warnLowCreditsForMember(auth.userId, remaining));
+        }
         if (grant.status === 'insufficient_credits') {
             return NextResponse.json(
                 {

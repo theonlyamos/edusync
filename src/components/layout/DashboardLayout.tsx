@@ -5,6 +5,7 @@ import { Menu } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
 import { Sidebar } from './Sidebar';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/homework', 'Homework'],
   ['/students/live', 'Live classes'],
   ['/students/timetable', 'Timetable'],
+  ['/students/announcements', 'Announcements'],
   ['/students/practice', 'Practice'],
   ['/students/tutor', 'Study companion'],
   ['/students/collaborator', 'Collaborator'],
@@ -34,6 +36,7 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/classes', 'Classes'],
   ['/school/subjects', 'Subjects'],
   ['/school/timetables', 'Timetables'],
+  ['/school/announcements', 'Announcements'],
   ['/school/lessons', 'Lessons'],
   ['/school/reports', 'Reports'],
   ['/school/billing', 'Billing'],
@@ -128,7 +131,7 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
                 <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} />
               </DialogContent>
             </Dialog>
-<span className="truncate text-sm font-semibold">
+<span className="min-w-0 flex-1 truncate text-sm font-semibold">
               {role === 'student'
                 ? pageTitle(STUDENT_PAGE_TITLES, pathname, 'Student Portal')
                 : role === 'school'
@@ -137,6 +140,7 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
                     ? pageTitle(ADMIN_PAGE_TITLES, pathname, 'Admin Portal')
                     : `${portalName} Portal`}
             </span>
+            {role !== 'admin' && <NotificationBell />}
           </header>
           <div className="hidden h-full shrink-0 lg:block"><Sidebar role={role} /></div>
         </>

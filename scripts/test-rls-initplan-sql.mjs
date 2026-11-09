@@ -43,13 +43,13 @@ const run = async (file) => db.exec(await readFile(path.join(migrations, file), 
 const BARE = /(?<!select )auth\.(uid|role|jwt)\(\)/i;
 
 test('every policy call to auth.* is wrapped in a subquery, and a second run changes nothing', async () => {
-    await run('20261109203000_rls_auth_initplan.sql');
+    await run('20261109203044_rls_auth_initplan.sql');
     const first = (await db.query('SELECT policyname, qual, with_check FROM pg_policies ORDER BY 1')).rows;
     for (const policy of first) {
         assert.ok(!BARE.test(policy.qual ?? ''), `${policy.policyname} USING still has a bare call`);
         assert.ok(!BARE.test(policy.with_check ?? ''), `${policy.policyname} CHECK still has a bare call`);
     }
-    await run('20261109203000_rls_auth_initplan.sql');
+    await run('20261109203044_rls_auth_initplan.sql');
     const second = (await db.query('SELECT policyname, qual, with_check FROM pg_policies ORDER BY 1')).rows;
     assert.deepEqual(second, first);
 });
@@ -63,7 +63,7 @@ test('the rewritten policies still enforce the same rules', async () => {
 });
 
 test('release_rate_limit gives one use back and never goes below zero', async () => {
-    await run('20261109203100_release_rate_limit.sql');
+    await run('20261109203032_release_rate_limit.sql');
     await db.exec(`SELECT public.release_rate_limit('daily:practice:a'); SELECT public.release_rate_limit('daily:practice:b'); SELECT public.release_rate_limit('missing');`);
     const rows = (await db.query('SELECT key, count FROM public.rate_limit_counters ORDER BY key')).rows;
     assert.deepEqual(rows, [{ key: 'daily:practice:a', count: 1 }, { key: 'daily:practice:b', count: 0 }]);

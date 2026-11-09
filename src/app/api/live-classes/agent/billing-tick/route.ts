@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateAgentSecret, UUID_RE } from '@/lib/live-class-agent-auth'
+import { afterResponse } from '@/lib/after-response'
+import { warnLowCreditsForLiveSession } from '@/lib/notifications.server'
 import { billLiveClassMinute } from '@/lib/school-billing.server'
 
 /**
@@ -21,6 +23,9 @@ export async function POST(request: NextRequest) {
     const bill = await billLiveClassMinute(sid)
     if (bill.status === 'not_found') {
       return NextResponse.json({ error: 'Invalid live class session' }, { status: 404 })
+    }
+    if (bill.payer === 'school' && (bill.status === 'charged' || bill.status === 'insufficient_credits')) {
+      afterResponse(() => warnLowCreditsForLiveSession(sid, bill.remainingCredits))
     }
     return NextResponse.json({
       status: bill.status,

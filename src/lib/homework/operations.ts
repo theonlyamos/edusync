@@ -16,6 +16,7 @@ import {
   HomeworkError,
 } from "./server";
 import { sourceForHomework } from "./sources";
+import { sendHomeworkNotices } from "./notices";
 export async function saveHomework(input: unknown, id?: string) {
   const draft = draftSchema.parse(input),
     context = id ? await requireHomework(id) : await requireHomeworkUser(true);
@@ -117,6 +118,8 @@ export async function homeworkAction(id: string, input: unknown) {
     throw new HomeworkError(403, "This action is not available for your role");
   const payload: Record<string, unknown> = { ...command };
   delete payload.action;
+  const startedAt = new Date();
+  let before: { student_id: string; submitted_at: string | null } | null = null;
   if ("attemptId" in command) {
     let query = db
       .from("homework_attempts")
@@ -127,6 +130,7 @@ export async function homeworkAction(id: string, input: unknown) {
     const { data: attempt, error } = await query.maybeSingle();
     if (error) throw error;
     if (!attempt) throw new HomeworkError(404, "Submission not found");
+    before = { student_id: attempt.student_id, submitted_at: attempt.submitted_at };
     try {
       if (command.action === "answers")
         payload.answers = validateAnswers(homework.questions, command.answers);
@@ -161,5 +165,15 @@ export async function homeworkAction(id: string, input: unknown) {
       throw error;
     }
   }
-  return mutate(db, user.id, id, command.action, payload);
+  const result = await mutate(db, user.id, id, command.action, payload);
+  await sendHomeworkNotices({
+    db,
+    homework,
+    actorId: user.id,
+    action: command.action,
+    recipients: command.action === "publish" ? command.recipients : undefined,
+    attempt: before,
+    startedAt,
+  });
+  return result;
 }
