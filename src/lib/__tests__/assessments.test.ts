@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessmentColumns, assessmentInputSchema, gradeSubmission, mapAssessment, normalizeQuestions, type AssessmentRow } from '@/lib/assessments'
+import { assessmentColumns, assessmentInputSchema, gradeSubmission, mapAssessment, seededShuffle, normalizeQuestions, type AssessmentRow } from '@/lib/assessments'
 
 const input = {
   title: 'Fractions check',
@@ -77,5 +77,39 @@ describe('mapAssessment', () => {
 
   it('gives the author the answer key', () => {
     expect(mapAssessment(row(), { includeAnswers: true }).questions[2].correctAnswer).toBe('Numerator')
+  })
+})
+
+describe('per-student order', () => {
+  const letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+  it('shuffles the same way for the same seed and keeps every item', () => {
+    const once = seededShuffle(letters, 'student-1:a-1')
+    expect(seededShuffle(letters, 'student-1:a-1')).toEqual(once)
+    expect([...once].sort()).toEqual(letters)
+    expect(letters).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'])
+  })
+
+  it('gives different students different orders', () => {
+    const orders = new Set(['s-1', 's-2', 's-3', 's-4', 's-5', 's-6'].map((id) => seededShuffle(letters, `${id}:a-1`).join('')))
+    expect(orders.size).toBeGreaterThan(3)
+  })
+
+  it('reorders questions and choices for a student without leaking answers', () => {
+    const plain = mapAssessment(row(), { includeAnswers: false })
+    const seeds = ['s-1:a-1', 's-2:a-1', 's-3:a-1', 's-4:a-1', 's-5:a-1', 's-6:a-1']
+    const shuffled = seeds.map((shuffleSeed) => mapAssessment(row(), { includeAnswers: false, shuffleSeed }))
+    for (const view of shuffled) {
+      expect(view.questions.map((q) => q._id).sort()).toEqual(plain.questions.map((q) => q._id).sort())
+      expect(JSON.stringify(view.questions)).not.toContain('correctAnswer')
+      const choice = view.questions.find((q) => q.type === 'multiple_choice') as { options?: string[] }
+      expect([...(choice.options ?? [])].sort()).toEqual(['10', '2', '5'])
+    }
+    expect(new Set(shuffled.map((view) => view.questions.map((q) => q._id).join())).size).toBeGreaterThan(1)
+  })
+
+  it('keeps the written order for the teacher', () => {
+    const teacher = mapAssessment(row(), { includeAnswers: true, shuffleSeed: 's-1:a-1' })
+    expect(teacher.questions.map((q) => q._id)).toEqual(['q-1', 'q-2', 'q-3'])
   })
 })

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Archive, BookOpen, Loader2, Plus, RotateCcw } from 'lucide-react';
+import { Archive, BookOpen, Library, Loader2, Plus, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -104,10 +104,15 @@ export default function LessonsPage() {
             <h2 className="text-3xl font-bold text-foreground">Lessons</h2>
             <p className="text-muted-foreground">Create and manage your lessons</p>
           </div>
-          <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Create Lesson
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/teachers/lessons/library" className="flex items-center gap-2"><Library className="h-4 w-4" />School library</Link>
+            </Button>
+            <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Create Lesson
+            </Button>
+          </div>
         </div>
 
         <div role="tablist" aria-label="Lesson list" className="mb-6 inline-flex rounded-lg border bg-muted/40 p-1 text-sm">

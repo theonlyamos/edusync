@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -57,6 +57,28 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTimeWarning, setShowTimeWarning] = useState(false);
   const [startTime] = useState(new Date());
+  // Leaving the page (another tab, another app) is counted for the teacher.
+  const focusLosses = useRef(0);
+  const [leftPage, setLeftPage] = useState(0);
+
+  useEffect(() => {
+    let lastAt = 0;
+    const left = () => {
+      // Hiding the tab also blurs the window: count that once.
+      const now = Date.now();
+      if (now - lastAt < 1000) return;
+      lastAt = now;
+      focusLosses.current += 1;
+      setLeftPage(focusLosses.current);
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') left(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', left);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', left);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -121,6 +143,7 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
         body: JSON.stringify({
           answers: formattedAnswers,
           startedAt: startTime.toISOString(),
+          focusLosses: focusLosses.current,
         }),
       });
 
@@ -221,6 +244,13 @@ export function AssessmentTaker({ assessment }: AssessmentTakerProps) {
             </span>
             <span>{currentQuestion.points} points</span>
           </div>
+
+          {leftPage > 0 && (
+            <p role="status" className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span>You left this page {leftPage === 1 ? 'once' : `${leftPage} times`}. Your teacher can see this, so stay here until you submit.</span>
+            </p>
+          )}
 
           <div className="space-y-4">
             <h3 className="text-lg font-medium">{currentQuestion.question}</h3>

@@ -19,6 +19,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
         return NextResponse.json(mapAssessment(row, {
             // Only the author (or an admin) sees the answer key.
             includeAnswers: canManage,
+            // Each student gets their own order, to make copying from a neighbour harder.
+            shuffleSeed: actor.role === 'student' ? `${actor.userId}:${row.id}` : undefined,
             creator: row.createdby ? creators.get(row.createdby) : null,
         }));
     } catch (error) {
