@@ -86,6 +86,19 @@ export function parseNewGuardian(input: unknown): NewGuardian {
   return { name, email, studentId: body.studentId };
 }
 
+/** Whether this school earlier gave this email a parent account that the parent then activated. */
+async function wasParentHere(supabase: ServiceSupabase, schoolId: string, email: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('organization_invitations')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', schoolId)
+    .eq('email', email.toLowerCase())
+    .eq('role', PARENT_LINK_ROLE)
+    .not('accepted_at', 'is', null);
+  if (error) throw error;
+  return Boolean(count);
+}
+
 /**
  * Links a parent to a student. A new email gets a new account and an
  * activation link. An email the school already added as a parent is linked to
@@ -119,9 +132,12 @@ export async function addGuardian(context: PeopleContext, input: NewGuardian): P
     guardianId = existing.id as string;
     const { data: links, error } = await supabase.from('student_guardians').select('student_id').eq('organization_id', school.id).eq('guardian_id', guardianId).limit(MAX_CHILDREN_PER_GUARDIAN + 1);
     if (error) throw error;
-    if (!links?.length) throw new PeopleError('An InsyteAI account already uses this email. Use a different email address for the parent.', 409);
-    if (links.some((link) => link.student_id === input.studentId)) throw new PeopleError('This parent already follows that student', 409);
-    if (links.length >= MAX_CHILDREN_PER_GUARDIAN) throw new PeopleError(`A parent can follow up to ${MAX_CHILDREN_PER_GUARDIAN} students`, 409);
+    // An account with no students here is only ours to link if this school made it as a parent account.
+    if (!links?.length && !(await wasParentHere(supabase, school.id, input.email))) {
+      throw new PeopleError('An InsyteAI account already uses this email. Use a different email address for the parent.', 409);
+    }
+    if (links?.some((link) => link.student_id === input.studentId)) throw new PeopleError('This parent already follows that student', 409);
+    if ((links?.length ?? 0) >= MAX_CHILDREN_PER_GUARDIAN) throw new PeopleError(`A parent can follow up to ${MAX_CHILDREN_PER_GUARDIAN} students`, 409);
   } else {
     const { data: made, error: createError } = await supabase.auth.admin.createUser({ email: input.email, email_confirm: true, user_metadata: { name: input.name } });
     if (createError || !made?.user) {
@@ -261,7 +277,7 @@ export async function parentChildren(supabase: ServiceSupabase, guardianId: stri
     const from = shiftDay(today, -90);
     const [attendance, marks, cards, klass] = await Promise.all([
       attendanceTotals(supabase, school.id, [link.student_id], from, today),
-      studentMarks(supabase, school.id, [link.student_id], from, today),
+      studentMarks(supabase, school, [link.student_id], from, today),
       studentReportCards(supabase, school.id, link.student_id),
       supabase.from('school_class_students').select('school_classes!inner(name, grade)').eq('student_id', link.student_id).eq('organization_id', school.id).limit(1).maybeSingle(),
     ]);

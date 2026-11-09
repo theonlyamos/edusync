@@ -2,11 +2,12 @@ import 'server-only';
 import type { NextResponse } from 'next/server';
 import { notify, type NewNotification } from '@/lib/notifications.server';
 import { isSchoolManager, requireSchoolRole, type SchoolRecord, type ServiceSupabase } from '@/lib/school-access.server';
-import { dayKey } from '@/lib/school-reports';
+import { dayKey, dayStart } from '@/lib/school-reports';
 import {
   ATTENDANCE_STATUSES,
   emptyAttendance,
   isDay,
+  shiftDay,
   subjectResults,
   type AttendanceStatus,
   type AttendanceTotals,
@@ -224,9 +225,11 @@ export async function attendanceTotals(supabase: ServiceSupabase, schoolId: stri
  * Released homework marks and handed-in assessment scores for the students,
  * from work set by this school, dated between `from` and `to` (inclusive days).
  */
-export async function studentMarks(supabase: ServiceSupabase, schoolId: string, studentIds: string[], from: string, to: string): Promise<MarkItem[]> {
-  const start = `${from}T00:00:00.000Z`;
-  const end = `${to}T23:59:59.999Z`;
+export async function studentMarks(supabase: ServiceSupabase, school: Pick<SchoolRecord, 'id' | 'timezone'>, studentIds: string[], from: string, to: string): Promise<MarkItem[]> {
+  const schoolId = school.id;
+  // Days are the school's own: from the start of `from` to the start of the day after `to`.
+  const start = dayStart(from, school.timezone);
+  const end = dayStart(shiftDay(to, 1), school.timezone);
   const marks: MarkItem[] = [];
 
   for (const part of chunked(studentIds)) {
@@ -247,7 +250,7 @@ export async function studentMarks(supabase: ServiceSupabase, schoolId: string, 
     const attemptOf = new Map(mine.map((row) => [row.id, row]));
     const latest = new Map<string, { attempt: number; item: MarkItem }>();
     for (const ids of chunked(mine.map((row) => row.id))) {
-      const { data, error } = await supabase.from('homework_grades').select('attempt_id, released_marks, released_at').in('attempt_id', ids).gte('released_at', start).lte('released_at', end);
+      const { data, error } = await supabase.from('homework_grades').select('attempt_id, released_marks, released_at').in('attempt_id', ids).gte('released_at', start).lt('released_at', end);
       if (error) throw error;
       for (const grade of data ?? []) {
         const attempt = attemptOf.get(grade.attempt_id as string);
@@ -272,7 +275,7 @@ export async function studentMarks(supabase: ServiceSupabase, schoolId: string, 
         .select('assessment_id, student_id, score, percentage, submittedat')
         .in('student_id', part)
         .gte('submittedat', start)
-        .lte('submittedat', end)
+        .lt('submittedat', end)
         .order('id')
         .range(a, b),
     );
@@ -349,7 +352,7 @@ export async function generateReportCards(actor: RecordsActor, klass: ClassInfo,
   if (roster.length === 0) throw new RecordsError('This class has no students yet');
   const ids = roster.map((student) => student.studentId);
   const [marks, attendance] = await Promise.all([
-    studentMarks(supabase, school.id, ids, period.periodStart, period.periodEnd),
+    studentMarks(supabase, school, ids, period.periodStart, period.periodEnd),
     attendanceTotals(supabase, school.id, ids, period.periodStart, period.periodEnd),
   ]);
   const now = new Date().toISOString();

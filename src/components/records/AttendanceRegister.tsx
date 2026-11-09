@@ -21,7 +21,7 @@ const STATUS_STYLE: Record<AttendanceStatus, string> = {
 
 type Draft = Record<string, { status: AttendanceStatus | null; note: string }>;
 
-function RegisterSheet({ classId, day }: { classId: string; day: string }) {
+function RegisterSheet({ classId, day, onDirty }: { classId: string; day: string; onDirty: (dirty: boolean) => void }) {
   const { toast } = useToast();
   const register = useHomeworkData<Register>(`/api/records/attendance?classId=${classId}&day=${day}`);
   const [draft, setDraft] = useState<Draft>({});
@@ -34,13 +34,15 @@ function RegisterSheet({ classId, day }: { classId: string; day: string }) {
     setDirty(false);
   }, [register.data]);
 
-  // Warn before leaving with marks that haven't been saved.
+  // Warn before leaving with marks that haven't been saved. The picker asks
+  // too, before it swaps this sheet for another class or day.
   useEffect(() => {
+    onDirty(dirty);
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  }, [dirty, onDirty]);
 
   const rows = register.data?.rows ?? [];
   const counts = useMemo(() => {
@@ -146,26 +148,34 @@ function RegisterSheet({ classId, day }: { classId: string; day: string }) {
 function Picker({ data }: { data: RecordsClasses }) {
   const [classId, setClassId] = useState(data.classes[0].id);
   const [day, setDay] = useState(data.today);
+  const [dirty, setDirty] = useState(false);
   const earliest = shiftDay(data.today, -365);
+  // Changing class or day replaces the sheet, so check before dropping unsaved marks.
+  const leave = (go: () => void) => {
+    if (dirty && !window.confirm('This register has marks you haven’t saved. Leave without saving them?')) return;
+    setDirty(false);
+    go();
+  };
+  const pickDay = (next: string) => leave(() => setDay(next));
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,18rem)_auto] sm:items-end">
-        <ClassSelect classes={data.classes} value={classId} onChange={setClassId} />
+        <ClassSelect classes={data.classes} value={classId} onChange={(id) => leave(() => setClassId(id))} />
         <div className="space-y-1.5">
           <Label htmlFor="register-day">Date</Label>
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Previous day" disabled={day <= earliest} onClick={() => setDay(shiftDay(day, -1))}>
+            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Previous day" disabled={day <= earliest} onClick={() => pickDay(shiftDay(day, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Input id="register-day" type="date" value={day} min={earliest} max={data.today} onChange={(e) => { if (e.target.value && e.target.value <= data.today) setDay(e.target.value); }} className="w-auto" />
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Next day" disabled={day >= data.today} onClick={() => setDay(shiftDay(day, 1))}>
+            <Input id="register-day" type="date" value={day} min={earliest} max={data.today} onChange={(e) => { if (e.target.value && e.target.value <= data.today) pickDay(e.target.value); }} className="w-auto" />
+            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Next day" disabled={day >= data.today} onClick={() => pickDay(shiftDay(day, 1))}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            {day !== data.today && <Button variant="ghost" onClick={() => setDay(data.today)}>Today</Button>}
+            {day !== data.today && <Button variant="ghost" onClick={() => pickDay(data.today)}>Today</Button>}
           </div>
         </div>
       </div>
-      <RegisterSheet key={`${classId}:${day}`} classId={classId} day={day} />
+      <RegisterSheet key={`${classId}:${day}`} classId={classId} day={day} onDirty={setDirty} />
     </div>
   );
 }

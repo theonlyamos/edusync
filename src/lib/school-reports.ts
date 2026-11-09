@@ -46,6 +46,26 @@ export function dayKey(at: Date | string, timeZone?: string | null): string {
   }
 }
 
+/** The moment a calendar day (YYYY-MM-DD) begins in the school's time zone, as an ISO instant. */
+export function dayStart(day: string, timeZone?: string | null): string {
+  const wall = Date.parse(`${day}T00:00:00Z`)
+  let format: Intl.DateTimeFormat
+  try {
+    format = new Intl.DateTimeFormat('en-US', { timeZone: timeZone || 'UTC', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch {
+    return new Date(wall).toISOString()
+  }
+  // How far the zone's clock is ahead of UTC at a given moment.
+  const offsetAt = (at: number) => {
+    const part = Object.fromEntries(format.formatToParts(new Date(at)).map((p) => [p.type, Number(p.value)]))
+    return Date.UTC(part.year, part.month - 1, part.day, part.hour, part.minute, part.second) - Math.floor(at / 1000) * 1000
+  }
+  // Two passes settle days on which the clocks change.
+  let at = wall - offsetAt(wall)
+  at = wall - offsetAt(at)
+  return new Date(at).toISOString()
+}
+
 /** Each day in the period, oldest first, ending with today. */
 export function periodDays(to: Date, days: number, timeZone?: string | null): string[] {
   const keys: string[] = []

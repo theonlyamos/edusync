@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const roster = await classRoster(actor.supabase, actor.school.id, klass.id);
     const ids = roster.map((student) => student.studentId);
     const [marks, attendance] = await Promise.all([
-      studentMarks(actor.supabase, actor.school.id, ids, from, to),
+      studentMarks(actor.supabase, actor.school, ids, from, to),
       attendanceTotals(actor.supabase, actor.school.id, ids, from, to),
     ]);
     return NextResponse.json({ class: klass, from, to, gradebook: buildGradebook(roster, marks), attendance: Object.fromEntries(attendance) });

@@ -69,3 +69,20 @@ describe('report card subjects', () => {
     expect(subjectResults([])).toEqual({ subjects: [], overall: null });
   });
 });
+
+describe('dayStart', () => {
+  it('finds the start of a school day in its own time zone', async () => {
+    const { dayStart } = await import('@/lib/school-reports');
+    expect(dayStart('2026-11-09', 'UTC')).toBe('2026-11-09T00:00:00.000Z');
+    expect(dayStart('2026-11-09', 'America/New_York')).toBe('2026-11-09T05:00:00.000Z');
+    expect(dayStart('2026-11-09', 'Africa/Accra')).toBe('2026-11-09T00:00:00.000Z');
+    expect(dayStart('2026-11-09', 'Asia/Kolkata')).toBe('2026-11-08T18:30:00.000Z');
+    // Clocks go forward and back in New York on these days.
+    expect(dayStart('2026-03-08', 'America/New_York')).toBe('2026-03-08T05:00:00.000Z');
+    expect(dayStart('2026-03-09', 'America/New_York')).toBe('2026-03-09T04:00:00.000Z');
+    expect(dayStart('2026-11-01', 'America/New_York')).toBe('2026-11-01T04:00:00.000Z');
+    expect(dayStart('2026-11-02', 'America/New_York')).toBe('2026-11-02T05:00:00.000Z');
+    expect(dayStart('2026-11-09', 'Not/AZone')).toBe('2026-11-09T00:00:00.000Z');
+    expect(dayStart('2026-11-09', null)).toBe('2026-11-09T00:00:00.000Z');
+  });
+});
