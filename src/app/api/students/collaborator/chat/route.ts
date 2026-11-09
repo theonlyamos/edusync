@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server';
 import { getUserSchoolId } from '@/lib/school';
-import { enforceDailyCap } from '@/lib/daily-caps';
+import { enforceDailyCap, refundDailyCap } from '@/lib/daily-caps';
 
 const MAX_MESSAGE_LENGTH = 2000;
 // A drawn canvas as PNG is well under this; it stops oversized uploads reaching the model.
@@ -15,7 +15,18 @@ if (!API_KEY) {
     console.error('GEMINI_API_KEY environment variable not set');
 }
 
+/** Set once the request has been counted against the student's daily allowance. */
+type CountedUse = { userId: string | null };
+
 export async function POST(request: NextRequest) {
+    const counted: CountedUse = { userId: null };
+    const response = await handlePost(request, counted);
+    // A server-side failure after counting should not cost the student a use.
+    if (counted.userId && response.status >= 500) await refundDailyCap('collaborator', counted.userId);
+    return response;
+}
+
+async function handlePost(request: NextRequest, counted: CountedUse) {
     try {
         // Signed-in school members only.
         const supabase = await createSSRUserSupabase();
@@ -46,6 +57,7 @@ export async function POST(request: NextRequest) {
 
         const capResponse = await enforceDailyCap('collaborator', user.id);
         if (capResponse) return capResponse;
+        counted.userId = user.id;
 
         const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
 

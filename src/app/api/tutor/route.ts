@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSSRUserSupabase } from '@/lib/supabase.server';
 import { generateAICompletion } from '@/lib/ai';
 import { rateLimit } from '@/lib/rate-limiter';
-import { enforceDailyCap } from '@/lib/daily-caps';
+import { enforceDailyCap, refundDailyCap } from '@/lib/daily-caps';
 import {
     LessonAccessError,
     MAX_STORED_MESSAGES,
@@ -91,7 +91,18 @@ Use 2-3 suggestedActions at most.`;
     return prompt;
 };
 
+/** Set once the request has been counted against the student's daily allowance. */
+type CountedUse = { userId: string | null };
+
 export async function POST(req: NextRequest) {
+    const counted: CountedUse = { userId: null };
+    const response = await handlePost(req, counted);
+    // A server-side failure after counting should not cost the student a use.
+    if (counted.userId && response.status >= 500) await refundDailyCap('companion', counted.userId);
+    return response;
+}
+
+async function handlePost(req: NextRequest, counted: CountedUse) {
     try {
         const supabase = await createSSRUserSupabase();
         const { data: { user } } = await supabase.auth.getUser();
@@ -133,6 +144,7 @@ export async function POST(req: NextRequest) {
 
         const capResponse = await enforceDailyCap('companion', user.id);
         if (capResponse) return capResponse;
+        counted.userId = user.id;
 
         const { chatId, content, mode, intent, panelDimensions } = parsedBody.data;
         const gradeLevel = student?.grade ?? "the student's current level";
@@ -324,6 +336,8 @@ export async function POST(req: NextRequest) {
             });
         } catch (error) {
             console.error('AI provider unavailable:', error);
+            await refundDailyCap('companion', user.id);
+            counted.userId = null;
             return NextResponse.json({
                 chatId: persistedChatId,
                 aiStatus: 'unavailable',

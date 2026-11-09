@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { normalizePublishedObjectives } from '@/lib/lesson-artifacts/student-learning';
 import { getUserSchoolId, inActiveSchool } from '@/lib/school';
-import { enforceDailyCap } from '@/lib/daily-caps';
+import { enforceDailyCap, refundDailyCap } from '@/lib/daily-caps';
 
 async function publishedLessonForStudent(userId: string, lessonId: string, studentGrade: string | null) {
     const db = createServerSupabase();
@@ -91,7 +91,18 @@ const exercisesSchema = z.object({
     questions: z.array(questionSchema)
 });
 
+/** Set once the request has been counted against the student's daily allowance. */
+type CountedUse = { userId: string | null };
+
 export async function POST(req: Request) {
+    const counted: CountedUse = { userId: null };
+    const response = await handlePost(req, counted);
+    // A server-side failure after counting should not cost the student a use.
+    if (counted.userId && response.status >= 500) await refundDailyCap('practice', counted.userId);
+    return response;
+}
+
+async function handlePost(req: Request, counted: CountedUse) {
     try {
         const supabase = await createSSRUserSupabase();
         const { data: { user } } = await supabase.auth.getUser();
@@ -150,6 +161,7 @@ export async function POST(req: Request) {
 
         const capResponse = await enforceDailyCap('practice', user.id);
         if (capResponse) return capResponse;
+        counted.userId = user.id;
 
         const lessonContent = [
             `Topic: ${topic}`,

@@ -51,3 +51,19 @@ export async function enforceDailyCap(feature: DailyCapFeature, userId: string):
     return null;
   }
 }
+
+/**
+ * Gives back the use counted by enforceDailyCap when the AI call then failed,
+ * so a student never loses allowance to an error. Best effort: a failure here
+ * only means the use stays counted.
+ */
+export async function refundDailyCap(feature: DailyCapFeature, userId: string): Promise<void> {
+  try {
+    const { error } = await createServerSupabase().rpc('release_rate_limit', {
+      p_key: dailyCapKey(feature, userId),
+    });
+    if (error) console.error(`[daily-cap:${feature}] refund failed:`, error.message);
+  } catch (error) {
+    console.error(`[daily-cap:${feature}] refund failed:`, error);
+  }
+}
