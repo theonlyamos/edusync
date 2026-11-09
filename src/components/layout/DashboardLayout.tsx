@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useContext, useState } from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, Search } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AppUserContext, SupabaseSessionContext } from '@/components/providers/SupabaseAuthProvider';
-import { Sidebar } from './Sidebar';
+import { Sidebar, portalPages } from './Sidebar';
+import { CommandPalette } from '@/components/search/CommandPalette';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -19,6 +20,7 @@ const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/homework', 'Homework'],
   ['/students/live', 'Live classes'],
   ['/students/timetable', 'Timetable'],
+  ['/students/calendar', 'Calendar'],
   ['/students/announcements', 'Announcements'],
   ['/students/report-cards', 'Report cards'],
   ['/students/practice', 'Practice'],
@@ -37,6 +39,7 @@ const SCHOOL_PAGE_TITLES: [string, string][] = [
   ['/school/classes', 'Classes'],
   ['/school/subjects', 'Subjects'],
   ['/school/timetables', 'Timetables'],
+  ['/school/calendar', 'Calendar'],
   ['/school/announcements', 'Announcements'],
   ['/school/parents', 'Parents'],
   ['/school/attendance', 'Attendance'],
@@ -84,6 +87,21 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
   const { user: appUser, loading, error } = useContext(AppUserContext);
   const pathname = usePathname();
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Ctrl or ⌘ + K opens the jump-to search from anywhere in a portal.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'k' || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      // Code editors use this chord themselves.
+      if (event.target instanceof Element && event.target.closest('.monaco-editor')) return;
+      event.preventDefault();
+      setNavigationOpen(false);
+      setSearchOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 1024px)');
@@ -133,7 +151,7 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
               <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none p-0 sm:rounded-none [&>button]:h-11 [&>button]:w-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center">
                 <DialogTitle className="sr-only">{portalName} navigation</DialogTitle>
                 <DialogDescription className="sr-only">Choose a page in your {portalName.toLowerCase()} portal.</DialogDescription>
-                <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} />
+                <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} onSearch={() => { setNavigationOpen(false); setSearchOpen(true); }} />
               </DialogContent>
             </Dialog>
 <span className="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -147,9 +165,13 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
                       ? 'My children'
                     : `${portalName} Portal`}
             </span>
+            <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Search" onClick={() => setSearchOpen(true)}>
+              <Search className="h-5 w-5" />
+            </Button>
             {role !== 'admin' && <NotificationBell />}
           </header>
-          <div className="hidden h-full shrink-0 print:hidden lg:block"><Sidebar role={role} /></div>
+          <div className="hidden h-full shrink-0 print:hidden lg:block"><Sidebar role={role} onSearch={() => setSearchOpen(true)} /></div>
+          <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} links={portalPages(role)} portal={role === 'school' ? 'school' : role === 'teacher' ? 'teacher' : null} />
         </>
       )}
       <main className="relative min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible">

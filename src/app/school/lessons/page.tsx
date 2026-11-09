@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { Archive, ArchiveRestore, Loader2, Search } from 'lucide-react';
@@ -40,7 +40,9 @@ function LessonsPage() {
   const params = useSearchParams();
   const { toast } = useToast();
   const lessons = useHomeworkData<{ lessons: SchoolLesson[] }>('/api/schools/current/lessons');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(params.get('q') ?? '');
+  const linkedQuery = params.get('q');
+  useEffect(() => { if (linkedQuery !== null) setQuery(linkedQuery); }, [linkedQuery]);
   const [teacher, setTeacher] = useState(params.get('teacher') ?? 'all');
   const [grade, setGrade] = useState(params.get('grade') ?? 'all');
   const [status, setStatus] = useState<StatusFilter>('current');
