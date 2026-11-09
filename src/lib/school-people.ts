@@ -370,6 +370,8 @@ export function schoolRoleLabel(role: string): string {
   if (role === 'admin') return 'Administrator'
   if (role === 'teacher') return 'Teacher'
   if (role === 'student') return 'Student'
+  // Parents are not school members; their links carry the spare "member" role.
+  if (role === 'member') return 'Parent'
   return role
 }
 
@@ -412,6 +414,7 @@ export const ACCOUNT_STATUS_LABEL: Record<AccountStatus, string> = {
 export function homeForSchoolRole(role: string): string {
   if (role === 'teacher') return '/teachers/dashboard'
   if (role === 'student') return '/students/dashboard'
+  if (role === 'member') return '/parents'
   return '/school/dashboard'
 }
 

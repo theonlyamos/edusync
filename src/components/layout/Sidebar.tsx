@@ -35,6 +35,9 @@ import {
   KeyRound,
   History,
   Megaphone,
+  CalendarCheck,
+  Table2,
+  ScrollText,
 } from "lucide-react";
 
 interface SidebarLink {
@@ -62,6 +65,9 @@ const teacherLinks: SidebarLink[] = [
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/teachers/lessons' },
   { label: 'Homework', icon: <FileCheck className="h-5 w-5" />, href: '/teachers/homework' },
   { label: 'Students', icon: <Users className="h-5 w-5" />, href: '/teachers/students' },
+  { label: 'Attendance', icon: <CalendarCheck className="h-5 w-5" />, href: '/teachers/attendance' },
+  { label: 'Gradebook', icon: <Table2 className="h-5 w-5" />, href: '/teachers/gradebook' },
+  { label: 'Report cards', icon: <ScrollText className="h-5 w-5" />, href: '/teachers/report-cards' },
   { label: 'Live classes', icon: <Video className="h-5 w-5" />, href: '/teachers/live' },
   { label: 'Timetable', icon: <Calendar className="h-5 w-5" />, href: '/teachers/timetable' },
   { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/teachers/announcements' },
@@ -76,12 +82,16 @@ const schoolLinks: SidebarLink[] = [
   { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, href: '/school/dashboard' },
   { label: 'Students', icon: <GraduationCap className="h-5 w-5" />, href: '/school/students' },
   { label: 'Teachers', icon: <Users className="h-5 w-5" />, href: '/school/teachers' },
+  { label: 'Parents', icon: <Users className="h-5 w-5" />, href: '/school/parents' },
   { label: 'Administrators', icon: <ShieldCheck className="h-5 w-5" />, href: '/school/administrators' },
   { label: 'Grades', icon: <Layers className="h-5 w-5" />, href: '/school/grades' },
   { label: 'Classes', icon: <School className="h-5 w-5" />, href: '/school/classes' },
   { label: 'Subjects', icon: <BookMarked className="h-5 w-5" />, href: '/school/subjects' },
   { label: 'Lessons', icon: <Book className="h-5 w-5" />, href: '/school/lessons' },
   { label: 'Timetables', icon: <Calendar className="h-5 w-5" />, href: '/school/timetables' },
+  { label: 'Attendance', icon: <CalendarCheck className="h-5 w-5" />, href: '/school/attendance' },
+  { label: 'Gradebook', icon: <Table2 className="h-5 w-5" />, href: '/school/gradebook' },
+  { label: 'Report cards', icon: <ScrollText className="h-5 w-5" />, href: '/school/report-cards' },
   { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/school/announcements' },
   { label: 'Reports', icon: <BarChart2 className="h-5 w-5" />, href: '/school/reports' },
   { label: 'Billing', icon: <CreditCard className="h-5 w-5" />, href: '/school/billing' },
@@ -101,9 +111,15 @@ const studentLinks: SidebarLink[] = [
   { label: 'Study companion', icon: <MessagesSquare className="h-5 w-5" />, href: '/students/tutor' },
   { label: 'Collaborator', icon: <Users className="h-5 w-5" />, href: '/students/collaborator' },
   { label: 'My performance', icon: <BarChart2 className="h-5 w-5" />, href: '/students/homework/performance' },
+  { label: 'Report cards', icon: <ScrollText className="h-5 w-5" />, href: '/students/report-cards' },
 ];
 
-export type PortalRole = 'admin' | 'teacher' | 'student' | 'school';
+// The parent portal: a read-only view of the students a parent follows.
+const parentLinks: SidebarLink[] = [
+  { label: 'My children', icon: <Users className="h-5 w-5" />, href: '/parents' },
+];
+
+export type PortalRole = 'admin' | 'teacher' | 'student' | 'school' | 'parent';
 
 interface SidebarProps {
   role: PortalRole;
@@ -150,6 +166,9 @@ export function Sidebar({ role, mobile = false, onNavigate }: SidebarProps) {
       break;
     case 'school':
       links = schoolLinks;
+      break;
+    case 'parent':
+      links = parentLinks;
       break;
     default:
       links = studentLinks;

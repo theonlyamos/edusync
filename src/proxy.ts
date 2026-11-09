@@ -119,7 +119,9 @@ export async function proxy(request: NextRequest) {
   // The school admin portal checks the school role itself; here it just needs a session.
   const isSchoolArea = pathname === '/school' || pathname.startsWith('/school/');
   const isUnprotectedPath = pathname.startsWith('/learn/embed/new');
-  const isProtected = (isAdminArea || isTeacherArea || isStudentArea || isSessionArea || isSchoolArea || isHelpArea) && !isUnprotectedPath;
+  // The parent portal's API checks which students the account follows; here it just needs a session.
+  const isParentArea = pathname === '/parents' || pathname.startsWith('/parents/');
+  const isProtected = (isAdminArea || isTeacherArea || isStudentArea || isSessionArea || isSchoolArea || isParentArea || isHelpArea) && !isUnprotectedPath;
 
   if (!isProtected) {
     return response;
@@ -170,6 +172,8 @@ export const config = {
     '/students/:path*',
     '/school',
     '/school/:path*',
+    '/parents',
+    '/parents/:path*',
     '/help',
     '/help/:path*',
     '/api/:path*',
