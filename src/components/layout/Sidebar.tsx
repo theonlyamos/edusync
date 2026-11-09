@@ -112,6 +112,7 @@ const studentLinks: SidebarLink[] = [
   { label: 'Calendar', icon: <CalendarDays className="h-5 w-5" />, href: '/students/calendar' },
   { label: 'Announcements', icon: <Megaphone className="h-5 w-5" />, href: '/students/announcements' },
   { label: 'Practice', icon: <FileText className="h-5 w-5" />, href: '/students/practice' },
+  { label: 'Flashcards', icon: <Layers className="h-5 w-5" />, href: '/students/flashcards' },
   { label: 'Assessments', icon: <ClipboardCheck className="h-5 w-5" />, href: '/assessments' },
   { label: 'Study companion', icon: <MessagesSquare className="h-5 w-5" />, href: '/students/tutor' },
   { label: 'Collaborator', icon: <Users className="h-5 w-5" />, href: '/students/collaborator' },

@@ -14,6 +14,7 @@ import { GRADE_LEVELS, SUBJECTS } from '@/lib/constants';
 import { formatDate } from '@/lib/format-date';
 import { formatGrade } from '@/lib/grade';
 import { ChangePasswordCard } from '@/components/account/ChangePasswordCard';
+import { TwoStepCard } from '@/components/account/TwoStepCard';
 
 interface TeacherProfile {
   name: string;
@@ -134,6 +135,7 @@ export default function TeacherProfilePage() {
             </Card>
 
             <ChangePasswordCard />
+            <TwoStepCard />
           </>
         )}
       </div>

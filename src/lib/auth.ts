@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { env } from '@/lib/env';
+import { secondStepPending } from '@/lib/mfa';
 
 export const authOptions = {} as any;
 
@@ -42,6 +43,12 @@ export async function getServerSession(adapter?: CookieAdapter): Promise<null | 
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return null;
+    // With an authenticator app set up, a password alone is not a sign-in:
+    // the session counts only once the code has been entered as well.
+    if (authUser.factors?.length) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (secondStepPending(authUser.factors, session?.access_token)) return null;
+    }
     const { data: appUser } = await supabase
         .from('users')
         .select('id, email, name, role, image')
