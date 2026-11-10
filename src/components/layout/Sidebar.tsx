@@ -187,15 +187,9 @@ export function Sidebar({ role, mobile = false, onNavigate, onSearch, school }: 
         <div className={cn('p-6', isCollapsed && 'px-2')}>
           <div className={cn('flex items-center gap-2', isCollapsed ? 'justify-center' : 'justify-between')}>
             {schoolLogo ? (
-              <Link href="/" aria-label={`${school!.school.name} home`} className="flex min-w-0 items-center gap-2.5">
+              <Link href="/" aria-label={`${school!.school.name} home`} className="flex min-w-0">
                 {/* eslint-disable-next-line @next/next/no-img-element -- school logos live in Supabase storage */}
-                <img src={schoolLogo} alt="" className="h-8 w-8 shrink-0 rounded object-contain" />
-                {!isCollapsed && (
-                  <span className="min-w-0">
-                    <span className="block truncate text-base font-semibold leading-tight text-foreground">{school!.school.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">Powered by InsyteAI</span>
-                  </span>
-                )}
+                <img src={schoolLogo} alt="" className="h-9 w-9 shrink-0 rounded object-contain" />
               </Link>
             ) : (
               <Link href="/" aria-label="InsyteAI home" className="flex min-w-0">
@@ -220,7 +214,15 @@ export function Sidebar({ role, mobile = false, onNavigate, onSearch, school }: 
               </div>
             )}
           </div>
-          {!isCollapsed && (
+          {!isCollapsed && schoolLogo && (
+            <div className="mt-2">
+              <p className="line-clamp-2 break-words font-semibold leading-snug">{school!.school.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {role.charAt(0).toUpperCase() + role.slice(1)} Portal · Powered by InsyteAI
+              </p>
+            </div>
+          )}
+          {!isCollapsed && !schoolLogo && (
             <p className="text-sm text-muted-foreground mt-1">
               {role.charAt(0).toUpperCase() + role.slice(1)} Portal
             </p>

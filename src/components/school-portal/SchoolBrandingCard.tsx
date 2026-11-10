@@ -163,9 +163,10 @@ export function SchoolBrandingCard({ schoolName }: { schoolName: string }) {
     return () => { cancelled = true; };
   }, [toast]);
 
-  const applied = (body: ClientBranding) => {
+  /** Takes the saved branding from the server. Logo changes keep any unsaved colour edits. */
+  const applied = (body: ClientBranding, keepDraft = false) => {
     setLoaded(body);
-    setDraft(toDraft(body));
+    if (!keepDraft) setDraft(toDraft(body));
     if (userId) updateSchoolBranding(userId, body);
   };
 
@@ -209,7 +210,7 @@ export function SchoolBrandingCard({ schoolName }: { schoolName: string }) {
       const res = await fetch('/api/schools/branding/logo', { method: 'POST', body: form });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(errorText(body, 'Please try again.'));
-      applied(body);
+      applied(body, true);
       toast({ title: 'Logo updated' });
     } catch (error) {
       toast({ title: 'Could not upload the logo', description: (error as Error).message, variant: 'destructive' });
@@ -225,7 +226,7 @@ export function SchoolBrandingCard({ schoolName }: { schoolName: string }) {
       const res = await fetch('/api/schools/branding/logo', { method: 'DELETE' });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(errorText(body, 'Please try again.'));
-      applied(body);
+      applied(body, true);
       toast({ title: 'Logo removed' });
     } catch (error) {
       toast({ title: 'Could not remove the logo', description: (error as Error).message, variant: 'destructive' });
