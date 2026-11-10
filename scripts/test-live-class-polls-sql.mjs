@@ -23,7 +23,7 @@ await db.exec(`
     INSERT INTO auth.users VALUES ('${teacher}'), ('${student}');
     INSERT INTO public.live_class_events VALUES ('${event}');
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110130000_live_class_polls.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261110182447_live_class_polls.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
