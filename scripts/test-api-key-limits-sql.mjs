@@ -24,7 +24,7 @@ await db.exec(`
     GRANT ALL ON public.embed_api_keys TO authenticated, service_role;
     INSERT INTO public.embed_api_keys (id, name) VALUES ('${key}', 'site');
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110190000_guard_api_key_limits.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261110184646_guard_api_key_limits.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
