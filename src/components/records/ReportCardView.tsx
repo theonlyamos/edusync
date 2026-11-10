@@ -9,15 +9,21 @@ import { ATTENDANCE_LABEL, ATTENDANCE_STATUSES, attendanceRate, dayLabel, type R
 import { LoadError, Loading } from './shared';
 
 /** The report card as a sheet of paper: what a student, parent or teacher reads and prints. */
-export function ReportCardSheet({ card }: { card: ReportCard }) {
+export function ReportCardSheet({ card, schoolLogoUrl = null }: { card: ReportCard; schoolLogoUrl?: string | null }) {
   const s = card.snapshot;
   const rate = attendanceRate(s.attendance);
   return (
     <article className="mx-auto max-w-3xl rounded-lg border bg-card p-6 text-card-foreground print:max-w-none print:border-0 print:bg-white print:p-0 print:text-black sm:p-8">
-      <header className="border-b pb-4">
-        <p className="text-sm text-muted-foreground print:text-black">{s.schoolName}</p>
-        <h1 className="mt-1 break-words text-2xl font-bold">{card.term} report card</h1>
-        <p className="mt-1 text-sm text-muted-foreground print:text-black">{dayLabel(card.periodStart)} to {dayLabel(card.periodEnd)}</p>
+      <header className="flex items-start gap-4 border-b pb-4">
+        {schoolLogoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- school logos live in Supabase storage
+          <img src={schoolLogoUrl} alt={`${s.schoolName} logo`} className="h-16 w-16 shrink-0 object-contain" />
+        )}
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground print:text-black">{s.schoolName}</p>
+          <h1 className="mt-1 break-words text-2xl font-bold">{card.term} report card</h1>
+          <p className="mt-1 text-sm text-muted-foreground print:text-black">{dayLabel(card.periodStart)} to {dayLabel(card.periodEnd)}</p>
+        </div>
       </header>
       <dl className="grid gap-x-6 gap-y-2 border-b py-4 text-sm sm:grid-cols-3">
         <div><dt className="text-muted-foreground print:text-black">Student</dt><dd className="break-words font-medium">{s.studentName}</dd></div>
@@ -75,7 +81,7 @@ export function ReportCardSheet({ card }: { card: ReportCard }) {
 
 /** A page showing one report card, with Back and Print. */
 export function ReportCardPage({ id, backHref, source = '/api/records/report-cards' }: { id: string; backHref: string; source?: string }) {
-  const loaded = useHomeworkData<{ card: ReportCard }>(`${source}/${id}`);
+  const loaded = useHomeworkData<{ card: ReportCard; schoolLogoUrl?: string | null }>(`${source}/${id}`);
   if (loaded.loading && !loaded.data) return <Loading />;
   if (loaded.error || !loaded.data) return <LoadError message={loaded.error || 'Could not load the report card.'} retry={() => void loaded.refresh()} />;
   const { card } = loaded.data;
@@ -88,7 +94,7 @@ export function ReportCardPage({ id, backHref, source = '/api/records/report-car
           <Button variant="outline" onClick={() => window.print()} className="min-h-11"><Printer className="mr-2 h-4 w-4" /> Print or save as PDF</Button>
         </div>
       </div>
-      <ReportCardSheet card={card} />
+      <ReportCardSheet card={card} schoolLogoUrl={loaded.data.schoolLogoUrl ?? null} />
     </div>
   );
 }

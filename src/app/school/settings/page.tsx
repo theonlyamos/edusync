@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { GradeLevelPicker } from '@/components/school/GradeLevelPicker';
 import { NATIVE_SELECT_CLASS } from '@/components/school-portal/PersonFormDialog';
 import { SchoolPageHeader, useSchoolPortal } from '@/components/school-portal/SchoolPortalProvider';
+import { SchoolBrandingCard } from '@/components/school-portal/SchoolBrandingCard';
 import OrgApiKeysTab from '@/app/learn/org/[orgId]/components/OrgApiKeysTab';
 
 function errorMessage(error: unknown, fallback: string) {
@@ -65,7 +66,7 @@ export default function SchoolSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SchoolPageHeader title="School settings" description="Your school’s profile, location and the grades it teaches." />
+      <SchoolPageHeader title="School settings" description="Your school’s profile, branding, location and the grades it teaches." />
 
       <Card>
         <CardHeader>
@@ -133,6 +134,8 @@ export default function SchoolSettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <SchoolBrandingCard schoolName={school.name} />
 
       <Card>
         <CardHeader>

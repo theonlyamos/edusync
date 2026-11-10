@@ -10,6 +10,10 @@ export type AccountEmailDetails = {
   email: string
   url: string
   expiresAt: Date
+  /** The school's logo and button colour, when it has set its branding. */
+  logoUrl?: string | null
+  buttonColor?: string | null
+  buttonTextColor?: string | null
 }
 
 const escapeHtml = (value: string) =>
@@ -38,17 +42,24 @@ export function buildSchoolAccountEmail(details: AccountEmailDetails): { subject
     ? `The link works until ${expires}. If you were not expecting this, you can ignore this email.`
     : `The link works until ${expires}. If you did not ask for this, you can ignore it and your password stays the same.`
 
+  const hex = /^#[0-9a-f]{6}$/i
+  const buttonColor = details.buttonColor && hex.test(details.buttonColor) ? details.buttonColor : '#4f46e5'
+  const buttonTextColor = details.buttonTextColor && hex.test(details.buttonTextColor) ? details.buttonTextColor : '#ffffff'
+  const logo = details.logoUrl && /^https:\/\//.test(details.logoUrl)
+    ? `<p style="margin:0 0 20px"><img src="${escapeHtml(details.logoUrl)}" alt="${escapeHtml(details.schoolName)}" height="48" style="height:48px;max-width:200px;object-fit:contain"></p>\n`
+    : ''
+
   const text = [greeting, '', intro, signIn, '', `${button}: ${details.url}`, '', ending].join('\n')
 
   const html = `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111827">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
 <table role="presentation" width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;padding:32px" cellspacing="0" cellpadding="0"><tr><td>
-<p style="margin:0 0 16px;font-size:16px">${escapeHtml(greeting)}</p>
+${logo}<p style="margin:0 0 16px;font-size:16px">${escapeHtml(greeting)}</p>
 <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${escapeHtml(intro)}</p>
 <p style="margin:0 0 24px;font-size:14px;color:#374151">${escapeHtml(signIn)}</p>
-<p style="margin:0 0 24px"><a href="${escapeHtml(details.url)}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">${escapeHtml(button)}</a></p>
-<p style="margin:0 0 8px;font-size:13px;color:#6b7280">Or open this link: <a href="${escapeHtml(details.url)}" style="color:#4f46e5;word-break:break-all">${escapeHtml(details.url)}</a></p>
+<p style="margin:0 0 24px"><a href="${escapeHtml(details.url)}" style="display:inline-block;background:${buttonColor};color:${buttonTextColor};text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">${escapeHtml(button)}</a></p>
+<p style="margin:0 0 8px;font-size:13px;color:#6b7280">Or open this link: <a href="${escapeHtml(details.url)}" style="color:${buttonColor};word-break:break-all">${escapeHtml(details.url)}</a></p>
 <p style="margin:0;font-size:13px;color:#6b7280">${escapeHtml(ending)}</p>
 </td></tr></table>
 </td></tr></table>

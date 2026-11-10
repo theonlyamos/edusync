@@ -299,13 +299,13 @@ export async function parentChildren(supabase: ServiceSupabase, guardianId: stri
 }
 
 /** A shared report card, for a parent who follows its student. */
-export async function parentReportCard(supabase: ServiceSupabase, guardianId: string, cardId: string): Promise<ReportCard | null> {
+export async function parentReportCard(supabase: ServiceSupabase, guardianId: string, cardId: string): Promise<{ card: ReportCard; schoolId: string } | null> {
   if (!/^[0-9a-f-]{36}$/i.test(cardId)) return null;
   const links = await guardianLinks(supabase, guardianId);
   for (const link of links) {
     const cards = await studentReportCards(supabase, link.organization_id, link.student_id);
     const card = cards.find((c) => c.id === cardId);
-    if (card) return card;
+    if (card) return { card, schoolId: link.organization_id };
   }
   return null;
 }

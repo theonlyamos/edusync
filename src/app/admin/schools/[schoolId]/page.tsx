@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { use, useState } from 'react';
-import { Coins, CalendarPlus, Crown, PauseCircle, PlayCircle } from 'lucide-react';
+import { Coins, CalendarPlus, Crown, Paintbrush, PauseCircle, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { ActionDialog, AdminPageHeader, Detail, Empty, LoadState, Pill, StatTile
 import { MAX_ADMIN_GRANT, MAX_TRIAL_EXTENSION_DAYS, ROLE_LABEL, monthLabel, type AdminSchoolDetail } from '@/lib/platform-admin';
 import { gradeLevelLabel } from '@/lib/school-registration';
 
-type Dialog = null | 'grant' | 'trial' | 'owner' | 'suspend' | 'reactivate';
+type Dialog = null | 'grant' | 'trial' | 'owner' | 'suspend' | 'reactivate' | 'branding';
 
 export default function AdminSchoolPage({ params }: { params: Promise<{ schoolId: string }> }) {
   const { schoolId } = use(params);
@@ -47,6 +47,7 @@ export default function AdminSchoolPage({ params }: { params: Promise<{ schoolId
             <Button onClick={() => setDialog('grant')}><Coins className="mr-2 h-4 w-4" aria-hidden />Give credits</Button>
             {s.credits.trialActive && <Button variant="outline" onClick={() => setDialog('trial')}><CalendarPlus className="mr-2 h-4 w-4" aria-hidden />Extend trial</Button>}
             <Button variant="outline" onClick={() => setDialog('owner')}><Crown className="mr-2 h-4 w-4" aria-hidden />Change owner</Button>
+            {s.branding?.customised && <Button variant="outline" onClick={() => setDialog('branding')}><Paintbrush className="mr-2 h-4 w-4" aria-hidden />Reset branding</Button>}
             {s.isActive
               ? !s.isDefault && <Button variant="outline" className="text-destructive" onClick={() => setDialog('suspend')}><PauseCircle className="mr-2 h-4 w-4" aria-hidden />Suspend</Button>
               : <Button variant="outline" onClick={() => setDialog('reactivate')}><PlayCircle className="mr-2 h-4 w-4" aria-hidden />Reactivate</Button>}
@@ -248,6 +249,23 @@ export default function AdminSchoolPage({ params }: { params: Promise<{ schoolId
               destructive
               onConfirm={act({ action: 'suspend' }, `${s.name} is suspended.`)}
             />
+            <ActionDialog
+              open={dialog === 'branding'}
+              onOpenChange={(o) => setDialog(o ? 'branding' : null)}
+              title={`Reset ${s.name}’s branding?`}
+              description="Its logo is deleted and its portals go back to the InsyteAI colours and look. The school can set them again from School settings."
+              confirmLabel="Reset branding"
+              destructive
+              onConfirm={act({ action: 'reset_branding' }, `${s.name} is back on the InsyteAI branding.`)}
+            >
+              {s.branding?.logoUrl && (
+                <div className="flex items-center gap-3 rounded-md border p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- school logos live in Supabase storage */}
+                  <img src={s.branding.logoUrl} alt={`${s.name} logo`} className="h-12 w-12 object-contain" />
+                  <span className="text-sm text-muted-foreground">Current logo</span>
+                </div>
+              )}
+            </ActionDialog>
             <ActionDialog
               open={dialog === 'reactivate'}
               onOpenChange={(o) => setDialog(o ? 'reactivate' : null)}

@@ -1,15 +1,24 @@
 /**
  * Light/dark/system appearance shared by every portal. The choice is kept in
- * localStorage under `theme`; when nothing is saved the app stays dark.
+ * localStorage under `theme`; when nothing is saved the person's school
+ * default applies, and without one the app stays dark.
  */
 export type ThemePreference = 'light' | 'dark' | 'system';
 
 export const THEME_STORAGE_KEY = 'theme';
+/** The look the person's school picked, used until they choose their own. */
+export const SCHOOL_THEME_STORAGE_KEY = 'school-theme-default';
+
+function isPreference(value: unknown): value is ThemePreference {
+  return value === 'light' || value === 'dark' || value === 'system';
+}
 
 export function readThemePreference(): ThemePreference {
   try {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
-    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    if (isPreference(saved)) return saved;
+    const school = localStorage.getItem(SCHOOL_THEME_STORAGE_KEY);
+    if (isPreference(school)) return school;
   } catch {
     // Storage can be blocked; fall back to the default.
   }
@@ -43,6 +52,23 @@ export function saveThemePreference(preference: ThemePreference): 'light' | 'dar
   return resolved;
 }
 
+/**
+ * Records the school's default look (null clears it). If the person never
+ * chose their own, the page switches to it straight away.
+ */
+export function setSchoolDefaultTheme(mode: ThemePreference | null) {
+  try {
+    const before = localStorage.getItem(SCHOOL_THEME_STORAGE_KEY);
+    if (mode) localStorage.setItem(SCHOOL_THEME_STORAGE_KEY, mode);
+    else localStorage.removeItem(SCHOOL_THEME_STORAGE_KEY);
+    if (before === (mode ?? null) || isPreference(localStorage.getItem(THEME_STORAGE_KEY))) return;
+  } catch {
+    return;
+  }
+  applyThemePreference(readThemePreference());
+  notifyThemeChange();
+}
+
 const THEME_CHANGE_EVENT = 'theme-preference-change';
 
 /** Tells every listener on this page (and other tabs, via storage) that the saved choice changed. */
@@ -53,7 +79,7 @@ function notifyThemeChange() {
 /** Calls back whenever the saved preference changes, in this tab or another. */
 export function subscribeThemePreference(onChange: () => void): () => void {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === THEME_STORAGE_KEY) {
+    if (event.key === THEME_STORAGE_KEY || event.key === SCHOOL_THEME_STORAGE_KEY) {
       applyThemePreference(readThemePreference());
       onChange();
     }

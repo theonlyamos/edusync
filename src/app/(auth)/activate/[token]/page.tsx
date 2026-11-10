@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { JoinShell } from '@/components/school/JoinShell';
+import { JoinShell, type JoinShellSchool } from '@/components/school/JoinShell';
 import { SupabaseBrowserClientContext } from '@/components/providers/SupabaseAuthProvider';
 import { MIN_PASSWORD_LENGTH, validateNewPassword } from '@/lib/password-reset';
 import { homeForSchoolRole, schoolRoleLabel } from '@/lib/school-people';
@@ -18,7 +18,7 @@ type LinkInfo = {
   email?: string;
   name?: string | null;
   role?: string;
-  school?: { name: string };
+  school?: JoinShellSchool;
 };
 
 const CLOSED: Record<Exclude<LinkInfo['state'], 'pending'>, { title: string; text: string }> = {
@@ -96,7 +96,7 @@ export default function ActivateAccountPage() {
   if (info.state !== 'pending') {
     const closed = CLOSED[info.state];
     return (
-      <JoinShell title={closed.title} description={closed.text}>
+      <JoinShell title={closed.title} description={closed.text} school={info.school}>
         <Button asChild className="w-full"><Link href="/login">Go to sign in</Link></Button>
       </JoinShell>
     );
@@ -106,6 +106,7 @@ export default function ActivateAccountPage() {
   const role = info.role ? schoolRoleLabel(info.role).toLowerCase() : 'member';
   return (
     <JoinShell
+      school={info.school}
       title={activating ? `Welcome to ${info.school?.name ?? 'your school'}` : 'Set a new password'}
       description={
         activating

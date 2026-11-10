@@ -5,6 +5,7 @@ import {
   extendSchoolTrial,
   grantSchoolCredits,
   requirePlatformAdmin,
+  resetSchoolBranding,
   setSchoolActive,
   transferSchoolOwnership,
 } from '@/lib/platform-admin.server'
@@ -14,7 +15,7 @@ type Params = { params: Promise<{ schoolId: string }> }
 /**
  * Support actions on a school. Body: { action, reason, ... }:
  * grant_credits { credits }, extend_trial { days }, suspend, reactivate,
- * transfer_owner { userId }. Every action needs a reason and is logged.
+ * transfer_owner { userId }, reset_branding. Every action needs a reason and is logged.
  */
 export async function POST(request: Request, { params }: Params) {
   const access = await requirePlatformAdmin()
@@ -41,6 +42,9 @@ export async function POST(request: Request, { params }: Params) {
         return NextResponse.json({ ok: true })
       case 'transfer_owner':
         await transferSchoolOwnership(access.context, schoolId, String(body.userId ?? ''), reason)
+        return NextResponse.json({ ok: true })
+      case 'reset_branding':
+        await resetSchoolBranding(access.context, schoolId, reason)
         return NextResponse.json({ ok: true })
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

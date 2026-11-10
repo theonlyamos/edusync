@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { schoolBalance, LOW_BALANCE_CREDITS } from '@/lib/school-billing'
+import { brandingSummary, clearSchoolBranding } from '@/lib/school-branding.server'
 import {
   TRIAL_ENDING_DAYS,
   creditsToDollars,
@@ -342,6 +343,7 @@ export async function getSchoolDetail(supabase: Supabase, schoolId: string, now:
     every(() => supabase.from('lessons').select('id, title, subject, created_at, current_publication_id, archived_at').eq('organization_id', schoolId).order('created_at', { ascending: false }).order('id')),
     listActivity(supabase, { targetId: schoolId, limit: 50 }),
   ])
+  const branding = await brandingSummary(supabase, schoolId)
   const people = await byIds(members.map((m) => m.user_id), (part) => supabase.from('users').select('id, name, email, lastlogin').in('id', part))
   const person = new Map(people.map((p) => [p.id as string, p]))
   const order: Record<string, number> = { owner: 0, admin: 1, teacher: 2, student: 3 }
@@ -385,7 +387,15 @@ export async function getSchoolDetail(supabase: Supabase, schoolId: string, now:
       recent: lessons.slice(0, 20).map((l) => ({ id: l.id, title: l.title, subject: l.subject ?? null, createdAt: l.created_at, published: Boolean(l.current_publication_id), archived: Boolean(l.archived_at) })),
     },
     activity,
+    branding,
   }
+}
+
+/** Puts a school back on the InsyteAI colours and logo, e.g. when its logo is inappropriate. */
+export async function resetSchoolBranding(context: PlatformAdminContext, schoolId: string, reason: string) {
+  const school = await findSchool(context.supabase, schoolId)
+  await clearSchoolBranding(context.supabase, school.id)
+  await logAdminAction(context, { action: 'school.reset_branding', targetType: 'school', targetId: school.id, targetLabel: school.name, details: { reason } })
 }
 
 export async function grantSchoolCredits(context: PlatformAdminContext, schoolId: string, credits: number, reason: string) {
