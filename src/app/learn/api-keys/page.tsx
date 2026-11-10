@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { KeyUsage } from '@/components/developers/KeyUsage';
+import { KeyWebhook } from '@/components/developers/KeyWebhook';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -399,6 +400,7 @@ function ApiKeysContent() {
                     </div>
 
                     <KeyUsage keyId={key.id} />
+                    <KeyWebhook keyId={key.id} />
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                       <div>

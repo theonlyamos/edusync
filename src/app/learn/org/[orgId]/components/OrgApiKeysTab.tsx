@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { KeyUsage } from '@/components/developers/KeyUsage';
+import { KeyWebhook } from '@/components/developers/KeyWebhook';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -301,6 +302,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
                     </div>
 
                     <KeyUsage keyId={key.id} />
+                    <KeyWebhook keyId={key.id} />
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                       <div>

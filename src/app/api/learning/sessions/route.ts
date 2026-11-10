@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { payerHasEnoughCredits } from '@/lib/credits'
 import { getAuthContext } from '@/lib/get-auth-context'
 import { createServerSupabase } from '@/lib/supabase.server'
+import { sendKeyEvent } from '@/lib/webhooks.server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,6 +69,11 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create session' },
         { status: 500 }
       );
+    }
+
+    if (authContext.authType === 'apiKey') {
+      // Tell the key owner's server, after the learner has their answer.
+      after(() => sendKeyEvent(authContext.apiKeyId, 'session.started', { sessionId: session.id, topic: topic || null, domain }))
     }
 
     return NextResponse.json({
