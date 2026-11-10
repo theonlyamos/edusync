@@ -2,6 +2,7 @@ import 'server-only';
 import { DataPacket_Kind, RoomServiceClient } from 'livekit-server-sdk';
 import { env } from '@/lib/env';
 import { liveClassRoomName } from '@/lib/live-class';
+import { eventClassIds, isEligibleLiveClassAttendee } from '@/lib/live-class-attendance';
 import { POLL_TOPIC, pollForViewer, tallyVotes, type PollBroadcast, type PollInput, type PollView } from '@/lib/live-class-polls';
 import { getLiveKitHttpHost } from '@/lib/livekit-token';
 import { createServerSupabase } from '@/lib/supabase.server';
@@ -14,15 +15,27 @@ const POLL_COLUMNS = 'id, question, options, status, created_at, closed_at';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (value: string) => UUID.test(value);
 
-/** The class, if this person hosts it or is enrolled in it. Anyone else has no business with its polls. */
+/**
+ * The class, if this person hosts it, or is enrolled in it and may still attend
+ * (active in the school, in the class's grade and audience), the same test the
+ * room itself applies. Anyone else has no business with its polls.
+ */
 export async function pollAccess(supabase: Supabase, eventId: string, userId: string): Promise<PollAccess | null> {
   if (!isUuid(eventId)) return null;
-  const { data: event } = await supabase.from('live_class_events').select('id, organizer_id, livekit_room_name').eq('id', eventId).maybeSingle();
+  const { data: event } = await supabase.from('live_class_events').select('id, organizer_id, livekit_room_name, grade_level, organization_id, audience_class_ids').eq('id', eventId).maybeSingle();
   if (!event) return null;
   const isHost = event.organizer_id === userId;
   if (!isHost) {
     const { data: enrolled } = await supabase.from('live_class_enrollments').select('id').eq('live_class_event_id', eventId).eq('user_id', userId).maybeSingle();
     if (!enrolled) return null;
+    const eligible = await isEligibleLiveClassAttendee(supabase, {
+      organizerId: event.organizer_id as string,
+      attendeeUserId: userId,
+      eventGradeLevel: event.grade_level as string | null,
+      eventOrganizationId: (event.organization_id as string | null) ?? null,
+      eventClassIds: eventClassIds(event),
+    });
+    if (!eligible) return null;
   }
   return { eventId, roomName: liveClassRoomName(eventId, event.livekit_room_name as string | null), isHost };
 }

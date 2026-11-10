@@ -90,3 +90,22 @@ export function mergePollBroadcast(current: PollView | null, incoming: PollBroad
   if (current && incoming.createdAt && current.createdAt && incoming.createdAt < current.createdAt) return current;
   return { ...incoming, myVote: null };
 }
+
+/**
+ * Applies the answer to a background check. The check may have been sent
+ * before the room announced something newer, so it never goes back to an
+ * older poll (or to "no poll"), never reopens an ended one, and never drops
+ * an answer this person has since sent.
+ */
+export function mergePollRefresh(current: PollView | null, fetched: PollView | null): PollView | null {
+  if (!current) return fetched;
+  if (!fetched) return current;
+  if (current.id !== fetched.id) {
+    const shown = Date.parse(current.createdAt ?? '');
+    const found = Date.parse(fetched.createdAt ?? '');
+    return Number.isFinite(shown) && Number.isFinite(found) && found < shown ? current : fetched;
+  }
+  if (current.status === 'closed' && fetched.status === 'open') return current;
+  if (fetched.status === 'open' && fetched.myVote === null && current.myVote !== null) return { ...fetched, myVote: current.myVote };
+  return fetched;
+}

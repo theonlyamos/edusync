@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergePollBroadcast, parsePollBroadcast, parsePollInput, pollForViewer, tallyVotes, votePercent, type PollBroadcast, type PollView } from '@/lib/live-class-polls';
+import { mergePollBroadcast, mergePollRefresh, parsePollBroadcast, parsePollInput, pollForViewer, tallyVotes, votePercent, type PollBroadcast, type PollView } from '@/lib/live-class-polls';
 
 const open: PollBroadcast & { counts: number[] } = { id: 'p1', question: 'Which is larger?', options: ['1/2', '1/3'], status: 'open', totalVotes: 3, counts: [2, 1], createdAt: '2026-11-10T10:00:00.000Z', closedAt: null };
 const closed = { ...open, status: 'closed' as const, closedAt: '2026-11-10T10:02:00.000Z' };
@@ -80,5 +80,28 @@ describe('mergePollBroadcast', () => {
     const ended: PollView = { ...closed, myVote: 1 };
     expect(mergePollBroadcast(ended, { ...open, counts: null })).toBe(ended);
     expect(mergePollBroadcast(ended, { ...open, id: 'p0', createdAt: '2026-11-10T09:00:00.000Z', counts: null })).toBe(ended);
+  });
+});
+
+describe('mergePollRefresh', () => {
+  const mine: PollView = { ...open, counts: null, myVote: 1 };
+  const newer: PollView = { ...open, id: 'p2', createdAt: '2026-11-10T10:05:00.000Z', counts: null, myVote: null };
+
+  it('takes what the check found when nothing newer is showing', () => {
+    expect(mergePollRefresh(null, mine)).toBe(mine);
+    expect(mergePollRefresh(null, null)).toBeNull();
+    expect(mergePollRefresh(mine, newer)).toBe(newer);
+    expect(mergePollRefresh(mine, { ...closed, myVote: 1 })).toMatchObject({ status: 'closed', counts: [2, 1] });
+  });
+
+  it('keeps a poll the room just announced when a late check found the previous one or none', () => {
+    expect(mergePollRefresh(newer, { ...closed, myVote: 1 })).toBe(newer);
+    expect(mergePollRefresh(newer, null)).toBe(newer);
+  });
+
+  it('never reopens an ended poll or drops an answer already sent', () => {
+    const ended: PollView = { ...closed, myVote: 1 };
+    expect(mergePollRefresh(ended, mine)).toBe(ended);
+    expect(mergePollRefresh(mine, { ...mine, myVote: null })).toMatchObject({ myVote: 1 });
   });
 });

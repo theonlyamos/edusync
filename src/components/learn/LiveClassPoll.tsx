@@ -12,6 +12,7 @@ import {
   POLL_OPTION_MAX,
   POLL_QUESTION_MAX,
   mergePollBroadcast,
+  mergePollRefresh,
   parsePollInput,
   votePercent,
   type PollBroadcast,
@@ -41,14 +42,8 @@ export function useLiveClassPoll(eventId: string, isHost: boolean, active: boole
   const refresh = useCallback(async () => {
     try {
       const data = await homeworkRequest<{ poll: PollView | null }>(base)
-      setPoll((current) => {
-        if (!current || !data.poll || current.id !== data.poll.id) return data.poll
-        // A check that was already on its way must not reopen a poll that has
-        // since ended, or wipe an answer this person has since sent.
-        if (current.status === 'closed' && data.poll.status === 'open') return current
-        if (data.poll.status === 'open' && data.poll.myVote === null && current.myVote !== null) return { ...data.poll, myVote: current.myVote }
-        return data.poll
-      })
+      // A check that was already on its way must not undo newer news from the room.
+      setPoll((current) => mergePollRefresh(current, data.poll))
     } catch {
       // A missed check is harmless; the next one, or the room, catches up.
     }
