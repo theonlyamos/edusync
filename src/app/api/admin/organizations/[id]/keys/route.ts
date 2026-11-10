@@ -1,3 +1,4 @@
+import { DEFAULT_RATE_LIMIT_PER_DAY, DEFAULT_RATE_LIMIT_PER_HOUR, parseRateLimits } from '@/lib/api-key-limits';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
@@ -56,7 +57,11 @@ export async function POST(
         const { id } = await params;
         const supabase = createServerSupabase();
         const body = await request.json();
-        const { name, description, allowed_domains, rate_limit_per_hour, rate_limit_per_day, expires_at } = body;
+        const { name, description, allowed_domains, expires_at } = body;
+        const limits = parseRateLimits(body, 'staff');
+        if (!limits.ok) {
+          return NextResponse.json({ error: limits.error }, { status: 400 });
+        }
 
         if (!name || name.trim().length === 0) {
             return NextResponse.json(
@@ -94,8 +99,8 @@ export async function POST(
                 name: name.trim(),
                 description: description?.trim() || null,
                 allowed_domains: domains.data,
-                rate_limit_per_hour: rate_limit_per_hour || 100,
-                rate_limit_per_day: rate_limit_per_day || 1000,
+                rate_limit_per_hour: limits.values.rate_limit_per_hour ?? DEFAULT_RATE_LIMIT_PER_HOUR,
+                rate_limit_per_day: limits.values.rate_limit_per_day ?? DEFAULT_RATE_LIMIT_PER_DAY,
                 expires_at: expires_at || null,
                 is_active: true,
             })

@@ -1,5 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
+import { hasEnoughCredits } from '@/lib/credits';
 import { createServerSupabase } from '@/lib/supabase.server';
 import { sendKeyEvent } from '@/lib/webhooks.server';
 
@@ -18,15 +19,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerSupabase();
 
-    const { data: user } = await supabase
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
-
-    const credits = user?.credits;
-
-    if (!credits || credits.credits < 1) {
+    // Embedded sessions are paid from the key owner's own credits.
+    if (!(await hasEnoughCredits(userId, 1))) {
       return NextResponse.json(
         {
           error: 'Insufficient credits. The API key owner needs at least 1 credit to start a session.',

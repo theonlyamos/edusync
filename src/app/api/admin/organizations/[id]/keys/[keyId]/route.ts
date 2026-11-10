@@ -1,3 +1,4 @@
+import { parseRateLimits } from '@/lib/api-key-limits';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
@@ -56,19 +57,21 @@ export async function PATCH(
         const supabase = createServerSupabase();
         const body = await request.json();
 
-        const { name, description, allowed_domains, is_active, rate_limit_per_hour, rate_limit_per_day, expires_at } = body;
+        const { name, description, allowed_domains, is_active, expires_at } = body;
 
         const domains = allowedDomainsSchema.safeParse(allowed_domains);
         if (!domains.success) {
           return NextResponse.json({ error: domains.error.issues[0].message }, { status: 400 });
         }
-        const updateData: any = {};
+        const limits = parseRateLimits(body, 'staff');
+        if (!limits.ok) {
+          return NextResponse.json({ error: limits.error }, { status: 400 });
+        }
+        const updateData: any = { ...limits.values };
         if (name !== undefined) updateData.name = name.trim();
         if (description !== undefined) updateData.description = description?.trim() || null;
         if (allowed_domains !== undefined) updateData.allowed_domains = domains.data;
         if (is_active !== undefined) updateData.is_active = is_active;
-        if (rate_limit_per_hour !== undefined) updateData.rate_limit_per_hour = rate_limit_per_hour;
-        if (rate_limit_per_day !== undefined) updateData.rate_limit_per_day = rate_limit_per_day;
         if (expires_at !== undefined) updateData.expires_at = expires_at;
 
         const { data, error } = await supabase

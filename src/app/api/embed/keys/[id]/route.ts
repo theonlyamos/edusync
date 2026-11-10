@@ -1,3 +1,4 @@
+import { parseRateLimits } from '@/lib/api-key-limits';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
@@ -19,8 +20,6 @@ export async function PATCH(
       name,
       description,
       allowed_domains,
-      rate_limit_per_hour,
-      rate_limit_per_day,
       is_active,
       expires_at,
     } = body;
@@ -31,12 +30,14 @@ export async function PATCH(
     if (!domains.success) {
       return NextResponse.json({ error: domains.error.issues[0].message }, { status: 400 });
     }
-    const updateData: any = {};
+    const limits = parseRateLimits(body, 'owner');
+    if (!limits.ok) {
+      return NextResponse.json({ error: limits.error }, { status: 400 });
+    }
+    const updateData: any = { ...limits.values };
     if (name !== undefined) updateData.name = name.trim();
     if (description !== undefined) updateData.description = description?.trim() || null;
     if (allowed_domains !== undefined) updateData.allowed_domains = domains.data;
-    if (rate_limit_per_hour !== undefined) updateData.rate_limit_per_hour = rate_limit_per_hour;
-    if (rate_limit_per_day !== undefined) updateData.rate_limit_per_day = rate_limit_per_day;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (expires_at !== undefined) updateData.expires_at = expires_at;
 
