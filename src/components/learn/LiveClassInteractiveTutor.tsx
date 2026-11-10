@@ -20,11 +20,14 @@ import {
 } from '@/lib/live-class-window'
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer'
 import { ParticipantSidebar } from './ParticipantSidebar'
+import { LiveClassPollCard, useLiveClassPoll } from './LiveClassPoll'
+import { POLL_TOPIC, parsePollBroadcast } from '@/lib/live-class-polls'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { handRaisedAt } from '@/lib/live-class-hand'
 import {
   Hand,
+  BarChart3,
   AlertTriangle,
   ArrowLeft,
   Headphones,
@@ -110,6 +113,15 @@ export function LiveClassInteractiveTutor({
   const seenVizIds = useRef<Set<string>>(new Set())
 
   const isHost = eventMeta?.organizerId === currentUserId
+  const polls = useLiveClassPoll(liveClassEventId, isHost, phase === 'live')
+  const [showPoll, setShowPoll] = useState(false)
+  const pollReceive = useRef(polls.receive)
+  pollReceive.current = polls.receive
+  // A poll opening or ending brings the card up for students, even if they had hidden an earlier one.
+  const pollMoment = polls.poll ? `${polls.poll.id}:${polls.poll.status}` : ''
+  useEffect(() => {
+    if (pollMoment && !isHost) setShowPoll(true)
+  }, [pollMoment, isHost])
   const countdown = useCountdown(eventMeta?.end ?? null, phase === 'live')
 
   useEffect(() => {
@@ -246,7 +258,18 @@ export function LiveClassInteractiveTutor({
         if (participant.identity === room.localParticipant.identity) setHandUp(handRaisedAt(participant.attributes) !== null)
       })
 
-      room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
+      room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+        // Poll news comes from the server (no participant), never from someone in the room.
+        if (topic === POLL_TOPIC && !participant) {
+          try {
+            const msg = JSON.parse(new TextDecoder().decode(payload)) as { type?: unknown; poll?: unknown }
+            const poll = msg.type === 'poll' ? parsePollBroadcast(msg.poll) : null
+            if (poll) pollReceive.current(poll)
+          } catch {
+            // Not a poll message we understand.
+          }
+          return
+        }
         if (topic !== 'agent') return
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload)) as Record<string, unknown>
@@ -513,6 +536,7 @@ export function LiveClassInteractiveTutor({
               </div>
             </div>
           )}
+          {showPoll && <LiveClassPollCard isHost={isHost} controls={polls} onClose={() => setShowPoll(false)} />}
         </div>
 
         {/* Participant sidebar */}
@@ -559,6 +583,20 @@ export function LiveClassInteractiveTutor({
         </div>
 
         <div className="flex items-center gap-1">
+          {(isHost || polls.poll) && (
+            <Button
+              variant={showPoll ? 'secondary' : 'ghost'}
+              size="sm"
+              className="min-h-11 min-w-11 gap-1.5"
+              onClick={() => setShowPoll((shown) => !shown)}
+              aria-expanded={showPoll}
+              title={showPoll ? 'Hide poll' : isHost ? 'Ask the class a quick question' : 'Show poll'}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Poll</span>
+              <span className="sr-only sm:hidden">Poll</span>
+            </Button>
+          )}
           <Button
             variant={showParticipants ? 'secondary' : 'ghost'}
             size="icon"
