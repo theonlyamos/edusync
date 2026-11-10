@@ -68,6 +68,42 @@ export default function DevelopersPage() {
           ),
         },
         {
+          heading: '5. Webhooks',
+          body: (
+            <>
+              <p>A webhook tells your server when something happens, so you don&rsquo;t have to keep asking. Open a key on the <Link href="/learn/api-keys">API keys</Link> page, choose <strong>Webhook</strong>, and enter an <code>https</code> address on your server. You are shown a signing secret once; keep it on your server.</p>
+              <p>We send a <code>POST</code> with a JSON body for these events:</p>
+              <ul>
+                <li><strong>session.started</strong>: a learner started a tutor session with the key.</li>
+                <li><strong>session.ended</strong>: the session finished. Includes <code>durationSeconds</code>.</li>
+                <li><strong>webhook.test</strong>: you pressed &ldquo;Send test event&rdquo;.</li>
+              </ul>
+              <pre className={code}>{`{
+  "id": "evt_3f1c9a...",
+  "type": "session.ended",
+  "created": "2026-11-10T09:30:00.000Z",
+  "data": {
+    "sessionId": "b6f0...",
+    "topic": "Fractions",
+    "startedAt": "2026-11-10T09:18:00.000Z",
+    "endedAt": "2026-11-10T09:30:00.000Z",
+    "durationSeconds": 720
+  }
+}`}</pre>
+              <p>Check that an event really came from us before trusting it. The <code>X-Insyte-Signature</code> header has the form <code>t=TIME,v1=SIGNATURE</code>. The signature is the HMAC-SHA256, in hex, of the time, a dot, and the raw body, using your signing secret. Reject events whose time is more than five minutes old.</p>
+              <pre className={code}>{`import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function isFromInsyte(rawBody, header, secret) {
+  const { t, v1 } = Object.fromEntries(header.split(',').map((part) => part.split('=')));
+  if (!t || !v1 || Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const expected = createHmac('sha256', secret).update(t + '.' + rawBody).digest('hex');
+  return v1.length === expected.length && timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
+}`}</pre>
+              <p>Answer with any <code>2xx</code> status within five seconds. Each event is sent once and is not retried, redirects are not followed, and the address must be a public <code>https</code> site. Now and then an event can arrive twice, so use its <code>id</code> to ignore repeats.</p>
+            </>
+          ),
+        },
+        {
           heading: 'Limits and errors',
           body: (
             <ul>
