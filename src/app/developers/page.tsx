@@ -19,7 +19,8 @@ export default function DevelopersPage() {
           heading: '1. Create an API key',
           body: (
             <>
-              <p>Sign in and open <Link href="/learn/api-keys">API keys</Link>. Give the key a name and, for anything public, list the domains that may use it. A key with allowed domains only works on those sites.</p>
+              <p>Sign in and open <Link href="/learn/api-keys">API keys</Link>. Give the key a name.</p>
+              <p>Allowed domains are optional. When a key has them, an API request is refused unless its <code>Origin</code> or <code>Referer</code> header names one of those sites, which includes server-side calls that send neither. The tutor in step 2 runs on <code>insyte.vercel.app</code> inside the frame, so a key used there needs either no allowed domains or <code>insyte.vercel.app</code> in the list. The list does not yet limit which sites can show the tutor in a frame.</p>
               <p>Treat a key like a password. If one leaks, turn it off on the same page and create a new one.</p>
             </>
           ),

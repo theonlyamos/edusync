@@ -22,7 +22,7 @@ await db.exec(`
         ('${key}', now()), ('${key}', now()), ('${key}', now() - interval '2 days'), ('${key}', now() - interval '200 days'), ('${other}', now());
     INSERT INTO public.learning_sessions (api_key_id, created_at) VALUES ('${key}', now()), ('${other}', now()), (NULL, now());
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110010000_embed_key_daily_usage.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261110014436_embed_key_daily_usage.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
