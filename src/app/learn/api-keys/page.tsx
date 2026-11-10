@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { allowedDomainsSchema } from '@/lib/validation/api-key-domains';
+import { KeyUsage } from '@/components/developers/KeyUsage';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -359,7 +360,7 @@ function ApiKeysContent() {
                           size="sm"
                           className="h-7 text-xs"
                           onClick={() => copyToClipboard(
-                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
                             `embed-${key.id}`
                           )}
                         >
@@ -379,12 +380,12 @@ function ApiKeysContent() {
                       <div className="relative">
                         <pre className="bg-muted p-3 rounded text-xs overflow-x-auto select-all hover:bg-muted/80 transition-colors cursor-pointer"
                           onClick={() => copyToClipboard(
-                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
+                            `<iframe src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic" width="100%" height="600px" frameborder="0" allow="microphone"></iframe>`,
                             `embed-click-${key.id}`
                           )}
                           title="Click to copy">
                           {`<iframe 
-  src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/learn/embed/new?apiKey=${key.api_key}&topic=Your%20Topic"
+  src="${typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.com'}/embed/new?apiKey=${key.api_key}&topic=Your%20Topic"
   width="100%" 
   height="600px"
   frameborder="0"
@@ -396,6 +397,8 @@ function ApiKeysContent() {
                         </p>
                       </div>
                     </div>
+
+                    <KeyUsage keyId={key.id} />
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                       <div>
@@ -441,7 +444,7 @@ function ApiKeysContent() {
             <h4 className="font-semibold mb-2">1. Embed with iframe (Simple - Recommended)</h4>
             <pre className="bg-muted p-3 rounded text-sm overflow-x-auto">
               {`<iframe 
-  src="https://yourapp.com/learn/embed/new?apiKey=YOUR_API_KEY&topic=Photosynthesis"
+  src="https://yourapp.com/embed/new?apiKey=YOUR_API_KEY&topic=Photosynthesis"
   width="100%" 
   height="600px"
   frameborder="0"

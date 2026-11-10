@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabase();
 
     const { searchParams } = new URL(request.url);
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50;
+    // Between 1 and 200 sessions per request.
+    const limit = Math.min(200, Math.max(1, Number.parseInt(searchParams.get('limit') ?? '', 10) || 50));
 
     const { data: sessions, error } = await supabase
       .from('learning_sessions')

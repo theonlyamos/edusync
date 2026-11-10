@@ -1,6 +1,7 @@
 'use client';
 
 import InteractiveAITutor from "@/components/learn/InteractiveAITutor";
+import { EmbedTheme } from "@/components/developers/EmbedTheme";
 
 export default function EmbedPage() {
   const onSessionStarted = (sessionId: string) => {
@@ -9,5 +10,10 @@ export default function EmbedPage() {
   const onSessionEnded = (sessionId: string | null) => {
     console.warn('Session ended:', sessionId);
   };
-  return <InteractiveAITutor onSessionStarted={onSessionStarted} onSessionEnded={onSessionEnded} />;
+  return (
+    <>
+      <EmbedTheme />
+      <InteractiveAITutor onSessionStarted={onSessionStarted} onSessionEnded={onSessionEnded} />
+    </>
+  );
 }
