@@ -138,9 +138,11 @@ interface SidebarProps {
   onNavigate?: () => void;
   /** Opens the jump-to search. */
   onSearch?: () => void;
+  /** The person's school; its logo and name replace the InsyteAI logo when it has one. */
+  school?: { school: { name: string }; branding: { logoUrl: string | null } } | null;
 }
 
-export function Sidebar({ role, mobile = false, onNavigate, onSearch }: SidebarProps) {
+export function Sidebar({ role, mobile = false, onNavigate, onSearch, school }: SidebarProps) {
   const pathname = usePathname();
   const supportUnread = useAdminSupportUnread(role === 'admin');
   // Sidebar collapse state
@@ -177,15 +179,29 @@ export function Sidebar({ role, mobile = false, onNavigate, onSearch }: SidebarP
     .sort((a, b) => b.length - a.length)[0];
   const isActive = (href: string) => href === activeHref;
   const isCollapsed = !mobile && collapsed;
+  const schoolLogo = school?.branding.logoUrl ?? null;
 
   return (
     <div className={cn("h-full min-h-0 shrink-0 bg-card border-r flex flex-col transition-all duration-200 ease-in-out", mobile ? "w-full" : isCollapsed ? "w-16" : "w-64")}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className={cn('p-6', isCollapsed && 'px-2')}>
           <div className={cn('flex items-center gap-2', isCollapsed ? 'justify-center' : 'justify-between')}>
-            <Link href="/" aria-label="InsyteAI home" className="flex min-w-0">
-              <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
-            </Link>
+            {schoolLogo ? (
+              <Link href="/" aria-label={`${school!.school.name} home`} className="flex min-w-0 items-center gap-2.5">
+                {/* eslint-disable-next-line @next/next/no-img-element -- school logos live in Supabase storage */}
+                <img src={schoolLogo} alt="" className="h-8 w-8 shrink-0 rounded object-contain" />
+                {!isCollapsed && (
+                  <span className="min-w-0">
+                    <span className="block truncate text-base font-semibold leading-tight text-foreground">{school!.school.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">Powered by InsyteAI</span>
+                  </span>
+                )}
+              </Link>
+            ) : (
+              <Link href="/" aria-label="InsyteAI home" className="flex min-w-0">
+                <Logo iconOnly={isCollapsed} markClassName="h-8 w-8" />
+              </Link>
+            )}
             {!mobile && !isCollapsed && (
               <div className="flex shrink-0 items-center">
               {role !== 'admin' && <NotificationBell align="start" className="h-9 w-9" />}

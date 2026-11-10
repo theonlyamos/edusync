@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { HomeworkAiLockBanner, isStudentAiPage } from '@/components/students/HomeworkAiLockBanner';
+import { useSchoolBranding } from '@/components/school-branding/school-branding-client';
 
 const STUDENT_PAGE_TITLES: [string, string][] = [
   ['/students/homework/performance', 'My performance'],
@@ -89,6 +90,15 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // School colours, look and logo apply in the school, teacher and student portals.
+  const brandable = portal === 'school' || (!portal && (appUser?.role === 'teacher' || appUser?.role === 'student'));
+  const branding = useSchoolBranding(session?.user?.id ?? null, !appUser || brandable);
+  const schoolName = branding?.school.name ?? null;
+
+  useEffect(() => {
+    if (schoolName) document.title = `${schoolName} · InsyteAI`;
+  }, [schoolName, pathname]);
+
   // Ctrl or ⌘ + K opens the jump-to search from anywhere in a portal.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -151,7 +161,7 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
               <DialogContent className="left-0 top-0 h-dvh max-h-dvh w-[min(20rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none p-0 sm:rounded-none [&>button]:h-11 [&>button]:w-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center">
                 <DialogTitle className="sr-only">{portalName} navigation</DialogTitle>
                 <DialogDescription className="sr-only">Choose a page in your {portalName.toLowerCase()} portal.</DialogDescription>
-                <Sidebar role={role} mobile onNavigate={() => setNavigationOpen(false)} onSearch={() => { setNavigationOpen(false); setSearchOpen(true); }} />
+                <Sidebar role={role} school={branding} mobile onNavigate={() => setNavigationOpen(false)} onSearch={() => { setNavigationOpen(false); setSearchOpen(true); }} />
               </DialogContent>
             </Dialog>
 <span className="min-w-0 flex-1 truncate text-sm font-semibold">
@@ -170,7 +180,7 @@ export function DashboardLayout({ children, fullBleed = false, portal }: Dashboa
             </Button>
             {role !== 'admin' && <NotificationBell />}
           </header>
-          <div className="hidden h-full shrink-0 print:hidden lg:block"><Sidebar role={role} onSearch={() => setSearchOpen(true)} /></div>
+          <div className="hidden h-full shrink-0 print:hidden lg:block"><Sidebar role={role} school={branding} onSearch={() => setSearchOpen(true)} /></div>
           <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} links={portalPages(role)} portal={role === 'school' ? 'school' : role === 'teacher' ? 'teacher' : null} />
         </>
       )}

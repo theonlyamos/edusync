@@ -138,6 +138,8 @@ export type AdminSchoolDetail = AdminSchoolRow & {
   usage: Array<{ month: string; voice: number; liveClass: number; visuals: number; images: number }>
   lessons: { total: number; published: number; recent: Array<{ id: string; title: string; subject: string | null; createdAt: string; published: boolean; archived: boolean }> }
   activity: ActivityRow[]
+  /** Whether the school changed its colours, look or logo, and the logo it uses. */
+  branding: { customised: boolean; logoUrl: string | null }
 }
 
 export type AdminUserRow = {

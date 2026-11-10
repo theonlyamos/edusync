@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { isEmailConfigured, sendEmail } from '@/lib/email'
 import { buildSchoolAccountEmail } from '@/lib/school-account-email'
+import { emailBranding } from '@/lib/school-branding.server'
 import { schoolHasPurchasedCredits, type SchoolRecord, type ServiceSupabase } from '@/lib/school-access.server'
 import {
   ACTIVATION_TTL_DAYS,
@@ -108,6 +109,7 @@ export async function issueAccountLink(context: PeopleContext, person: LinkPerso
       email,
       url,
       expiresAt,
+      ...(await emailBranding(supabase, school.id)),
     })
     const result = await sendEmail({ to: email, ...message })
     emailed = result.sent

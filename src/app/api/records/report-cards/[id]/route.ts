@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { REPORT_COMMENT_MAX } from '@/lib/school-records';
+import { schoolLogoUrl } from '@/lib/school-branding.server';
 import { readReportCard, recordsErrorResponse, requireRecordsActor, updateReportCard } from '@/lib/school-records.server';
 
 type Params = { params: Promise<{ id: string }> };
@@ -11,7 +12,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const guard = await requireRecordsActor(['owner', 'admin', 'teacher', 'student']);
     if (!guard.ok) return guard.response;
     const card = await readReportCard(guard.actor, (await params).id);
-    return NextResponse.json({ card }, { headers: { 'Cache-Control': 'private, no-store' } });
+    const logoUrl = await schoolLogoUrl(guard.actor.supabase, guard.actor.school.id);
+    return NextResponse.json({ card, schoolLogoUrl: logoUrl }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     const { body, status } = recordsErrorResponse(error, 'Could not load the report card', 'GET /api/records/report-cards/[id]');
     return NextResponse.json(body, { status });

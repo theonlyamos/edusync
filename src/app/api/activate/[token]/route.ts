@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase.server'
 import { rateLimit } from '@/lib/rate-limiter'
+import { activationBranding } from '@/lib/school-branding.server'
 import { completeAccountLink, findAccountLink, hashLinkToken, peopleErrorResponse } from '@/lib/school-people.server'
 import { validateNewPassword } from '@/lib/password-reset'
 
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (limited) return limited
   try {
     const { token } = await params
-    const link = await findAccountLink(createServerSupabase(), token)
+    const supabase = createServerSupabase()
+    const link = await findAccountLink(supabase, token)
     if (!link) return NextResponse.json({ state: 'invalid' }, { status: 404 })
     return NextResponse.json({
       state: link.state,
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       email: link.email,
       name: link.name,
       role: link.role,
-      school: { name: link.schoolName },
+      school: { name: link.schoolName, ...(await activationBranding(supabase, link.schoolId)) },
     })
   } catch (error) {
     const { body, status } = peopleErrorResponse(error, 'Could not check this link', 'GET /api/activate/[token]')
