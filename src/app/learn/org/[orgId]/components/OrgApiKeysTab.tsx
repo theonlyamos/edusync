@@ -436,7 +436,7 @@ export default function OrgApiKeysTab({ organizationId, isOwnerOrAdmin, onError,
                 </p>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                Leave empty to allow all domains. Use ASCII hostnames or *.example.com, without protocols, ports or paths.
+                The tutor only loads inside pages on these sites. Leave empty to allow any site. Use ASCII hostnames or *.example.com, without protocols, ports or paths.
               </p>
             </div>
           </div>

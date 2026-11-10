@@ -4,6 +4,8 @@ import { getServerSession, type CookieAdapter } from '@/lib/auth';
 import { addSecurityHeaders, configureCORS } from '@/middleware/security';
 import { rateLimit } from '@/lib/rate-limiter';
 import { authenticateRequest, setAuthHeaders, getAuthModeForPath } from '@/lib/auth-middleware';
+import { embedKeyDomains } from '@/lib/api-key-auth';
+import { frameAncestorSources, openedOutsideFrame } from '@/lib/embed-frame';
 import {isGeneralHomeworkAiTool} from '@/lib/homework/ai-policy';
 import {homeworkAiLockForUser, homeworkAiLockMessage} from '@/lib/homework/ai-policy-server';
 
@@ -11,6 +13,8 @@ import {homeworkAiLockForUser, homeworkAiLockMessage} from '@/lib/homework/ai-po
 // client must never be able to send its own values (a header the proxy leaves
 // unset, such as the role for an API key, would otherwise pass straight through).
 const TRUSTED_AUTH_HEADERS = ['x-auth-user-id', 'x-auth-type', 'x-auth-api-key-id', 'x-auth-user-role'];
+
+const EMBED_PAGE = /^\/embed\/[^/]+$/;
 
 export async function proxy(request: NextRequest) {
   const forwardedHeaders = new Headers(request.headers);
@@ -22,7 +26,22 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  response = addSecurityHeaders(response, request);
+  // A tutor page opened with an API key can only be framed by the sites that
+  // key allows. If the key can't be read, no other site may frame it.
+  let embedFrameSources: string | undefined;
+  const embedKey = EMBED_PAGE.test(request.nextUrl.pathname) ? request.nextUrl.searchParams.get('apiKey') : null;
+  if (embedKey) {
+    const key = await embedKeyDomains(embedKey);
+    if (openedOutsideFrame(key.domains, request.headers.get('sec-fetch-dest'))) {
+      return addSecurityHeaders(new NextResponse(
+        'This tutor only opens inside the website it was added to.',
+        { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } },
+      ));
+    }
+    embedFrameSources = key.failed ? "'self'" : frameAncestorSources(key.domains);
+  }
+
+  response = addSecurityHeaders(response, request, embedFrameSources);
   response = configureCORS(request, response);
 
   if (request.method === 'OPTIONS') {

@@ -1,23 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function addSecurityHeaders(response: NextResponse, request?: NextRequest): NextResponse {
+export function addSecurityHeaders(response: NextResponse, request?: NextRequest, embedFrameSources?: string): NextResponse {
     const pathname = request?.nextUrl?.pathname || '';
 
-    // Check for different embed routes
-    // /embed/[id] - embeddable on any website (for public sharing)
-    // /embed/new - same-origin only
+    // The tutor pages under /embed/ are made to be framed by other websites.
+    // `embedFrameSources` narrows that to the sites an API key allows; without
+    // it any site may frame them. Nothing else in the app can be framed.
     const isEmbedWithId = pathname.match(/^\/embed\/[^/]+$/);
-
-    // Content Security Policy - configure frame-ancestors based on route
-    let frameAncestors: string;
-    if (isEmbedWithId) {
-        // Allow embedding on any website for /embed/[id]
-        frameAncestors = "frame-ancestors *";
-    } else {
-        // No embedding allowed for other routes
-        frameAncestors = "frame-ancestors 'none'";
-    }
+    const frameAncestors = isEmbedWithId ? `frame-ancestors ${embedFrameSources || '*'}` : "frame-ancestors 'none'";
 
     const csp = [
         "default-src 'self'",
