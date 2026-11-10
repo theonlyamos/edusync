@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/get-auth-context';
 import { createServerSupabase } from '@/lib/supabase.server';
+import { sendKeyEvent } from '@/lib/webhooks.server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,6 +62,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Tell the key owner's server, after this request has been answered.
+    after(() => sendKeyEvent(apiKeyId, 'session.started', { sessionId: session.id, topic: topic || null, domain: null }));
 
     return NextResponse.json({
       sessionId: session.id,

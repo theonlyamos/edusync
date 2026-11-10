@@ -99,7 +99,7 @@ function isFromInsyte(rawBody, header, secret) {
   const expected = createHmac('sha256', secret).update(t + '.' + rawBody).digest('hex');
   return v1.length === expected.length && timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
 }`}</pre>
-              <p>Answer with any <code>2xx</code> status within five seconds. Each event is sent once and is not retried, redirects are not followed, and the address must be a public <code>https</code> site. Now and then an event can arrive twice, so use its <code>id</code> to ignore repeats.</p>
+              <p>Answer with any <code>2xx</code> status within five seconds. Each event is sent once and is not retried, redirects are not followed, and the address must be a public <code>https</code> site.</p>
             </>
           ),
         },

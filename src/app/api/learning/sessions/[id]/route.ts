@@ -42,17 +42,35 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
-        const { error } = await supabase
-            .from('learning_sessions')
-            .update(updates)
-            .eq('id', id)
-
-        if (error) {
-            return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+        // An embedded session can be ended by two requests at once (the voice
+        // stopping and the page disconnecting). Only the one that actually moves
+        // it from running to ended tells the key owner's server.
+        let endedNow = false
+        if (updates.ended_at && existing.api_key_id && !existing.ended_at) {
+            const { data: claimed, error: claimError } = await supabase
+                .from('learning_sessions')
+                .update(updates)
+                .eq('id', id)
+                .is('ended_at', null)
+                .select('id')
+            if (claimError) {
+                return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+            }
+            endedNow = (claimed?.length ?? 0) > 0
         }
 
-        // The first time an embedded session ends, tell the key owner's server.
-        if (updates.ended_at && existing.api_key_id && !existing.ended_at) {
+        if (!endedNow) {
+            const { error } = await supabase
+                .from('learning_sessions')
+                .update(updates)
+                .eq('id', id)
+
+            if (error) {
+                return NextResponse.json({ error: 'Failed to update session' }, { status: 500 })
+            }
+        }
+
+        if (endedNow) {
             const event = {
                 sessionId: existing.id,
                 topic: updates.topic ?? existing.topic ?? null,
