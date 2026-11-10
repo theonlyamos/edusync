@@ -19,7 +19,7 @@ await db.exec(`
     CREATE TABLE public.embed_api_keys (id uuid PRIMARY KEY);
     INSERT INTO public.embed_api_keys VALUES ('${key}');
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110090000_embed_webhooks.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261110122114_embed_webhooks.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
