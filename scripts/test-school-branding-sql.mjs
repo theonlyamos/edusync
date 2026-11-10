@@ -19,7 +19,7 @@ await db.exec(`
     GRANT UPDATE (name, settings) ON public.organizations TO authenticated;
     INSERT INTO public.organizations (id, name) VALUES ('${school}', 'Riverside');
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261110194000_school_branding.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261110200355_school_branding.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
