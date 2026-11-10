@@ -73,6 +73,15 @@ describe('readable colours', () => {
     expect(contrastRatio(parseHexColor(navy.hex)!, DARK_BG)).toBeGreaterThanOrEqual(PRIMARY_MIN_CONTRAST - 0.2)
   })
 
+  it('moves pure white and pure black too', () => {
+    const white = readableTokens('#ffffff', 'light', PRIMARY_MIN_CONTRAST)
+    expect(white.adjusted).toBe(true)
+    expect(contrastRatio(parseHexColor(white.hex)!, LIGHT_BG)).toBeGreaterThanOrEqual(PRIMARY_MIN_CONTRAST - 0.2)
+    const black = readableTokens('#000000', 'dark', PRIMARY_MIN_CONTRAST)
+    expect(black.adjusted).toBe(true)
+    expect(contrastRatio(parseHexColor(black.hex)!, DARK_BG)).toBeGreaterThanOrEqual(PRIMARY_MIN_CONTRAST - 0.2)
+  })
+
   it('leaves a colour that already reads well alone', () => {
     expect(readableTokens('#1e3a8a', 'light', PRIMARY_MIN_CONTRAST).adjusted).toBe(false)
   })

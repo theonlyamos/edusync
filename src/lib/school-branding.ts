@@ -179,7 +179,8 @@ export function readableTokens(hex: string, mode: 'light' | 'dark', minContrast:
   let l = l0;
   let current = rgb;
   const step = mode === 'light' ? -1 : 1;
-  while (contrastRatio(current, background) < minContrast && l > 0 && l < 100) {
+  // Pure white can still darken on light pages, and pure black lighten on dark ones.
+  while (contrastRatio(current, background) < minContrast && (step < 0 ? l > 0 : l < 100)) {
     l = Math.min(100, Math.max(0, l + step));
     current = hslToRgb([h, s, l]);
   }

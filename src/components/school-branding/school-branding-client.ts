@@ -109,6 +109,9 @@ export function clearSchoolBrandingFromPage() {
   state = null;
   activeUser = null;
   paint(null);
+  // Don't let the school's default look follow into a sign-out or another portal.
+  // A personal Light/Dark/System choice is kept.
+  setSchoolDefaultTheme(null);
   emit();
 }
 
