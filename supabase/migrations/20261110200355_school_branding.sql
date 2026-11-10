@@ -7,10 +7,18 @@ SET LOCAL lock_timeout = '10s';
 ALTER TABLE public.organizations
   ADD COLUMN IF NOT EXISTS branding jsonb NOT NULL DEFAULT '{}'::jsonb;
 
-ALTER TABLE public.organizations DROP CONSTRAINT IF EXISTS organizations_branding_shape;
-ALTER TABLE public.organizations
-  ADD CONSTRAINT organizations_branding_shape
-  CHECK (jsonb_typeof(branding) = 'object' AND pg_column_size(branding) <= 2048);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'organizations_branding_shape' AND conrelid = 'public.organizations'::regclass
+  ) THEN
+    ALTER TABLE public.organizations
+      ADD CONSTRAINT organizations_branding_shape
+      CHECK (jsonb_typeof(branding) = 'object' AND pg_column_size(branding) <= 2048);
+  END IF;
+END
+$$;
 
 -- Public bucket for school logos. Anyone can view a logo by its URL (it shows
 -- on sign-in pages, emails and report cards); only the server can upload.
