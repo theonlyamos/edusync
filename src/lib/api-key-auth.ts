@@ -74,7 +74,7 @@ export async function validateApiKey(
   const origin = request.headers.get('origin') || request.headers.get('referer') || '';
   const domain = extractDomain(origin);
 
-  if (!isDomainAllowed(domain, apiKeyData.allowed_domains)) {
+  if (!isRequestDomainAllowed(domain, request.nextUrl?.hostname || '', apiKeyData.allowed_domains)) {
     return {
       valid: false,
       error: `Domain ${domain} is not whitelisted for this API key`,
@@ -111,6 +111,27 @@ export async function validateApiKey(
   };
 }
 
+/**
+ * The allowed domains of the key in a tutor page's address, for the frame
+ * rule. An unknown or switched-off key has no limit to apply (the API refuses
+ * it anyway, and the tutor can then say so inside the frame). `failed` means
+ * the key could not be read, and the caller refuses framing by other sites.
+ */
+export async function embedKeyDomains(apiKey: string): Promise<{ domains: string[] | null; failed: boolean }> {
+  if (!/^isk_[0-9a-f]{16,128}$/.test(apiKey)) return { domains: null, failed: false };
+  try {
+    const { data, error } = await createServerSupabase()
+      .from('embed_api_keys')
+      .select('allowed_domains, is_active')
+      .eq('api_key', apiKey)
+      .maybeSingle();
+    if (error) return { domains: null, failed: true };
+    return { domains: data?.is_active ? data.allowed_domains ?? null : null, failed: false };
+  } catch {
+    return { domains: null, failed: true };
+  }
+}
+
 function extractApiKey(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
@@ -142,6 +163,15 @@ export function isDomainAllowed(domain: string, allowedDomains: string[] | null 
     }
     return domain === allowedDomain;
   });
+}
+
+/**
+ * The tutor in a frame calls the API from this app's own address, so those
+ * calls pass whatever the key's list says. Which sites may frame the tutor is
+ * enforced when the page is served (see the proxy).
+ */
+export function isRequestDomainAllowed(domain: string, ownHost: string, allowedDomains: string[] | null | undefined): boolean {
+  return (domain !== '' && domain === ownHost) || isDomainAllowed(domain, allowedDomains);
 }
 
 async function updateApiKeyUsage(supabase: any, apiKeyId: string) {

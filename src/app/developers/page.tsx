@@ -20,7 +20,7 @@ export default function DevelopersPage() {
           body: (
             <>
               <p>Sign in and open <Link href="/learn/api-keys">API keys</Link>. Give the key a name.</p>
-              <p>Allowed domains are optional. When a key has them, an API request is refused unless its <code>Origin</code> or <code>Referer</code> header names one of those sites, which includes server-side calls that send neither. The tutor in step 2 runs on <code>insyte.vercel.app</code> inside the frame, so a key used there needs either no allowed domains or <code>insyte.vercel.app</code> in the list. The list does not yet limit which sites can show the tutor in a frame.</p>
+              <p>For anything public, list the websites that may use the key under <strong>Allowed domains</strong>, for example <code>example.com</code> or <code>*.example.com</code>. The tutor then only loads inside pages on those sites: browsers refuse to show it anywhere else, and opening its address in a tab of its own is refused too. Direct API calls from a browser are limited to the same sites. A key with no allowed domains works on any site.</p>
               <p>Treat a key like a password. If one leaks, turn it off on the same page and create a new one.</p>
             </>
           ),
@@ -73,7 +73,7 @@ export default function DevelopersPage() {
             <ul>
               <li><strong>Rate limits:</strong> each key has an hourly and a daily request limit, shown on the API keys page. Going over returns <code>429</code>.</li>
               <li><strong>Credits:</strong> a session needs at least one credit on the owning account. Without it the answer is <code>402</code> with the code <code>INSUFFICIENT_CREDITS</code>.</li>
-              <li><strong>Domains:</strong> a request from a site that is not on the key&rsquo;s allowed list is refused.</li>
+              <li><strong>Domains:</strong> a key with allowed domains only shows the tutor on those sites, over <code>https</code> (<code>localhost</code> also works over <code>http</code> for development). A server-side call that sends no <code>Origin</code> header needs a key without allowed domains.</li>
               <li><strong>Keys:</strong> a missing, expired or switched-off key returns <code>401</code>.</li>
             </ul>
           ),

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { isDomainAllowed, enforceApiKeyRateLimit } from '@/lib/api-key-auth'
+import { isDomainAllowed, isRequestDomainAllowed, enforceApiKeyRateLimit } from '@/lib/api-key-auth'
 
 describe('isDomainAllowed', () => {
   it('allows everything when the whitelist is null or empty', () => {
@@ -24,6 +24,23 @@ describe('isDomainAllowed', () => {
     // but it is NOT a subdomain of example.com.
     expect(isDomainAllowed('evilexample.com', ['*.example.com'])).toBe(false)
     expect(isDomainAllowed('notexample.com', ['*.example.com'])).toBe(false)
+  })
+})
+
+describe('isRequestDomainAllowed', () => {
+  it('passes calls made by the tutor from the app’s own address', () => {
+    expect(isRequestDomainAllowed('insyte.test', 'insyte.test', ['example.com'])).toBe(true)
+  })
+
+  it('still refuses other sites and requests that name no site', () => {
+    expect(isRequestDomainAllowed('evil.com', 'insyte.test', ['example.com'])).toBe(false)
+    expect(isRequestDomainAllowed('', '', ['example.com'])).toBe(false)
+    expect(isRequestDomainAllowed('', 'insyte.test', ['example.com'])).toBe(false)
+  })
+
+  it('keeps the list working for direct calls', () => {
+    expect(isRequestDomainAllowed('example.com', 'insyte.test', ['example.com'])).toBe(true)
+    expect(isRequestDomainAllowed('anything.com', 'insyte.test', null)).toBe(true)
   })
 })
 
