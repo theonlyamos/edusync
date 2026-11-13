@@ -11,7 +11,7 @@ import { createVisualStatusDelivery, isVisualToolName, VISUAL_PENDING_TOOL_RESPO
 import { voiceErrorMessage } from '@/lib/live-tutor/voice-errors';
 
 export type UseAudioStreamingLiveOptions = {
-    variant?: 'tutor' | 'studyCompanion';
+    variant?: 'tutor' | 'studyCompanion' | 'coauthor';
     gradeLevel?: string | null;
     studyMode?: StudyMode;
     studyIntent?: StudyIntent;
@@ -942,7 +942,9 @@ export function useAudioStreaming(
                 ? 'Continue'
                 : isStudyCompanion
                     ? 'The student connected for live voice study companion help. Greet them briefly and ask what they want to work on.'
-                    : 'Hello';
+                    : variant === 'coauthor'
+                        ? 'The teacher turned on voice to plan this lesson with you. Greet them in one short sentence and ask what they want to work on.'
+                        : 'Hello';
             geminiSession.sendRealtimeInput({ text: initialMessage });
             if (!ownsRequest()) return;
             if (setupError) throw setupError;

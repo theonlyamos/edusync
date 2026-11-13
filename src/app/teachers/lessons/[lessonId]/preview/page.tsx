@@ -2,11 +2,13 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ChevronDown, CircleHelp, Eye, Loader2, Presentation, Target } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { ArrowLeft, ChevronDown, CircleHelp, Eye, Loader2, Mic, Presentation, Target } from 'lucide-react';
 
 import { MarkdownContent } from '@/components/content/MarkdownContent';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { LessonIntroduction } from '@/components/lessons/LessonIntroduction';
+import { RehearsalFlag } from '@/components/lessons/RehearsalFlag';
 import { LearningArtifactCard } from '@/components/students/study-companion/LearningArtifactCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +30,8 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
   const [preview, setPreview] = useState<Preview>();
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string>();
+  const rehearsing = useSearchParams().get('rehearse') === '1';
+  const [flagged, setFlagged] = useState(0);
 
   const load = useCallback(async () => {
     setError('');
@@ -49,8 +53,13 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
       <div className="mx-auto max-w-5xl space-y-6 p-3 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
           <p className="flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /><span><strong>Student preview.</strong> This is what students get when you publish now: approved materials only. Nothing here is saved.</span></p>
-          <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}?tab=studio`}><ArrowLeft className="mr-2 h-4 w-4" />Back to Studio</Link></Button>
+          <div className="flex flex-wrap gap-2">
+            {!rehearsing && <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}/preview?rehearse=1`}>Rehearse as a student</Link></Button>}
+            <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}/rehearse`}><Mic className="mr-2 h-4 w-4" />Rehearse by voice</Link></Button>
+            <Button variant="outline" size="sm" asChild><Link href={`/teachers/lessons/${lessonId}?tab=studio`}><ArrowLeft className="mr-2 h-4 w-4" />Back to Studio</Link></Button>
+          </div>
         </div>
+        {rehearsing && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"><strong>Rehearsal.</strong> Work through each activity as a student would. Flag anything that confuses you or feels too easy; your notes wait for the co-author in the Studio.{flagged > 0 && ` ${flagged} flagged so far.`}</div>}
 
         {error && <div role="alert" className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center"><p className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => void load()}>Try again</Button></div>}
         {!preview && !error && <div role="status" className="flex min-h-64 items-center justify-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />Building the preview…</div>}
@@ -86,7 +95,10 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
                 </button>
                 {expanded && <CardContent className="border-t bg-muted/20 p-3 sm:p-5">
                   {items.length
-                    ? items.map(artifact => <LearningArtifactCard key={artifact.id} preview attachment={{ artifact, instanceId: artifact.id, source: 'teacher_approved', exhausted: false }} />)
+                    ? items.map(artifact => <div key={artifact.id}>
+                      <LearningArtifactCard preview attachment={{ artifact, instanceId: artifact.id, source: 'teacher_approved', exhausted: false }} />
+                      {rehearsing && <RehearsalFlag lessonId={lessonId} where={`Objective ${index + 1} · ${artifact.kind === 'structured_quiz' ? 'knowledge check' : artifact.kind === 'visual_quiz' ? 'visual challenge' : artifact.kind === 'generated_image' ? 'introduction image' : 'interactive visual'}`} artifactId={artifact.id} onAdded={() => setFlagged(count => count + 1)} />}
+                    </div>)
                     : <p className="text-sm text-muted-foreground">No approved materials yet. Students would get AI-made activities for this objective during their session.</p>}
                 </CardContent>}
               </Card>;
@@ -94,7 +106,7 @@ export default function StudentPreviewPage({ params }: { params: Promise<{ lesso
             {!preview.detail.objectives.length && <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">This lesson has no objectives yet.</p>}
           </div>
 
-          {lesson.content && <section><h2 className="mb-2 font-semibold">Lesson text</h2><MarkdownContent>{lesson.content}</MarkdownContent></section>}
+          {lesson.content && <section><h2 className="mb-2 font-semibold">Lesson text</h2><MarkdownContent>{lesson.content}</MarkdownContent>{rehearsing && <RehearsalFlag lessonId={lessonId} where="Lesson text" onAdded={() => setFlagged(count => count + 1)} />}</section>}
         </>}
       </div>
     </DashboardLayout>

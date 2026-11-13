@@ -20,7 +20,8 @@ export const liveTokenRequestSchema = z.object({
     sessionId: z.string().uuid().nullish(),
     /** Gemini session resumption handle from the previous connection. */
     resumptionHandle: z.string().min(1).max(4096).nullish(),
-    variant: z.enum(['tutor', 'studyCompanion']).default('tutor'),
+    /** coauthor = a teacher planning a lesson out loud with the lesson co-author (teachers only). */
+    variant: z.enum(['tutor', 'studyCompanion', 'coauthor']).default('tutor'),
     topic: z.string().max(300).nullish(),
     gradeLevel: z.string().max(80).nullish(),
     studyMode: studyModeSchema.nullish(),
@@ -68,6 +69,21 @@ export const objectiveArtifactToolDeclaration = {
             taskDescription: { type: 'string', description: 'A short description of the concept or check the learner needs.' },
         },
         required: ['kind', 'taskDescription'],
+    },
+};
+
+export const askCoauthorToolDeclaration = {
+    name: 'ask_coauthor',
+    description: 'Hands the teacher\'s request to the lesson co-author, which reads the whole saved lesson and shows proposal cards (objectives, concepts, quiz edits, lesson text, or generating images, visuals and quizzes) in the chat. Call it for every request to plan, check, change or generate something. The result arrives later as a message starting COAUTHOR_RESULT.',
+    parameters: {
+        type: 'object',
+        properties: {
+            request: {
+                type: 'string',
+                description: 'The teacher\'s request in full, with any details they gave (class, misconceptions, which objective or material).',
+            },
+        },
+        required: ['request'],
     },
 };
 
@@ -132,7 +148,31 @@ Focus your teaching on these objectives. Use the lesson material as the foundati
     return '';
 }
 
+const COAUTHOR_VOICE_PROMPT = `You are the voice of InsyteAI's lesson co-author, talking with a teacher who is planning a lesson in the Objective Studio.
+
+- Speak briefly and warmly, like a colleague: one to three sentences at a time.
+- Ask about the class, what students already know, time available and common misconceptions when that would help.
+- For anything that plans, checks, changes or generates part of the lesson, call ask_coauthor with the teacher's full request. Do not invent lesson changes yourself.
+- After calling it, say you're working on it. When a COAUTHOR_RESULT message arrives, sum it up in a sentence or two and tell the teacher the cards are in the chat. The teacher taps Apply on a card to use it; you cannot apply anything.
+- Generating images, visuals and quizzes uses the school's AI allowance. Mention it when you offer to generate.
+- Never read out ids, JSON or long lists.`;
+
+function buildCoauthorVoicePrompt(input: LiveTokenRequest): string {
+    const lesson = input.lesson;
+    if (!lesson?.title) return COAUTHOR_VOICE_PROMPT;
+    return `${COAUTHOR_VOICE_PROMPT}
+
+### Lesson being planned
+- Title: ${lesson.title}
+- Subject: ${lesson.subject || 'Not specified'}
+- Grade: ${lesson.gradeLevel || 'Not specified'}
+
+Objectives:
+${objectivesText(lesson.objectives, true) || 'None yet.'}`;
+}
+
 export function buildLiveSystemPrompt(input: LiveTokenRequest): string {
+    if (input.variant === 'coauthor') return buildCoauthorVoicePrompt(input);
     if (input.variant === 'studyCompanion') {
         const lesson = input.lesson;
         const lessonHint = lesson?.title && lesson.title.trim().length > 0
@@ -154,6 +194,7 @@ export function buildLiveSystemPrompt(input: LiveTokenRequest): string {
 }
 
 export function buildLiveTools(input: LiveTokenRequest) {
+    if (input.variant === 'coauthor') return [{ functionDeclarations: [askCoauthorToolDeclaration] }];
     if (input.variant === 'studyCompanion') {
         // Study Companion Live: function calls only (no Google Search); single viz/quiz tool.
         return [{ functionDeclarations: [visualizationToolDeclaration] }];
@@ -180,7 +221,7 @@ export function getLiveModel(): string | null {
  * can be locked into the token and returned to the browser unchanged.
  */
 export function buildLiveConnectConfig(input: LiveTokenRequest) {
-    const isStudyCompanion = input.variant === 'studyCompanion';
+    const withTranscripts = input.variant === 'studyCompanion' || input.variant === 'coauthor';
     return {
         responseModalities: ['AUDIO'],
         proactivity: { proactiveAudio: true },
@@ -197,6 +238,6 @@ export function buildLiveConnectConfig(input: LiveTokenRequest) {
         contextWindowCompression: { slidingWindow: {} },
         sessionResumption: input.resumptionHandle ? { handle: input.resumptionHandle } : {},
         tools: buildLiveTools(input),
-        ...(isStudyCompanion ? { inputAudioTranscription: {}, outputAudioTranscription: {} } : {}),
+        ...(withTranscripts ? { inputAudioTranscription: {}, outputAudioTranscription: {} } : {}),
     };
 }
