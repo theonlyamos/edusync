@@ -7,6 +7,8 @@ export const DAILY_CAPS = {
   companion: { max: 60, noun: 'study companion messages' },
   practice: { max: 10, noun: 'practice sets' },
   collaborator: { max: 10, noun: 'collaborator images' },
+  /** Teachers: messages to the lesson co-author in the Objective Studio. */
+  coauthor: { max: 150, noun: 'co-author messages' },
 } as const;
 
 export type DailyCapFeature = keyof typeof DAILY_CAPS;
@@ -20,6 +22,7 @@ export function dailyCapKey(feature: DailyCapFeature, userId: string, now: Date 
 
 export function dailyCapMessage(feature: DailyCapFeature): string {
   const cap = DAILY_CAPS[feature];
+  if (feature === 'coauthor') return `You've used today's ${cap.max} ${cap.noun}. They reset tomorrow.`;
   return `You've used today's ${cap.max} ${cap.noun}. Great work! They reset tomorrow.`;
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { authoringUpdateSchema } from '@/lib/lesson-artifacts/authoring';
-import { acceptedCreativeConcepts } from '@/lib/lesson-artifacts/creative-concept';
+import { loadAcceptedConcepts } from '@/lib/lesson-artifacts/accepted-concepts.server';
 import { lessonArtifactErrorResponse, requireLessonManager } from '@/lib/lesson-artifacts/server';
 import { lessonAudience } from '@/lib/lesson-artifacts/audience.server';
 
@@ -27,15 +27,7 @@ export async function GET(
     if (objectivesError) throw objectivesError;
     if (artifactsError) throw artifactsError;
     if (activeJobsError) throw activeJobsError;
-    // At most one row per active objective; a busy objective cannot hide another one's plan.
-    const conceptResults = await Promise.all((objectives ?? []).map((objective) => supabase.from('content_jobs')
-      .select('objective_id,input').eq('lesson_id', lessonId).eq('objective_id', objective.id)
-      .eq('input->>objectiveRevision', String(objective.revision)).not('input->>creativeConcept', 'is', null)
-      .order('created_at', { ascending: false }).limit(1)));
-    const conceptJobs = conceptResults.flatMap(({ data, error }) => {
-      if (error) throw error;
-      return data ?? [];
-    });
+    const creativeConcepts = await loadAcceptedConcepts(supabase, lessonId, objectives ?? []);
 
     let currentPublication = null;
     if (lesson.current_publication_id) {
@@ -57,7 +49,7 @@ export async function GET(
       viewerId: session.user.id,
       audience,
       activeBatchId: activeJobs?.[0]?.batch_id,
-      creativeConcepts: acceptedCreativeConcepts(objectives ?? [], conceptJobs ?? []),
+      creativeConcepts,
       lesson: {
         id: lesson.id,
         title: lesson.title,

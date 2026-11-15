@@ -85,3 +85,21 @@ describe('server-built Gemini Live config', () => {
         expect(liveTokenRequestSchema.safeParse(body).success).toBe(true);
     });
 });
+
+describe('lesson co-author voice', () => {
+    it('gives the co-author only its hand-off tool, transcripts and the lesson', () => {
+        const config = buildLiveConnectConfig(parse(buildLiveTokenRequest({
+            grantId: null,
+            sessionId: null,
+            resumptionHandle: null,
+            variant: 'coauthor',
+            lesson: { title: 'Fractions', subject: 'Maths', gradeLevel: '4', objectives: ['Place unit fractions'] },
+        })));
+        expect(toolNames(config)).toEqual(['ask_coauthor']);
+        expect(config.systemInstruction).toContain('lesson co-author');
+        expect(config.systemInstruction).toContain('- Place unit fractions');
+        expect(config.systemInstruction).not.toContain(EUREKA_TUTOR_SYSTEM_PROMPT);
+        expect(config).toHaveProperty('inputAudioTranscription');
+        expect(config).toHaveProperty('outputAudioTranscription');
+    });
+});

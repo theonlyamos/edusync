@@ -10,7 +10,7 @@ export type LiveTokenRequestInput = {
     grantId: string | null;
     sessionId: string | null;
     resumptionHandle: string | null;
-    variant: 'tutor' | 'studyCompanion';
+    variant: 'tutor' | 'studyCompanion' | 'coauthor';
     topic?: string | null;
     gradeLevel?: string | null;
     studyMode?: string | null;

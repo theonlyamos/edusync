@@ -344,7 +344,7 @@ export default function LessonPage() {
                     </TabsContent>
 
                     <TabsContent value="studio" className="mt-6">
-                        <ObjectiveAuthoringWorkspace key={studioKey} lessonId={params.lessonId as string} />
+                        <ObjectiveAuthoringWorkspace key={studioKey} lessonId={params.lessonId as string} onContentSaved={(content) => setLesson((current) => current ? { ...current, content: content ?? '' } : current)} />
                     </TabsContent>
 
                     <TabsContent value="content" className="mt-6">

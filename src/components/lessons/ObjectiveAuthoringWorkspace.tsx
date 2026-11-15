@@ -15,6 +15,10 @@ import { ConceptEditor } from './ConceptEditor';
 import { StudioArtifactReview } from './StudioArtifactReview';
 import { StudioDirections } from './StudioDirections';
 import { LessonAudiencePicker, type LessonAudienceData } from './LessonAudiencePicker';
+import { CoauthorPanel } from './CoauthorPanel';
+import type { CoauthorFocus, CoauthorProposal } from '@/lib/lesson-artifacts/coauthor';
+import type { SketchResult } from '@/lib/lesson-artifacts/sketch';
+import { describePoint, describePointForTeacher, type MaterialPoint } from '@/lib/lesson-artifacts/point-comment';
 type Objective = { id: string; text: string; position: number; revision: number; visualInstructions: string };
 type Concept = { revision: number; concept: string };
 type Step = 'direction' | 'lesson' | 'objective' | 'publish';
@@ -33,7 +37,7 @@ async function readJson(response: Response) {
   if (!response.ok) throw new Error(data.error || 'Something went wrong');
   return data;
 }
-export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) {
+export function ObjectiveAuthoringWorkspace({ lessonId, onContentSaved }: { lessonId: string; onContentSaved?: (content: string | null) => void }) {
   const { toast } = useToast();
   const [data, setData] = useState<AuthoringData>();
   const [loadError, setLoadError] = useState<string>();
@@ -61,6 +65,9 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const [storageReady, setStorageReady] = useState('');
   const [pendingImpact, setPendingImpact] = useState<DirectionEditImpact>();
   const [prepareOpen, setPrepareOpen] = useState(false);
+  const [coauthorOpen, setCoauthorOpen] = useState(false);
+  const coauthorDecided = useRef(false);
+  const [coauthorQueue, setCoauthorQueue] = useState<{ id: string; text: string; shown?: string }>();
   const restoredKey = useRef('');
   const loadSequenceRef = useRef(0);
   const syncDraftsRef = useRef(false);
@@ -136,6 +143,22 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
     try { localStorage.setItem(storageKey, JSON.stringify({ step, objectiveId: activeObjectiveId, materialKey, series: selectedSeries, version: historicalId, concepts: conceptDrafts })); }
     catch { /* A blocked local store must not prevent authoring. */ }
   }, [storageKey, storageReady, step, activeObjectiveId, materialKey, selectedSeries, historicalId, conceptDrafts]);
+  // The co-author opens by itself on a brand-new lesson, then remembers the teacher's choice.
+  useEffect(() => {
+    if (!data || coauthorDecided.current) return;
+    coauthorDecided.current = true;
+    let saved: string | null = null;
+    try { saved = localStorage.getItem('insyte:coauthor-open'); } catch { /* optional */ }
+    setCoauthorOpen(saved === null ? data.artifacts.length === 0 : saved === '1');
+  }, [data]);
+  const handleQueued = useCallback((id: string) => setCoauthorQueue(current => current?.id === id ? undefined : current), []);
+  const toggleCoauthor = (open: boolean) => {
+    setCoauthorOpen(open);
+    try { localStorage.setItem('insyte:coauthor-open', open ? '1' : '0'); } catch { /* optional */ }
+    // The panel is as tall as the window, so bring its message box on screen.
+    if (open) requestAnimationFrame(() => document.getElementById('studio-coauthor')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
+
   useEffect(() => {
     if (moveFocusRef.current) { headingRef.current?.focus(); moveFocusRef.current = false; }
   }, [selectionToken]);
@@ -274,7 +297,7 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   };
 
   const generateBundle = async (introduction = false) => {
-    if (!introduction && !activeObjective) return;
+    if (!introduction && !activeObjective) return false;
     const token = selectionToken;
     setBusy('generate');
     try {
@@ -284,9 +307,11 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
       setBatchId(result.batchId);
       setJobProgress({ total: result.jobs.length, done: 0, succeeded: 0, failed: 0, cancelled: 0, active: result.jobs.length });
       if (!introduction && selectionRef.current === token) { moveFocusRef.current = true; navigate('objective', activeObjectiveId, 'introduction'); }
+      return true;
     } catch (error) {
       setBusy(undefined);
       toast({ title: 'Could not start generation', description: (error as Error).message, variant: 'destructive' });
+      return false;
     } finally { setBusy(undefined); }
   };
 
@@ -345,15 +370,17 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
     }
   }, [load, toast]);
 
-  const regenerate = async (artifactId: string) => {
+  const regenerate = async (artifactId: string, feedbackOverride?: string) => {
     setArtifactBusy({ artifactId, action: 'regenerate' });
     try {
-      const result = await readJson(await fetch(`/api/teachers/artifacts/${artifactId}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feedback: feedback[artifactId] ?? '' }) }));
+      const result = await readJson(await fetch(`/api/teachers/artifacts/${artifactId}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feedback: feedbackOverride ?? feedback[artifactId] ?? '' }) }));
       setBatchId(result.batchId);
       setJobProgress({ total: 1, done: 0, succeeded: 0, failed: 0, cancelled: 0, active: 1 });
+      return true;
     } catch (error) {
       setArtifactBusy(undefined);
       toast({ title: 'Regeneration failed', description: (error as Error).message, variant: 'destructive' });
+      return false;
     }
   };
 
@@ -416,6 +443,153 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   };
 
 
+  /** Why a co-author proposal can't be applied right now, in the teacher's words. */
+  const coauthorBlockedReason = (proposal: CoauthorProposal) => {
+    if (!data) return 'The Studio is still loading.';
+    if (busy) return 'Wait for the current step to finish.';
+    if (proposal.type === 'objectives' || proposal.type === 'lesson_direction' || proposal.type === 'content' || proposal.type === 'sketch') return undefined;
+    if (objectivesDirty) return 'Save or undo your direction changes first.';
+    if (proposal.type === 'concept') {
+      const objective = data.objectives.find(item => item.id === proposal.objectiveId);
+      if (!objective) return 'That objective was removed.';
+      if (objective.revision !== proposal.objectiveRevision) return 'This objective changed since the suggestion. Ask again.';
+      return undefined;
+    }
+    if (proposal.type === 'generate_introduction' || proposal.type === 'generate_materials' || proposal.type === 'prepare_all') {
+      if (batchId) return 'Wait for the materials being made to finish.';
+      if (proposal.type === 'prepare_all') return unpreparedObjectives(data.objectives, data.artifacts).length ? undefined : 'Every objective already has materials.';
+      if (proposal.type === 'generate_materials') {
+        const objective = data.objectives.find(item => item.id === proposal.objectiveId);
+        if (!objective) return 'That objective was removed.';
+        if (objective.revision !== proposal.objectiveRevision) return 'This objective changed since the suggestion. Ask again.';
+        if (!proposal.concept && !conceptFor(objective)) return 'This objective needs a concept first. Ask for one.';
+      }
+      return undefined;
+    }
+    if (!data.artifacts.some(item => item.id === proposal.artifactId)) return 'That material is no longer here.';
+    if (proposal.type === 'regenerate' && batchId) return 'Wait for the materials being made to finish.';
+    if (artifactBusy) return 'Wait for the current material action to finish.';
+    return undefined;
+  };
+
+  const showMaterial = (objectiveId: string | null, materialKey: string, artifactId: string) => {
+    const artifact = dataRef.current?.artifacts.find(item => item.id === artifactId);
+    if (objectiveId) navigate('objective', objectiveId, materialKey); else navigate('lesson');
+    if (artifact) setSelectedSeries(artifact.series_id);
+  };
+
+  const applyCoauthorProposal = async (proposal: CoauthorProposal): Promise<boolean> => {
+    if (!data || coauthorBlockedReason(proposal)) return false;
+    switch (proposal.type) {
+      case 'objectives':
+        updateDraftObjectives(() => proposal.objectives.map(item => ({
+          ...(item.id ? { id: item.id } : {}),
+          text: item.text,
+          visualInstructions: item.visualInstructions ?? data.objectives.find(objective => objective.id === item.id)?.visualInstructions ?? '',
+        })));
+        navigate('direction');
+        toast({ title: 'Objectives filled in', description: 'Check them in Lesson direction, then save.' });
+        return true;
+      case 'lesson_direction':
+        setVisualInstructions(proposal.visualInstructions);
+        setDirty(true);
+        navigate('direction');
+        toast({ title: 'Lesson direction filled in', description: 'Check it, then save.' });
+        return true;
+      case 'concept':
+        setConceptDrafts(current => ({ ...current, [proposal.objectiveId]: { revision: proposal.objectiveRevision, concept: proposal.concept } }));
+        navigate('objective', proposal.objectiveId, 'concept');
+        return true;
+      case 'regenerate': {
+        showMaterial(proposal.objectiveId, proposal.materialKey === 'lesson' ? 'introduction' : proposal.materialKey, proposal.artifactId);
+        return regenerate(proposal.artifactId, proposal.feedback);
+      }
+      case 'quiz': {
+        const ok = await editQuiz(proposal.artifactId, proposal.payload);
+        if (ok) showMaterial(proposal.objectiveId, proposal.materialKey, proposal.artifactId);
+        return ok;
+      }
+      case 'generate_introduction':
+        navigate('lesson');
+        return generateBundle(true);
+      case 'prepare_all':
+        setPrepareOpen(true);
+        return true;
+      case 'generate_materials': {
+        const objective = data.objectives.find(item => item.id === proposal.objectiveId)!;
+        const creativeConcept = proposal.concept ?? conceptFor(objective)!;
+        if (proposal.concept) setConceptDrafts(current => ({ ...current, [objective.id]: { revision: objective.revision, concept: proposal.concept! } }));
+        setBusy('generate');
+        try {
+          const result = await readJson(await fetch(`/api/teachers/objectives/${objective.id}/generate-bundle`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creativeConcept, objectiveRevision: objective.revision }),
+          }));
+          setBatchId(result.batchId);
+          setJobProgress({ total: result.jobs.length, done: 0, succeeded: 0, failed: 0, cancelled: 0, active: result.jobs.length });
+          navigate('objective', objective.id, 'introduction');
+          return true;
+        } catch (error) {
+          toast({ title: 'Could not start generation', description: (error as Error).message, variant: 'destructive' });
+          return false;
+        } finally { setBusy(undefined); }
+      }
+      case 'sketch':
+        return false;
+      case 'content':
+        try {
+          await readJson(await fetch(`/api/teachers/lessons/${lessonId}/content`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: proposal.content }),
+          }));
+          onContentSaved?.(proposal.content);
+          await load();
+          toast({ title: 'Lesson text updated', description: 'You can edit it in the Content tab.' });
+          return true;
+        } catch (error) {
+          toast({ title: 'Could not update the lesson text', description: (error as Error).message, variant: 'destructive' });
+          return false;
+        }
+    }
+  };
+
+  const coauthorObjectiveLabel = (objectiveId: string) => {
+    const objective = data?.objectives.find(item => item.id === objectiveId);
+    return objective ? `Objective ${objective.position + 1}` : 'A removed objective';
+  };
+  const keepSketchBlocked = (sketch: SketchResult) => {
+    const objective = data?.objectives.find(item => item.id === sketch.objectiveId);
+    if (!objective) return 'That objective was removed.';
+    if (objective.revision !== sketch.objectiveRevision) return 'The objective changed since this was drawn. Redraw it to keep it.';
+    if (objectivesDirty) return 'Save or undo your direction changes first.';
+    if (busy) return 'Wait for the current step to finish.';
+    return undefined;
+  };
+  const keepSketch = async (sketch: SketchResult) => {
+    if (keepSketchBlocked(sketch)) return false;
+    try {
+      const result = await readJson(await fetch(`/api/teachers/objectives/${sketch.objectiveId}/keep-sketch`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sketch),
+      }));
+      await load();
+      navigate('objective', sketch.objectiveId, result.materialKey);
+      if (result.artifact?.series_id) setSelectedSeries(result.artifact.series_id);
+      toast({ title: 'Sketch kept as a draft', description: 'It is checked in the preview. Approve it when you are happy.' });
+      return true;
+    } catch (error) {
+      toast({ title: 'Could not keep the sketch', description: (error as Error).message, variant: 'destructive' });
+      return false;
+    }
+  };
+  /** Point and comment: a pin on a material becomes a co-author message. */
+  const pointAtMaterial = (point: MaterialPoint) => {
+    const artifact = data?.artifacts.find(item => item.id === point.artifactId);
+    if (!artifact) return;
+    const objective = data?.objectives.find(item => item.id === artifact.objective_id);
+    const material = objective ? getStudioMaterials(artifacts, objective.id, objective.revision).find(item => item.artifacts.some(candidate => candidate.series_id === artifact.series_id))?.label : 'Lesson introduction';
+    toggleCoauthor(true);
+    const label = `${material ?? 'material'}${objective ? `, objective ${objective.position + 1}` : ''}`;
+    setCoauthorQueue({ id: `${point.artifactId}:${Date.now()}`, text: describePoint(point, label), shown: describePointForTeacher(point, label) });
+  };
+
   const saveDirectionsAndContinue = async () => {
     if (!objectivesDirty || await saveObjectives()) { moveFocusRef.current = true; navigate('lesson'); }
   };
@@ -444,19 +618,34 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
   const toPrepare = unpreparedObjectives(data.objectives, artifacts).slice(0, PREPARE_OBJECTIVES_LIMIT);
   const needConcept = toPrepare.filter(objective => !conceptFor(objective)).length;
   const title = step === 'direction' ? 'Set the direction' : step === 'lesson' ? 'Introduce the lesson' : step === 'publish' ? 'Ready for your students?' : materialKey === 'concept' ? 'Choose a creative concept' : currentMaterial.label;
+  const coauthorFocus: CoauthorFocus = {
+    step,
+    objectiveId: step === 'objective' ? activeObjectiveId ?? null : null,
+    materialKey: step === 'objective' ? materialKey : null,
+    artifactId: (step === 'objective' && materialKey !== 'concept') || step === 'lesson' ? selectedArtifact?.id ?? null : null,
+    conceptDraft: step === 'objective' && materialKey === 'concept' && concept ? concept : null,
+  };
+  const coauthorFocusLabel = step === 'objective' && activeObjective ? `${materialKey === 'concept' ? 'Creative concept' : currentMaterial.label}, objective ${activeObjective.position + 1}` : title === 'Set the direction' ? 'Lesson direction' : title;
+  const coauthorStarters = data.objectives.length === 0 || artifacts.length === 0
+    ? ['Interview me about my class', 'Suggest objectives for this lesson', 'Draft the lesson text']
+    : step === 'objective' && materialKey === 'knowledge'
+      ? ['Check this quiz for misconceptions', 'Make it harder', 'Add a numeric question']
+      : step === 'objective' && materialKey === 'concept'
+        ? ['Suggest a concept for this objective', 'Make it more hands-on']
+        : ['What is missing from this lesson?', 'Make objective 1 easier', 'Suggest a better setting'];
   const navClass = (active: boolean) => cn('flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', active ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground');
   const status = (complete: boolean) => complete ? <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" /> : <Circle className="h-4 w-4 shrink-0 text-muted-foreground/50" />;
   const renderFocusedArtifact = () => selectedArtifact ? <>
     {choices.length > 1 && <label className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">Material alternatives<select disabled={mutationDisabled} aria-label="Material alternatives" className="rounded-lg border bg-background p-2 text-foreground" value={selectedArtifact.series_id} onChange={event => { setSelectedSeries(event.target.value); setHistoricalId(''); }}>{choices.map((item, index) => <option key={item.series_id} value={item.series_id}>Option {choices.length - index} · {item.status}{item.objective_revision !== (step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision) ? ' · earlier directions' : ''}</option>)}</select></label>}
-    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onEditQuiz={editQuiz} onValidation={validateArtifact} onContinue={continueReview} />
+    <StudioArtifactReview key={selectedArtifact.id} artifact={selectedArtifact} versions={artifacts.filter(item => item.series_id === selectedArtifact.series_id)} revision={step === 'lesson' ? data.lesson.visualRevision : activeObjective?.revision ?? 0} disabled={mutationDisabled || artifactBusy?.artifactId === selectedArtifact.id} generating={!!batchId} historicalId={historicalId} onHistory={setHistoricalId} feedback={feedback[selectedArtifact.id] ?? ''} onFeedback={text => setFeedback(current => ({ ...current, [selectedArtifact.id]: text }))} onReview={review} onRegenerate={regenerate} onEditQuiz={editQuiz} onValidation={validateArtifact} onContinue={continueReview} onPoint={pointAtMaterial} />
   </> : <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed px-6 text-center"><ImageIcon className="mb-4 h-9 w-9 text-muted-foreground/50" /><h4 className="text-lg font-medium">{batchId ? 'Your material is on its way' : 'Bring this idea to life'}</h4><p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{batchId ? 'Generation continues in the background. You can review other steps while you wait.' : step === 'lesson' ? 'Generate a visual introduction using your lesson directions.' : 'Choose a creative concept to generate the five materials for this objective.'}</p>{!batchId && <Button className="mt-6" disabled={generationDisabled} onClick={() => step === 'lesson' ? void generateBundle(true) : navigate('objective', activeObjectiveId, 'concept')}><Sparkles className="mr-2 h-4 w-4" />{step === 'lesson' ? 'Generate introduction' : 'Choose concept'}</Button>}</div>;
 
   return <div className="overflow-clip rounded-2xl border bg-background">
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-5 sm:px-7"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Objective Studio</p><p className="mt-1 text-sm text-muted-foreground">Shape the experience, one step at a time.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">{approvedCount}/{total} approved</span>{toPrepare.length > 0 && <Button size="sm" variant="outline" disabled={generationDisabled} onClick={() => setPrepareOpen(true)}>{busy === 'prepare' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}{busy === 'prepare' ? 'Preparing…' : `Prepare ${toPrepare.length === data.objectives.length ? 'all objectives' : `${toPrepare.length} remaining`}`}</Button>}{data.currentPublication && <Badge variant="outline">Live · v{data.currentPublication.version}</Badge>}<Button variant="outline" size="sm" className="lg:hidden" aria-expanded={showOutline} aria-controls="studio-outline" onClick={() => setShowOutline(value => !value)}><List className="mr-2 h-4 w-4" />Outline</Button></div></header>
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-5 sm:px-7"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Objective Studio</p><p className="mt-1 text-sm text-muted-foreground">Shape the experience, one step at a time.</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">{approvedCount}/{total} approved</span>{toPrepare.length > 0 && <Button size="sm" variant="outline" disabled={generationDisabled} onClick={() => setPrepareOpen(true)}>{busy === 'prepare' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}{busy === 'prepare' ? 'Preparing…' : `Prepare ${toPrepare.length === data.objectives.length ? 'all objectives' : `${toPrepare.length} remaining`}`}</Button>}{data.currentPublication && <Badge variant="outline">Live · v{data.currentPublication.version}</Badge>}<Button variant={coauthorOpen ? 'secondary' : 'outline'} size="sm" aria-pressed={coauthorOpen} aria-controls="studio-coauthor" onClick={() => toggleCoauthor(!coauthorOpen)}><Sparkles className="mr-2 h-4 w-4" />Co-author</Button><Button variant="outline" size="sm" className="lg:hidden" aria-expanded={showOutline} aria-controls="studio-outline" onClick={() => setShowOutline(value => !value)}><List className="mr-2 h-4 w-4" />Outline</Button></div></header>
     {batchId && <div role="status" className="flex flex-wrap items-center gap-3 border-b bg-primary/5 px-5 py-3 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /><span>Preparing materials · {jobProgress?.done ?? 0}/{jobProgress?.total ?? 5} finished</span><span className="text-muted-foreground">You can keep reviewing.</span></div>}
     {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 p-4 text-sm text-destructive"><span>{loadError}</span><Button variant="outline" size="sm" onClick={() => void load({ restoreJobs: true }).catch(() => undefined)}>Refresh</Button></div>}
     {objectivesDirty && step !== 'direction' && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b bg-amber-500/10 p-4 text-sm"><span>Save your direction changes before generating, approving, or publishing.</span><Button variant="outline" size="sm" onClick={() => navigate('direction')}>Review directions</Button></div>}
-    <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
+    <div className={cn('lg:grid lg:grid-cols-[220px_minmax(0,1fr)]', coauthorOpen && 'xl:grid-cols-[220px_minmax(0,1fr)_360px]')}>
       <aside id="studio-outline" className={cn('border-b bg-muted/20 p-3 lg:block lg:border-b-0 lg:border-r', !showOutline && 'hidden')}><nav aria-label="Lesson creation outline" className="space-y-1 lg:sticky lg:top-4">
         <button className={navClass(step === 'direction')} aria-current={step === 'direction' ? 'step' : undefined} onClick={() => navigate('direction')}>{status(!objectivesDirty && artifacts.length > 0)}<span>Lesson direction</span></button>
         <button className={navClass(step === 'lesson')} aria-current={step === 'lesson' ? 'step' : undefined} onClick={() => navigate('lesson')}>{status(lessonApproved)}<span>Lesson introduction</span></button>
@@ -480,6 +669,9 @@ export function ObjectiveAuthoringWorkspace({ lessonId }: { lessonId: string }) 
         </>}
         {step === 'publish' && <div className="space-y-6"><p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Check the introductions and reviewed materials below. Your current publication stays available until you publish these changes.</p><button className="flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left" onClick={() => navigate('lesson')}><span className="flex items-center gap-3">{status(lessonApproved)}Lesson introduction</span><span className="text-xs text-muted-foreground">{lessonApproved ? 'Approved' : 'Required'}</span></button>{readiness.map(({ objective, materials: items }) => <section key={objective.id} className="rounded-xl border p-5"><p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Objective {objective.position + 1}</p><h4 className="text-sm font-medium leading-relaxed">{objective.text}</h4><div className="mt-4 grid gap-2 sm:grid-cols-2">{items.map(item => <button key={item.key} className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-muted" onClick={() => navigate('objective', objective.id, item.key)}>{status(item.approved)}<span>{item.label}</span><span className="ml-auto text-xs text-muted-foreground">{item.approved ? 'Ready' : item.key === 'introduction' ? 'Required' : 'Recommended'}</span></button>)}</div></section>)}{data.audience?.gradeLevel && <LessonAudiencePicker lessonId={lessonId} audience={data.audience} disabled={mutationDisabled} onChange={(audience) => setData((current) => current ? { ...current, audience } : current)} />}{!requiredReady && <p role="status" className="rounded-xl bg-amber-500/10 p-4 text-sm">Approve a current introduction for the lesson and every objective before publishing. Other materials are recommended.</p>}<div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5"><p className="text-sm text-muted-foreground">{approvedCount} of {total} recommended materials approved.</p><div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link href={`/teachers/lessons/${lessonId}/preview`} target="_blank" rel="noopener noreferrer"><Eye className="mr-2 h-4 w-4" />Preview as student</Link></Button><Button disabled={!requiredReady || mutationDisabled || !!batchId} onClick={() => void publish()}>{busy === 'publish' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{data.currentPublication ? 'Publish reviewed changes' : 'Publish lesson'}</Button></div></div></div>}
       </section>
+      {coauthorOpen && <div id="studio-coauthor" className="border-t lg:col-span-2 xl:col-span-1 xl:border-l xl:border-t-0">
+        <CoauthorPanel lessonId={lessonId} lesson={{ title: data.lesson.title, subject: data.lesson.subject, gradeLevel: data.lesson.gradeLevel, objectives: data.objectives.map(item => item.text) }} focus={coauthorFocus} focusLabel={coauthorFocusLabel} starters={coauthorStarters} blockedReason={coauthorBlockedReason} onApply={applyCoauthorProposal} objectiveLabel={coauthorObjectiveLabel} keepSketchBlocked={keepSketchBlocked} onKeepSketch={keepSketch} queued={coauthorQueue} onQueuedHandled={handleQueued} onClose={() => toggleCoauthor(false)} className="h-[70vh] xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)] xl:max-h-[900px]" />
+      </div>}
     </div>
     <AlertDialog open={prepareOpen} onOpenChange={setPrepareOpen}>
       <AlertDialogContent>

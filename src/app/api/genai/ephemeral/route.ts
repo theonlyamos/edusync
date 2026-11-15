@@ -70,6 +70,10 @@ export async function POST(request: NextRequest) {
     }
     const input = parsed.data;
     const apiKeyId = auth.authType === 'apiKey' ? auth.apiKeyId ?? null : null;
+    // The lesson co-author is part of the teacher Studio, never the embed widget.
+    if (input.variant === 'coauthor' && (apiKeyId || !['teacher', 'admin'].includes(auth.userRole ?? ''))) {
+        return NextResponse.json({ error: 'The lesson co-author is for teachers' }, { status: 403 });
+    }
 
     if (!(await allowVoiceTokenRequest({ userId: auth.userId, apiKeyId }))) {
         return NextResponse.json(

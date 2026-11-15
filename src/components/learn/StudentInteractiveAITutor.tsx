@@ -13,9 +13,10 @@ type StudentInteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
   onSessionEnded?: (sessionId: string | null) => void;
   initialLessonContext?: LessonContext;
+  back?: { href: string; label: string };
 };
 
-export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded, initialLessonContext }: StudentInteractiveAITutorProps) => {
+export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded, initialLessonContext, back }: StudentInteractiveAITutorProps) => {
   const searchParams = useSearchParams();
   const debugMode = searchParams.get('debug') === 'true';
   const getFeedback = searchParams.get('getFeedback') === 'true';
@@ -122,6 +123,7 @@ export const StudentInteractiveAITutorComponent = ({ onSessionStarted, onSession
       objectiveLearning={lessonContext?.learningRunId ? objectiveLearning : undefined}
       onSessionStarted={onSessionStarted}
       onSessionEnded={onSessionEnded}
+      back={back}
     />
   );
 };
