@@ -6,7 +6,6 @@ describe("homework AI entry points", () => {
       "/api/tutor",
       "/api/genai/ephemeral",
       "/api/genai/visualize",
-      "/api/students/illustrator",
       "/api/students/collaborator/chat",
       "/api/students/practice/generate",
       "/api/learning-runs/x/artifacts/next",

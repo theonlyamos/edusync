@@ -4,9 +4,9 @@ import { getAuthContext } from '@/lib/get-auth-context';
 import { createServerSupabase } from '@/lib/supabase.server';
 import {
     buildLiveConnectConfig,
-    getLiveModel,
     liveTokenRequestSchema,
 } from '@/lib/live-tutor/live-connect-config';
+import { getAiModels } from '@/lib/ai-models.server';
 import { afterResponse } from '@/lib/after-response';
 import { warnLowCreditsForMember } from '@/lib/notifications.server';
 import { allowVoiceTokenRequest, finalizeVoiceTokenIssuance, grantVoiceMinutes } from '@/lib/live-tutor/voice-billing';
@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
     if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const model = getLiveModel();
+    const { liveModel: model, liveVoice } = await getAiModels();
     if (!apiKey || !model) {
-        console.error('Voice tutor is not configured: GEMINI_API_KEY or GEMINI_LIVE_MODEL is missing');
+        console.error('Voice tutor is not configured: GEMINI_API_KEY or a voice tutor model (admin AI models page or GEMINI_LIVE_MODEL) is missing');
         return NextResponse.json({ error: 'Voice tutor is not configured' }, { status: 500 });
     }
 
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
         };
 
         const newSessionExpireTime = new Date(Math.min(now + NEW_SESSION_WINDOW_MS, expireTime.getTime()));
-        const config = buildLiveConnectConfig(input);
+        const config = buildLiveConnectConfig(input, liveVoice);
         const constrainedConfig = { ...config };
         Reflect.deleteProperty(constrainedConfig, 'sessionResumption');
 

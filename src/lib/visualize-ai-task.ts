@@ -1,48 +1,11 @@
-import OpenAI from 'openai'
+import { getAiModels, getChatClient, requireModel } from '@/lib/ai-models.server'
 import { convertImageUrlsToBase64 } from '@/lib/imageUtils.server'
 import { buildVisualizationLayoutPrompt, type VisualizationDimensions } from '@/lib/visualization-layout'
 import { assertReactComponentSyntax } from '@/lib/lesson-artifacts/react-component-source'
 import { assertReactComponentBindings } from '@/lib/lesson-artifacts/react-component-bindings'
 import { compileReactComponentJsx } from '@/lib/lesson-artifacts/react-component-jsx'
 
-interface OpenAIConfig {
-  baseURL: string
-  apiKey: string
-  defaultHeaders?: Record<string, string>
-}
-
-const AI_PROVIDER = process.env.AI_PROVIDER || 'GEMINI'
-const PROVIDER_BASE_URL = process.env[`${AI_PROVIDER}_BASE_URL`] || ''
-const PROVIDER_API_KEY = process.env[`${AI_PROVIDER}_API_KEY`]
-const PROVIDER_MODEL = process.env[`${AI_PROVIDER}_MODEL`]
-let HELICONE_BASE_URL = process.env.HELICONE_BASE_URL || ''
-const HELICONE_API_KEY = process.env.HELICONE_API_KEY
-
-if (AI_PROVIDER === 'GEMINI') {
-  HELICONE_BASE_URL = HELICONE_BASE_URL + 'beta'
-}
-
-const openaiConfig: OpenAIConfig = {
-  baseURL: AI_PROVIDER === 'GROQ' ? PROVIDER_BASE_URL : HELICONE_BASE_URL,
-  apiKey: PROVIDER_API_KEY || '',
-}
-
-if (AI_PROVIDER !== 'GROQ') {
-  openaiConfig.defaultHeaders = {
-    'Helicone-Auth': `Bearer ${HELICONE_API_KEY}`,
-    'Helicone-Target-Url': PROVIDER_BASE_URL,
-    'Helicone-Target-Provider': AI_PROVIDER,
-  }
-}
-
-// Lazy + memoized: constructed on first use, not at module load, so importing
-// this file during `next build` page-data collection never runs the OpenAI
-// constructor (which throws when no API key is set, e.g. in CI).
-let _openai: OpenAI | null = null
-function getOpenAI(): OpenAI {
-  if (!_openai) _openai = new OpenAI(openaiConfig)
-  return _openai
-}
+type ChatTarget = { provider: string; model: string }
 
 const SYSTEM_PROMPT = `### Persona & Goal
 You are an expert at creating interactive, educational visualizations and quizzes that make concepts tangible through direct manipulation and active recall — the learner should be able to change a parameter, answer a question, and immediately see the effect or get feedback. Prioritize interactivity and insight over decoration.
@@ -118,16 +81,17 @@ Avoid implementation terms such as "React" or "useState" in the user-facing expl
 ### Output
 Respond with a single \`display_visual_aid\` function call containing \`code\`, \`library\`, and \`explanation\`.`;
 
-const displayVisualAidFunctionDeclaration = {
+function displayVisualAidFunctionDeclaration(provider: string) {
+  return {
   type: 'function' as const,
   function: {
     name: 'display_visual_aid',
-    ...(AI_PROVIDER === 'CEREBRAS' ? { strict: true } : {}),
+    ...(provider === 'CEREBRAS' ? { strict: true } : {}),
     description:
       'Generates and displays a complete visual aid for the student. This is the final step and should contain the generated code, the library used, and a user-friendly explanation of the concept.',
     parameters: {
       type: 'object',
-      ...(AI_PROVIDER === 'CEREBRAS' ? { additionalProperties: false } : {}),
+      ...(provider === 'CEREBRAS' ? { additionalProperties: false } : {}),
       properties: {
         explanation: {
           type: 'string',
@@ -148,6 +112,7 @@ const displayVisualAidFunctionDeclaration = {
       required: ['explanation', 'code', 'library'],
     },
   },
+  }
 }
 
 export type VisualizeGenerationInput = {
@@ -198,12 +163,14 @@ function stripLeakedToolCalls(code: string): string {
 }
 
 async function generateVisualizationOnce(
+  target: ChatTarget,
   systemPrompt: string,
   taskDescription: string,
   previousFailure?: string,
 ): Promise<VisualizeGenerationResult> {
-  const completion = await getOpenAI().chat.completions.create({
-    model: PROVIDER_MODEL as string,
+  const { provider, model } = target
+  const completion = await getChatClient(provider).chat.completions.create({
+    model,
     messages: [
       { role: 'system', content: systemPrompt },
       {
@@ -213,13 +180,13 @@ async function generateVisualizationOnce(
           : taskDescription,
       },
     ],
-    tools: [displayVisualAidFunctionDeclaration],
-    ...(AI_PROVIDER === 'CEREBRAS' ? {
+    tools: [displayVisualAidFunctionDeclaration(provider)],
+    ...(provider === 'CEREBRAS' ? {
       tool_choice: { type: 'function' as const, function: { name: VISUAL_AID_TOOL_NAME } },
       parallel_tool_calls: false,
     } : {}),
     // Qwen defaults to high reasoning, which can consume the budget before producing code.
-    ...(AI_PROVIDER === 'CEREBRAS' && PROVIDER_MODEL === 'qwen-3.8-27b'
+    ...(provider === 'CEREBRAS' && model === 'qwen-3.8-27b'
       ? { reasoning_effort: 'low' as const }
       : {}),
     temperature: 0.7,
@@ -309,12 +276,15 @@ Since components run in a sandboxed environment, use Tailwind CSS utility classe
 
   const systemPromptWithDimensions = SYSTEM_PROMPT + dimensionsInfo + themeInfo
 
+  const { visual } = await getAiModels()
+  const target: ChatTarget = { provider: visual.provider, model: requireModel('visuals', visual.provider, visual.model) }
+
   let lastError: unknown
   let previousFailure: string | undefined
 
   for (let attempt = 1; attempt <= MAX_VIZ_GENERATION_ATTEMPTS; attempt++) {
     try {
-      const result = await generateVisualizationOnce(systemPromptWithDimensions, request, previousFailure)
+      const result = await generateVisualizationOnce(target, systemPromptWithDimensions, request, previousFailure)
       // Strip stray `display_visual_aid(...)` calls the model sometimes appends. If a reference
       // still survives (e.g. the whole component was wrapped in the call) or nothing is left, the
       // code would throw "display_visual_aid is not defined" in the sandbox — regenerate instead.

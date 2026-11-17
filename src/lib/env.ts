@@ -22,8 +22,11 @@ const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  // ── AI providers (Gemini primary, OpenAI/others as fallback) ──
-  // Free-form: providers vary by deployment (GEMINI, OPENAI, CEREBRAS, ...).
+  // ── AI providers ──
+  // Models and providers are picked on the admin AI models page (/admin/ai-models);
+  // the *_MODEL and AI_PROVIDER vars are only fallbacks for settings left blank there.
+  // A provider (GEMINI, CEREBRAS, GROQ, OPENAI) can be picked once its
+  // <NAME>_API_KEY and <NAME>_BASE_URL are set. There is no automatic failover.
   AI_PROVIDER: z.string().default('GEMINI'),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_BASE_URL: z.string().url().optional(),

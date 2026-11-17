@@ -224,6 +224,35 @@ const setTopic = llm.tool({
   },
 })
 
+type ModelSettings = { model: string | null; voice: string | null }
+
+/**
+ * The model and voice picked on the app's admin AI models page. Asked once per
+ * class; if the app can't be reached quickly, the env vars below decide.
+ */
+async function fetchModelSettings(): Promise<ModelSettings> {
+  const none: ModelSettings = { model: null, voice: null }
+  if (!appBase || !agentSecret) return none
+  try {
+    const res = await fetch(`${appBase}/api/live-classes/agent/config`, {
+      headers: agentHeaders,
+      signal: AbortSignal.timeout(3_000),
+    })
+    if (!res.ok) {
+      console.error('[live-class-agent] model settings request failed:', res.status)
+      return none
+    }
+    const data = (await res.json()) as Partial<ModelSettings>
+    return {
+      model: typeof data.model === 'string' && data.model.trim() ? data.model.trim() : null,
+      voice: typeof data.voice === 'string' && data.voice.trim() ? data.voice.trim() : null,
+    }
+  } catch (e) {
+    console.error('[live-class-agent] model settings unavailable, using env vars:', e)
+    return none
+  }
+}
+
 /** How often the agent asks the app to pay for the next minute of class. */
 const BILLING_TICK_MS = 20_000
 /** Keep teaching this long past the paid time while the app can't be reached. */
@@ -312,7 +341,9 @@ export default defineAgent({
       },
     })
 
+    const chosen = await fetchModelSettings()
     const model =
+      chosen.model ||
       process.env.GEMINI_LIVE_MODEL ||
       process.env.GOOGLE_LIVE_MODEL ||
       'gemini-3.8-live'
@@ -320,7 +351,7 @@ export default defineAgent({
     const session = new voice.AgentSession({
       llm: new google.beta.realtime.RealtimeModel({
         model,
-        voice: (process.env.GEMINI_VOICE as 'Zephyr' | undefined) || 'Zephyr',
+        voice: (chosen.voice || process.env.GEMINI_VOICE || 'Zephyr') as 'Zephyr',
         temperature: 0.75,
         instructions:
           'You are Eureka, a live class tutor. Multiple students may speak. Teach visually and call tools as specified in your instructions.',

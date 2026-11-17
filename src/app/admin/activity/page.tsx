@@ -12,7 +12,7 @@ export default function AdminActivityPage() {
     <div>
       <AdminPageHeader
         title="Activity log"
-        description="Every change a platform admin made to a school or account: credits given, trials extended, suspensions, owner changes, password resets and admin access. The latest 500 are shown."
+        description="Every change a platform admin made: credits given, trials extended, suspensions, owner changes, password resets, admin access and AI model changes. The latest 500 are shown."
       />
       <LoadState loading={activity.loading && !activity.data} error={activity.error} retry={activity.refresh}>
         <Card>

@@ -1,11 +1,11 @@
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
+import { getAiModels, getChatClient, requireModel } from '@/lib/ai-models.server';
 
-interface OpenAIConfig {
-    baseURL: string;
-    apiKey: string;
-    defaultHeaders?: Record<string, string>;
-}
-
+/**
+ * One chat completion for the app's text features (lesson drafts, co-author,
+ * homework, practice, the text tutor, lesson artifacts). The provider and model
+ * come from the admin panel's AI models page, falling back to env vars.
+ */
 export async function generateAICompletion(
     systemPrompt: string,
     userPrompt: string,
@@ -13,32 +13,11 @@ export async function generateAICompletion(
     json: boolean = false,
     temperature: number = 0.7
 ) {
-    const AI_PROVIDER = 'GEMINI';
-    const PROVIDER_BASE_URL = process.env[`${AI_PROVIDER}_BASE_URL`] || '';
-    const PROVIDER_API_KEY = process.env[`${AI_PROVIDER}_API_KEY`];
-    const PROVIDER_MODEL = process.env[`${AI_PROVIDER}_MODEL`];
-    let HELICONE_BASE_URL = process.env.HELICONE_BASE_URL || '';
-    const HELICONE_API_KEY = process.env.HELICONE_API_KEY;
-    HELICONE_BASE_URL = HELICONE_BASE_URL + 'beta';
+    const { text } = await getAiModels();
+    const model = requireModel('text', text.provider, text.model);
 
-    const openaiConfig: OpenAIConfig = {
-        baseURL: HELICONE_BASE_URL,
-        apiKey: PROVIDER_API_KEY as string,
-        defaultHeaders: {
-            "Helicone-Auth": `Bearer ${HELICONE_API_KEY}`,
-            "Helicone-Target-Url": PROVIDER_BASE_URL,
-            "Helicone-Target-Provider": AI_PROVIDER,
-        }
-    };
-
-
-
-
-
-    const openai = new OpenAI(openaiConfig);
-
-    const response = await openai.chat.completions.create({
-        model: PROVIDER_MODEL as string,
+    const response = await getChatClient(text.provider).chat.completions.create({
+        model,
         messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },

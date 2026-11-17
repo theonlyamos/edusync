@@ -6,6 +6,7 @@ import { Empty, formatDateTime } from '@/components/admin/AdminParts';
 
 /** Where an audit entry's target lives in the portal, if anywhere. */
 function targetHref(row: ActivityRow): string | null {
+  if (row.targetType === 'platform' && row.action.startsWith('ai_models.')) return '/admin/ai-models';
   if (!row.targetId) return null;
   if (row.targetType === 'school') return `/admin/schools/${row.targetId}`;
   if (row.targetType === 'user') return `/admin/users/${row.targetId}`;
