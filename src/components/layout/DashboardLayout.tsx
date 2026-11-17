@@ -61,6 +61,7 @@ const ADMIN_PAGE_TITLES: [string, string][] = [
   ['/admin/users', 'Users'],
   ['/admin/billing', 'Billing'],
   ['/admin/usage', 'AI usage'],
+  ['/admin/ai-models', 'AI models'],
   ['/admin/support', 'Support'],
   ['/admin/feedback', 'Tutor ratings'],
   ['/admin/organizations', 'Developers'],

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { buildStudyCompanionLiveVoiceSystemPrompt, studyIntentSchema, studyModeSchema } from '@/lib/study-companion';
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
+import { DEFAULT_VOICE } from '@/lib/ai-models';
 
 /**
  * Gemini Live session setup for the voice tutor and the voice study companion.
@@ -210,17 +211,13 @@ export function buildLiveTools(input: LiveTokenRequest) {
     ];
 }
 
-/** The Live model the tokens are locked to. Server env wins over the old public one. */
-export function getLiveModel(): string | null {
-    return process.env.GEMINI_LIVE_MODEL || process.env.NEXT_PUBLIC_GEMINI_LIVE_MODEL || null;
-}
 
 /**
  * JSON-safe LiveConnectConfig. Enum values are written as their wire strings
  * (Modality.AUDIO, StartSensitivity.START_SENSITIVITY_HIGH) so the same object
  * can be locked into the token and returned to the browser unchanged.
  */
-export function buildLiveConnectConfig(input: LiveTokenRequest) {
+export function buildLiveConnectConfig(input: LiveTokenRequest, voiceName: string = DEFAULT_VOICE) {
     const withTranscripts = input.variant === 'studyCompanion' || input.variant === 'coauthor';
     return {
         responseModalities: ['AUDIO'],
@@ -233,7 +230,7 @@ export function buildLiveConnectConfig(input: LiveTokenRequest) {
         },
         systemInstruction: buildLiveSystemPrompt(input),
         speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName } },
         },
         contextWindowCompression: { slidingWindow: {} },
         sessionResumption: input.resumptionHandle ? { handle: input.resumptionHandle } : {},

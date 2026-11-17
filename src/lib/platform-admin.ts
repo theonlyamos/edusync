@@ -213,6 +213,20 @@ export type ActivityRow = {
   admin: { id: string; name: string | null; email: string | null } | null
 }
 
+const AI_SETTING_NAME: Record<string, string> = {
+  textProvider: 'text provider',
+  textModel: 'text model',
+  visualProvider: 'visuals provider',
+  visualModel: 'visuals model',
+  imageModel: 'image model',
+  extractionModel: 'upload reading model',
+  embeddingModel: 'search index model',
+  liveModel: 'voice tutor model',
+  liveVoice: 'voice tutor voice',
+  agentModel: 'co-teacher model',
+  agentVoice: 'co-teacher voice',
+}
+
 /** How an audit entry reads in the activity log. */
 export function describeAction(row: Pick<ActivityRow, 'action' | 'details' | 'targetLabel'>): string {
   const d = row.details ?? {}
@@ -240,6 +254,11 @@ export function describeAction(row: Pick<ActivityRow, 'action' | 'details' | 'ta
       return `Made ${who} a platform admin`
     case 'admin.remove':
       return `Removed ${who}'s platform admin access`
+    case 'ai_models.update': {
+      const changes = (d.changes ?? {}) as Record<string, { to?: string | null }>
+      const parts = Object.entries(changes).map(([key, c]) => `${AI_SETTING_NAME[key] ?? key} to ${c?.to ?? 'its default'}`)
+      return parts.length ? `Changed the ${parts.join(', ')}` : 'Changed the AI models'
+    }
     default:
       return `${row.action} · ${who}`
   }

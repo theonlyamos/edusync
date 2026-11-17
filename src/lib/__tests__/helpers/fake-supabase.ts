@@ -48,6 +48,7 @@ export function fakeSupabase(tables: Record<string, Row[]>) {
         else payload = value
         return builder
       },
+      abortSignal: () => builder,
       maybeSingle: () => { single = true; return builder },
       single: () => { single = true; return builder },
       insert: (value: Row | Row[]) => { op = 'insert'; payload = value; return builder },

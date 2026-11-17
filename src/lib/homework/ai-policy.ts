@@ -5,7 +5,6 @@ export function isGeneralHomeworkAiTool(path: string, method: string) {
       "/api/tutor",
       "/api/genai/ephemeral",
       "/api/genai/visualize",
-      "/api/students/illustrator",
       "/api/students/collaborator/chat",
       "/api/students/practice/generate",
       "/api/learning/sessions",

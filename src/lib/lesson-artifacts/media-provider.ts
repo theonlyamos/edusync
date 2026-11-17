@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { getAiModels } from '@/lib/ai-models.server';
 
 const client = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -11,7 +12,7 @@ export async function extractMediaText(bytes: Buffer, mimeType: string, filename
     return bytes.toString('utf8').replace(/\u0000/g, '').trim();
   }
   const response: any = await client().models.generateContent({
-    model: process.env.GEMINI_EXTRACTION_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    model: (await getAiModels()).extractionModel,
     contents: [{
       role: 'user',
       parts: [
@@ -34,7 +35,7 @@ export async function embedGroundingText(text: string): Promise<number[]> {
 export async function embedGroundingTexts(texts: string[]): Promise<number[][]> {
   if (!texts.length) return [];
   const response: any = await client().models.embedContent({
-    model: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
+    model: (await getAiModels()).embeddingModel,
     contents: texts,
     config: { outputDimensionality: 1536 },
   } as any);

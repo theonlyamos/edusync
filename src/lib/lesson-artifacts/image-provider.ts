@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { getAiModels } from '@/lib/ai-models.server';
 
 export interface GeneratedImageBinary {
   bytes: Buffer;
@@ -30,7 +31,7 @@ export async function generateGeminiLessonImage(prompt: string): Promise<Generat
   if (!apiKey) throw new Error('GEMINI_API_KEY is required for image generation');
   const client = new GoogleGenAI({ apiKey });
   const response = await client.models.generateContent({
-    model: process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image',
+    model: (await getAiModels()).imageModel,
     contents: prompt,
     config: {
       responseModalities: ['TEXT', 'IMAGE'],

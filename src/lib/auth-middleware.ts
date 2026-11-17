@@ -75,6 +75,7 @@ export const API_AUTH_CONFIG: Record<string, ApiAuthMode> = {
     '/api/live-classes/agent/persist-visualization': 'none',
     '/api/live-classes/agent/persist-session-topic': 'none',
     '/api/live-classes/agent/billing-tick': 'none',
+    '/api/live-classes/agent/config': 'none',
     '/api/livekit/webhook': 'none',
     '/api/embed/keys': 'session',
     '/api/embed/keys/*': 'session',

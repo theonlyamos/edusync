@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Modality } from '@google/genai';
+import { getAiModels } from '@/lib/ai-models.server';
 import { createServerSupabase, createSSRUserSupabase } from '@/lib/supabase.server';
 import { getUserSchoolId } from '@/lib/school';
 import { enforceDailyCap, refundDailyCap } from '@/lib/daily-caps';
@@ -72,7 +73,7 @@ async function handlePost(request: NextRequest, counted: CountedUse) {
         ];
 
         const response = await ai.models.generateContent({
-            model: process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image',
+            model: (await getAiModels()).imageModel,
             contents: contents,
             config: {
                 responseModalities: [Modality.TEXT, Modality.IMAGE],

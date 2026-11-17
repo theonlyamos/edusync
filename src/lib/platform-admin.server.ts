@@ -134,7 +134,7 @@ async function usersById(supabase: Supabase, ids: string[]) {
 /** Records what an admin did. Never blocks the action itself. */
 export async function logAdminAction(
   context: PlatformAdminContext,
-  entry: { action: string; targetType: 'school' | 'organization' | 'user'; targetId: string | null; targetLabel: string | null; details?: Record<string, unknown> },
+  entry: { action: string; targetType: 'school' | 'organization' | 'user' | 'platform'; targetId: string | null; targetLabel: string | null; details?: Record<string, unknown> },
 ) {
   const { error } = await context.supabase.from('platform_admin_actions').insert({
     admin_id: context.adminId,

@@ -61,6 +61,7 @@ beforeEach(() => {
             if (name === 'add_user_credits') return Response.json(60);
             if (name === 'user_school_id') return Response.json(schoolId);
         }
+        if (url.pathname === '/rest/v1/platform_ai_settings') return Response.json([]);
         if (url.pathname === '/rest/v1/learning_sessions') {
             return Response.json([{ id: sessionId, ...sessionOwner }]);
         }
