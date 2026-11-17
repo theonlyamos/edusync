@@ -74,8 +74,10 @@ export async function saveAiModelSettings(context: PlatformAdminContext, input: 
   }
   if (Object.keys(changes).length === 0) return getAiModelsView(context.supabase, env)
 
+  // Write only the columns this save changes, so two admins saving different
+  // fields at once don't overwrite each other with a stale copy.
   const row: Record<string, unknown> = { id: true, updated_at: new Date().toISOString(), updated_by: context.adminId }
-  for (const key of AI_MODEL_KEYS) row[COLUMN[key]] = next[key]
+  for (const key of Object.keys(changes) as AiModelKey[]) row[COLUMN[key]] = next[key]
   const { error } = await context.supabase.from('platform_ai_settings').upsert(row, { onConflict: 'id' })
   if (error) throw error
 

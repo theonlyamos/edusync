@@ -124,6 +124,23 @@ describe('admin input', () => {
     expect(fake.tables.platform_admin_actions).toHaveLength(2)
   })
 
+  it('only writes the columns a save changes', async () => {
+    fake.tables.platform_ai_settings.push({ id: true, text_model: 'stale-text' })
+    // Another admin changes image_model between this save's read and its write.
+    const from = fake.client.from
+    const client = { ...fake.client, from: (table: string) => {
+      const builder = from(table)
+      const upsert = builder.upsert
+      builder.upsert = (value: Record<string, unknown>) => {
+        fake.tables.platform_ai_settings[0].image_model = 'img-other-admin'
+        return upsert(value)
+      }
+      return builder
+    } }
+    await admin.saveAiModelSettings({ adminId: ADMIN, supabase: client }, { settings: { liveVoice: 'Puck' } }, READY)
+    expect(fake.tables.platform_ai_settings[0]).toMatchObject({ text_model: 'stale-text', image_model: 'img-other-admin', live_voice: 'Puck' })
+  })
+
   it('refuses providers without credentials, unknown keys and bad values', async () => {
     const ctx = { adminId: ADMIN, supabase: fake.client }
     await expect(admin.saveAiModelSettings(ctx, { settings: { visualProvider: 'OPENAI' } }, READY)).rejects.toThrow(/OPENAI_API_KEY/)
