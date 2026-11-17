@@ -22,7 +22,7 @@ await db.exec(`
     );
     GRANT SELECT ON public.users TO authenticated;
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261117060000_platform_ai_settings.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261117070844_platform_ai_settings.sql'), 'utf8');
 await db.exec(migration);
 await db.exec(migration);
 
