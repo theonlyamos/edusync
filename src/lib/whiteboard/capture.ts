@@ -85,3 +85,38 @@ export function boardFontCss(root: HTMLElement): Promise<string> {
   boardFont ??= buildBoardFontCss(root).catch(() => '');
   return boardFont;
 }
+
+/** The size that fits inside maxSide without stretching. Never larger than the original. */
+export function fitWithin(width: number, height: number, maxSide: number): { width: number; height: number } {
+  const scale = Math.min(1, maxSide / Math.max(width, height, 1));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+export const PHOTO_MAX_BYTES = 15 * 1024 * 1024;
+
+/**
+ * Turns a photo the learner picked into small JPEGs: one for the tutor and a
+ * thumbnail for the board. Redrawing it also drops the camera's location data.
+ * Throws when the file is not a picture the browser can open.
+ */
+export async function preparePhoto(file: Blob): Promise<{ forTutor: string; forBoard: string }> {
+  if (!file.type.startsWith('image/') || file.size > PHOTO_MAX_BYTES) throw new Error('Not a usable photo');
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  try {
+    const draw = (maxSide: number, quality: number) => {
+      const size = fitWithin(bitmap.width, bitmap.height, maxSide);
+      const canvas = document.createElement('canvas');
+      canvas.width = size.width;
+      canvas.height = size.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('No canvas');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, size.width, size.height);
+      context.drawImage(bitmap, 0, 0, size.width, size.height);
+      return canvas.toDataURL('image/jpeg', quality);
+    };
+    return { forTutor: draw(1280, 0.85), forBoard: draw(640, 0.8) };
+  } finally {
+    bitmap.close();
+  }
+}

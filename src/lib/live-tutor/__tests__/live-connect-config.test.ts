@@ -110,7 +110,7 @@ describe('lesson co-author voice', () => {
         expect(toolNames(config)).toEqual([
             'googleSearch', 'generate_visualization_description', 'set_topic',
             'write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board',
-            'ask_checkpoint', 'mark_checkpoint',
+            'ask_checkpoint', 'mark_checkpoint', 'save_review_cards',
         ]);
         expect(config.systemInstruction).toContain('### Whiteboard');
         expect(config.systemInstruction).toContain('"Fractions"');
@@ -126,7 +126,7 @@ describe('lesson co-author voice', () => {
         expect(toolNames(config)).toEqual([
             'googleSearch', 'request_learning_artifact', 'set_topic',
             'write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board',
-            'ask_checkpoint', 'mark_checkpoint',
+            'ask_checkpoint', 'mark_checkpoint', 'save_review_cards',
         ]);
     });
 

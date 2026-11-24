@@ -56,6 +56,13 @@ export type BoardItemBody =
       /** The choice the learner tapped. */
       chosen?: number;
       result?: CheckpointResult;
+    }
+  | {
+      /** A photo the learner showed the tutor. Only the browser makes these, never the tutor. */
+      kind: 'photo';
+      /** A small JPEG data URL made in the browser. */
+      src: string;
+      text?: string;
     };
 
 export type CheckpointResult = 'correct' | 'incorrect';
@@ -73,6 +80,9 @@ export type BoardItem = BoardItemBody & {
 
 export type BoardPage = { id: string; title: string | null; items: BoardItem[] };
 
+/** A question and answer the tutor set aside for the learner to review later. */
+export type ReviewCard = { front: string; back: string };
+
 export type BoardState = {
   pages: BoardPage[];
   /** Index of the page on screen. */
@@ -82,6 +92,8 @@ export type BoardState = {
   /** Epoch ms until which queued drawing is still playing. */
   busyUntil: number;
   nextId: number;
+  /** Review cards the tutor saved during the lesson. They are not drawn on the board. */
+  cards: ReviewCard[];
 };
 
 export const BOARD_LIMITS = {
@@ -96,6 +108,10 @@ export const BOARD_LIMITS = {
   labelChars: 60,
   choices: 4,
   choiceChars: 80,
+  cards: 20,
+  cardsPerCall: 5,
+  cardFrontChars: 200,
+  cardBackChars: 300,
 } as const;
 
 export const initialBoardState: BoardState = {
@@ -104,6 +120,7 @@ export const initialBoardState: BoardState = {
   revision: 0,
   busyUntil: 0,
   nextId: 1,
+  cards: [],
 };
 
 export type BoardAction =
@@ -114,6 +131,7 @@ export type BoardAction =
   | { type: 'goto'; index: number }
   | { type: 'answerCheckpoint'; id: string; chosen: number }
   | { type: 'markCheckpoint'; result: CheckpointResult }
+  | { type: 'addCards'; cards: ReviewCard[] }
   | { type: 'settle' }
   | { type: 'reset' };
 
@@ -284,6 +302,56 @@ export function checkpointScore(state: BoardState): { correct: number; answered:
   return { correct, answered };
 }
 
+/** Reads `save_review_cards` arguments. Cards without both sides are dropped. */
+export function parseReviewCards(args: unknown): ReviewCard[] {
+  const list = isRecord(args) && Array.isArray(args.cards) ? args.cards : isRecord(args) ? [args] : [];
+  const cards: ReviewCard[] = [];
+  for (const raw of list.slice(0, BOARD_LIMITS.cardsPerCall)) {
+    if (!isRecord(raw)) continue;
+    const front = cleanText(raw.front ?? raw.question, BOARD_LIMITS.cardFrontChars);
+    const back = cleanText(raw.back ?? raw.answer, BOARD_LIMITS.cardBackChars);
+    if (front && back) cards.push({ front, back });
+  }
+  return cards;
+}
+
+const cardKey = (card: ReviewCard) => card.front.toLowerCase();
+
+/**
+ * The cards to offer after the lesson: the ones the tutor saved, then every
+ * tap-to-answer checkpoint with its right answer. Repeated questions are kept once.
+ */
+export function collectReviewCards(state: BoardState): ReviewCard[] {
+  const cards: ReviewCard[] = [];
+  const seen = new Set<string>();
+  const add = (card: ReviewCard) => {
+    if (cards.length >= BOARD_LIMITS.cards || seen.has(cardKey(card))) return;
+    seen.add(cardKey(card));
+    cards.push(card);
+  };
+  state.cards.forEach(add);
+  for (const page of state.pages) {
+    for (const item of page.items) {
+      if (item.kind === 'checkpoint' && item.choices && item.correct !== undefined) add({ front: item.text, back: item.choices[item.correct] });
+    }
+  }
+  return cards;
+}
+
+export type LessonNotes = {
+  pages: BoardPage[];
+  cards: ReviewCard[];
+  score: { correct: number; answered: number };
+};
+
+/** What the lesson left behind, to read back afterwards. Null when nothing was written. */
+export function lessonNotes(state: BoardState): LessonNotes | null {
+  const pages = state.pages.filter((page) => page.items.length > 0).map(settle);
+  const cards = collectReviewCards(state);
+  if (pages.length === 0 && cards.length === 0) return null;
+  return { pages, cards, score: checkpointScore(state) };
+}
+
 export function parseBoardTarget(args: unknown): string {
   if (!isRecord(args)) return '';
   return cleanText(args.target ?? args.id ?? args.text, BOARD_LIMITS.textChars);
@@ -308,6 +376,8 @@ export function drawDuration(item: BoardItemBody): number {
       return 1200 + item.series.length * 800;
     case 'checkpoint':
       return clamp(item.text.length * 30, 400, 1800);
+    case 'photo':
+      return 400;
   }
 }
 
@@ -435,6 +505,18 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
       if (index < 0) return state;
       const items = page.items.map((item, i) => (i === index ? { ...item, result: action.result } : item));
       return { ...state, pages: replaceLastPage(state, { ...page, items }), revision: state.revision + 1 };
+    }
+    case 'addCards': {
+      const seen = new Set(state.cards.map(cardKey));
+      const fresh: ReviewCard[] = [];
+      for (const card of action.cards) {
+        if (seen.has(cardKey(card))) continue;
+        seen.add(cardKey(card));
+        fresh.push(card);
+      }
+      const room = BOARD_LIMITS.cards - state.cards.length;
+      if (fresh.length === 0 || room <= 0) return state;
+      return { ...state, cards: [...state.cards, ...fresh.slice(0, room)] };
     }
     case 'settle': {
       // The board left the screen (the learner opened an activity). When it

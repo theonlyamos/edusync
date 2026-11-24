@@ -11,6 +11,7 @@ import {
   DIAGRAM_WIDTH,
   type BoardColor,
   type BoardItem,
+  type BoardPage,
   type BoardShape,
   type BoardState,
   checkpointScore,
@@ -281,7 +282,7 @@ function Plot({ item }: { item: Extract<BoardItem, { kind: 'plot' }> }) {
   );
 }
 
-function Checkpoint({ item, onAnswer }: { item: Extract<BoardItem, { kind: 'checkpoint' }>; onAnswer?: (id: string, chosen: number) => void }) {
+function Checkpoint({ item, onAnswer, quiet }: { item: Extract<BoardItem, { kind: 'checkpoint' }>; onAnswer?: (id: string, chosen: number) => void; quiet?: boolean }) {
   const done = Boolean(item.result);
   const tappable = !done && item.correct !== undefined && Boolean(onAnswer);
   return (
@@ -317,7 +318,7 @@ function Checkpoint({ item, onAnswer }: { item: Extract<BoardItem, { kind: 'chec
           })}
         </div>
       ) : null}
-      {!done && <p className="mt-2 font-sans text-sm opacity-70">{tappable ? 'Tap an answer or say it out loud.' : 'Say your answer out loud.'}</p>}
+      {!done && !quiet && <p className="mt-2 font-sans text-sm opacity-70">{tappable ? 'Tap an answer or say it out loud.' : 'Say your answer out loud.'}</p>}
     </div>
   );
 }
@@ -455,7 +456,7 @@ function FrameLayer({ items, onFrame, onQuestion, onClose }: {
   );
 }
 
-function ItemBody({ item, onAnswerCheckpoint }: { item: BoardItem; onAnswerCheckpoint?: (id: string, chosen: number) => void }) {
+function ItemBody({ item, onAnswerCheckpoint, quiet }: { item: BoardItem; onAnswerCheckpoint?: (id: string, chosen: number) => void; quiet?: boolean }) {
   switch (item.kind) {
     case 'heading':
       return (
@@ -483,8 +484,36 @@ function ItemBody({ item, onAnswerCheckpoint }: { item: BoardItem; onAnswerCheck
     case 'plot':
       return <Plot item={item} />;
     case 'checkpoint':
-      return <Checkpoint item={item} onAnswer={onAnswerCheckpoint} />;
+      return <Checkpoint item={item} onAnswer={onAnswerCheckpoint} quiet={quiet} />;
+    case 'photo':
+      return (
+        <figure className="wb-fade" style={timing(item.delay)}>
+          {/* A data URL made in the browser from the learner's own photo, so next/image has nothing to optimise. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={item.src} alt="The photo you showed your tutor" className="mx-auto block max-h-80 max-w-full rounded-lg border-2" style={{ borderColor: 'color-mix(in srgb, var(--wb-ink) 25%, transparent)' }} />
+          {item.text && <figcaption className="mt-1 text-center text-lg opacity-80 sm:text-xl">{item.text}</figcaption>}
+        </figure>
+      );
   }
+}
+
+/**
+ * One board as a finished sheet of paper, for the lesson notes. Always light,
+ * like a printed page, and never animated.
+ */
+export function BoardSheet({ page }: { page: BoardPage }) {
+  return (
+    <PensContext.Provider value={LIGHT_PENS}>
+      <div className={`wb-root wb-light ${hand.className} flex flex-col gap-4 rounded-xl border p-4 sm:gap-5 sm:p-8`}>
+        {page.title && <p className="font-sans text-sm font-medium opacity-70">{page.title}</p>}
+        {page.items.map((item) => (
+          <div key={item.id} className="wb-sheet-item">
+            <ItemBody item={item} quiet />
+          </div>
+        ))}
+      </div>
+    </PensContext.Provider>
+  );
 }
 
 type WhiteboardProps = {

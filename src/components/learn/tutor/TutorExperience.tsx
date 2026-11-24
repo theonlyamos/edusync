@@ -8,7 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation, PenLine, Captions, CaptionsOff, SquareDashedMousePointer } from 'lucide-react';
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation, PenLine, Captions, CaptionsOff, SquareDashedMousePointer, ImagePlus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import type { LessonContext, LiveTranscriptionPayload, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
@@ -19,9 +19,9 @@ import { LearningArtifactCard } from '@/components/students/study-companion/Lear
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
-import { boardReducer, initialBoardState, parseBoardItems, parseBoardTarget, parseBoardTitle, parseCheckpoint, parseCheckpointResult } from '@/lib/whiteboard/board';
-import { formatBoardFrame, formatCheckpointResult, formatFrameQuestion, isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
-import { boardFontCss, cropDataUrl } from '@/lib/whiteboard/capture';
+import { boardReducer, initialBoardState, lessonNotes, parseBoardItems, parseBoardTarget, parseBoardTitle, parseCheckpoint, parseCheckpointResult, parseReviewCards, type LessonNotes as LessonNotesData } from '@/lib/whiteboard/board';
+import { formatBoardFrame, formatCheckpointResult, formatFrameQuestion, formatLearnerPhoto, isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
+import { boardFontCss, cropDataUrl, preparePhoto } from '@/lib/whiteboard/capture';
 import type { BoardFrame } from '@/components/learn/whiteboard/Whiteboard';
 import { captionReducer, initialCaptionState } from '@/lib/whiteboard/captions';
 import { readWhiteboardPreference, saveWhiteboardPreference } from '@/lib/whiteboard/preference';
@@ -33,6 +33,7 @@ const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 const Whiteboard = dynamic(() => import('@/components/learn/whiteboard/Whiteboard').then(mod => mod.Whiteboard), { ssr: false });
+const LessonNotes = dynamic(() => import('@/components/learn/whiteboard/LessonNotes').then(mod => mod.LessonNotes), { ssr: false });
 
 /** How long a caption stays up after the tutor stops talking. */
 const CAPTION_LINGER_MS = 6000;
@@ -136,7 +137,16 @@ export const TutorExperience = ({
   const lastEndedSessionIdRef = useRef<string | null>(null);
   const handleVoiceStartupFailed = useCallback(() => setVoiceActive(false), []);
 
+  // What the last lesson left on the board, kept so it can be read back after the session ends.
+  const [notes, setNotes] = useState<{ data: LessonNotesData; topic: string | null } | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const topicRef = useRef(topic);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [photoNote, setPhotoNote] = useState('');
+
   const resetBoard = useCallback(() => {
+    const left = lessonNotes(boardRef.current);
+    if (left) setNotes({ data: left, topic: topicRef.current });
     boardDispatch({ type: 'reset' });
     captionDispatch({ type: 'clear' });
     setPanelView('board');
@@ -147,6 +157,11 @@ export const TutorExperience = ({
   useEffect(() => {
     boardRef.current = board;
   }, [board]);
+  useEffect(() => {
+    topicRef.current = topic;
+  }, [topic]);
+  const openNotes = useCallback(() => setNotesOpen(true), []);
+  const closeNotes = useCallback(() => setNotesOpen(false), []);
 
   // Messages to the tutor go through the same window events as the rest of the voice UI.
   const tellTutor = useCallback((text: string) => {
@@ -183,6 +198,26 @@ export const TutorExperience = ({
     }
     tellTutor(formatBoardFrame(frame.items));
   }, [tellTutor]);
+
+  // The learner shows the tutor a photo: homework, a textbook page, their own working.
+  const handlePhoto = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const photo = await preparePhoto(file);
+      window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl: photo.forTutor, mimeType: 'image/jpeg' } }));
+      tellTutor(formatLearnerPhoto());
+      boardDispatch({ type: 'write', items: [{ kind: 'photo', src: photo.forBoard, text: 'Your photo' }], now: Date.now() });
+      setPanelView('board');
+      setPhotoNote('');
+    } catch {
+      setPhotoNote('That file could not be opened as a photo. Try a JPG or PNG.');
+    }
+  }, [tellTutor]);
+  useEffect(() => {
+    if (!photoNote) return;
+    const timer = setTimeout(() => setPhotoNote(''), 6000);
+    return () => clearTimeout(timer);
+  }, [photoNote]);
 
   const handleFrameQuestion = useCallback((question: string) => tellTutor(formatFrameQuestion(question)), [tellTutor]);
   const handleFrameClose = useCallback(() => setFraming(false), []);
@@ -415,6 +450,9 @@ export const TutorExperience = ({
         const result = parseCheckpointResult(args);
         if (!result) return;
         boardDispatch({ type: 'markCheckpoint', result });
+      } else if (name === 'save_review_cards') {
+        const cards = parseReviewCards(args);
+        if (cards.length > 0) boardDispatch({ type: 'addCards', cards });
       } else {
         boardDispatch({ type: 'newBoard', title: parseBoardTitle(args) });
       }
@@ -842,6 +880,7 @@ export const TutorExperience = ({
     if (!showBoard) boardDispatch({ type: 'settle' });
   }, [showBoard]);
   const whiteboardToggle = whiteboardFixed === undefined ? { enabled: whiteboardChoice, onChange: handleWhiteboardChoice } : undefined;
+  const notesButton = notes ? { onOpen: openNotes } : undefined;
   const studentBackHref = back?.href ?? (variant === 'student'
     ? (lessonContext?.lessonId ? `/students/lessons/${lessonContext.lessonId}` : '/students/dashboard')
     : undefined);
@@ -881,6 +920,7 @@ export const TutorExperience = ({
               outOfCredits={credits !== null && credits <= 0}
               remainingCredits={credits ?? undefined}
               whiteboard={whiteboardToggle}
+              notes={notesButton}
             />
           ) : (
             <StartButtonOverlay
@@ -894,6 +934,7 @@ export const TutorExperience = ({
               connectionStatus={connectionStatus}
               hideCredits={true}
               whiteboard={whiteboardToggle}
+              notes={notesButton}
             />
           )}
         </div>
@@ -1053,8 +1094,9 @@ export const TutorExperience = ({
       {voiceActive && connectionStatus === 'connected' && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pb-[env(safe-area-inset-bottom)]">
           <div className="flex flex-col items-center py-3 px-4">
+            {photoNote && <p role="alert" className="rounded-full bg-black/80 px-3 py-1.5 text-sm text-white">{photoNote}</p>}
             {/* Controls */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <span className="w-3 h-3 rounded-full bg-emerald-500" />
               <Button
                 type="button"
@@ -1097,6 +1139,33 @@ export const TutorExperience = ({
                   <SquareDashedMousePointer className="h-5 w-5" />
                 </Button>
               )}
+              {whiteboardMode && (
+                <>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    tabIndex={-1}
+                    aria-hidden
+                    onChange={(event) => {
+                      void handlePhoto(event.target.files?.[0]);
+                      event.target.value = '';
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-11 w-11 rounded-full bg-background/90"
+                    onClick={() => photoInputRef.current?.click()}
+                    title="Show the tutor a photo"
+                    aria-label="Show the tutor a photo"
+                  >
+                    <ImagePlus className="h-5 w-5" />
+                  </Button>
+                </>
+              )}
               {whiteboardMode && hasActivity && (
                 <Button
                   type="button"
@@ -1111,6 +1180,15 @@ export const TutorExperience = ({
             </div>
           </div>
         </div>
+      )}
+
+      {notesOpen && notes && (
+        <LessonNotes
+          notes={notes.data}
+          topic={notes.topic}
+          cardSubject={variant === 'student' ? (lessonContext?.subject || notes.topic || 'Tutor lesson') : undefined}
+          onClose={closeNotes}
+        />
       )}
 
       {/* Feedback Form - positioned relative to main content only */}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Power, Loader, AlertTriangle } from 'lucide-react';
+import { Power, Loader, AlertTriangle, NotebookText } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
 interface StartButtonOverlayProps {
@@ -16,9 +16,11 @@ interface StartButtonOverlayProps {
   backLabel?: string;
   /** Lets the learner choose whiteboard mode before the session starts. */
   whiteboard?: { enabled: boolean; onChange: (enabled: boolean) => void };
+  /** Set when the last whiteboard lesson left notes to read back. */
+  notes?: { onOpen: () => void };
 }
 
-export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error, backHref, backLabel = 'Back', whiteboard }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error, backHref, backLabel = 'Back', whiteboard, notes }: StartButtonOverlayProps) {
   const isConnecting = connectionStatus === 'connecting';
 
   // Skip credit loading check if hideCredits is true
@@ -85,6 +87,11 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
             <span id="whiteboard-mode-hint" className="block text-xs text-muted-foreground">Your tutor writes and draws as it explains, with captions.</span>
           </span>
         </label>
+      )}
+      {notes && !isConnecting && (
+        <Button type="button" variant="outline" className="mt-5 min-h-11" onClick={notes.onOpen}>
+          <NotebookText className="mr-2 h-4 w-4" aria-hidden /> Notes from your last lesson
+        </Button>
       )}
       {backHref && !isConnecting && (
         <a href={backHref} className="mt-6 inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">

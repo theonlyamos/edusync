@@ -29,6 +29,19 @@
   --wb-mark: rgba(250, 204, 21, 0.3);
 }
 
+/* Lesson notes are a sheet of paper: light even when the app is dark. */
+.dark .wb-root.wb-light {
+  --wb-paper: #fdfcf7;
+  --wb-grid: rgba(15, 23, 42, 0.05);
+  --wb-ink: #1f2937;
+  --wb-blue: #1d4ed8;
+  --wb-red: #dc2626;
+  --wb-green: #15803d;
+  --wb-orange: #c2410c;
+  --wb-purple: #7e22ce;
+  --wb-mark: rgba(250, 204, 21, 0.5);
+}
+
 .wb-word {
   display: inline-block;
   white-space: pre;
@@ -116,4 +129,36 @@
     stroke-dashoffset: 0;
   }
   .wb-item { transition: none; }
+}
+
+/* Printing the lesson notes: only the notes go on paper, and they flow over as many pages as they need. */
+@media print {
+  html:has(.wb-notes),
+  html:has(.wb-notes) body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  html:has(.wb-notes) body > *:not(.wb-notes) {
+    display: none !important;
+  }
+  .wb-notes {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .wb-notes .wb-no-print {
+    display: none !important;
+  }
+  .wb-notes .wb-root {
+    background-image: none;
+    border: 0;
+    padding: 0;
+  }
+  .wb-sheet-item,
+  .wb-notes-card {
+    break-inside: avoid;
+  }
 }

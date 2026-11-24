@@ -6,7 +6,7 @@
 
 import { BOARD_COLORS } from './board';
 
-export const WHITEBOARD_TOOL_NAMES = ['write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board', 'ask_checkpoint', 'mark_checkpoint'] as const;
+export const WHITEBOARD_TOOL_NAMES = ['write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board', 'ask_checkpoint', 'mark_checkpoint', 'save_review_cards'] as const;
 
 export function isWhiteboardToolName(name: string): boolean {
   return (WHITEBOARD_TOOL_NAMES as readonly string[]).includes(name);
@@ -158,6 +158,30 @@ export const markCheckpointToolDeclaration = {
   },
 };
 
+export const saveReviewCardsToolDeclaration = {
+  name: 'save_review_cards',
+  description:
+    'Quietly sets aside question-and-answer cards for the learner to review after the lesson. Nothing appears on the board and you do not mention it.',
+  parameters: {
+    type: 'object',
+    properties: {
+      cards: {
+        type: 'array',
+        description: 'One to three cards about the idea you just finished teaching.',
+        items: {
+          type: 'object',
+          properties: {
+            front: { type: 'string', description: 'A short question that makes the learner recall or use the idea.' },
+            back: { type: 'string', description: 'The answer in one short sentence, or the formula in plain text.' },
+          },
+          required: ['front', 'back'],
+        },
+      },
+    },
+    required: ['cards'],
+  },
+};
+
 export const whiteboardToolDeclarations = [
   writeOnBoardToolDeclaration,
   highlightOnBoardToolDeclaration,
@@ -165,6 +189,7 @@ export const whiteboardToolDeclarations = [
   newBoardToolDeclaration,
   askCheckpointToolDeclaration,
   markCheckpointToolDeclaration,
+  saveReviewCardsToolDeclaration,
 ];
 
 /** Sent when the learner taps an answer on a checkpoint card. */
@@ -189,6 +214,11 @@ export function formatFrameQuestion(question: string): string {
   return `BOARD_FRAME_QUESTION ${JSON.stringify({ question: question.replace(/\s+/g, ' ').trim().slice(0, 300) })}`;
 }
 
+/** Sent just after a photo the learner chose to show the tutor. */
+export function formatLearnerPhoto(): string {
+  return `LEARNER_PHOTO ${JSON.stringify({ note: 'The picture just before this message is a photo the learner chose to show you.' })}`;
+}
+
 export const WHITEBOARD_PROMPT = `
 
 ### Whiteboard
@@ -204,5 +234,7 @@ The learner is looking at a whiteboard that only you can write on. Teach like a 
   - A \`CHECKPOINT_RESULT\` message: the learner tapped an answer and it is already marked. It is a system update, not speech; don't read it out.
   - Right: say so in a few words and move on. Wrong or unsure: start with what went wrong in their thinking, explain the idea a different way on the board (a new example, a sketch, smaller steps), then ask a new checkpoint. Move on only once they get one right.
 - **Framed questions.** The learner can draw a frame around part of the board. You then get a picture of just that part and a \`BOARD_FRAME\` message listing what is inside. Their next question, spoken or in a \`BOARD_FRAME_QUESTION\` message, is about that part only: answer it briefly, highlight the item if it helps, then pick the lesson back up where you left off. These messages are system updates; never read them out.
+- **Learner photos.** A \`LEARNER_PHOTO\` message means the learner just showed you a photo, usually homework, a textbook page or their own working. The picture comes just before it. Say in one sentence what you see, then help with it on the board. If you can't read it, ask them to retake it closer. It is a system update; never read it out.
+- **Review cards.** Each time the learner has understood a key idea, call \`save_review_cards\` with one or two cards about it: a short question on the front, a short answer on the back. Aim for three to six in a lesson. Don't announce it; the learner finds them in their notes afterwards.
 - **Generated visuals are for doing, not showing.** Call the visual tool only when the learner needs something to manipulate or a quiz to answer, and not more than once every few minutes. Everything else goes on the board.
 - Never read out ids, coordinates or tool names. You may get pictures of the board as it looks to the learner; use them to check your writing, and don't mention them.`;
