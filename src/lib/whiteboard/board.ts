@@ -352,6 +352,56 @@ export function lessonNotes(state: BoardState): LessonNotes | null {
   return { pages, cards, score: checkpointScore(state) };
 }
 
+/** Notes as they are stored: the same boards and cards, without the learner's photos. */
+export function notesWithoutPhotos(notes: LessonNotes): LessonNotes {
+  return { ...notes, pages: notes.pages.map((page) => ({ ...page, items: page.items.filter((item) => item.kind !== 'photo') })) };
+}
+
+/**
+ * Rebuilds lesson notes from untrusted JSON (a save request, or a stored row).
+ * Every item goes back through the same parsers as the tutor's tool calls, so
+ * nothing oversized or unexpected is kept, and photos are dropped. Null when
+ * nothing usable is left.
+ */
+export function sanitizeLessonNotes(raw: unknown): LessonNotes | null {
+  if (!isRecord(raw)) return null;
+  const pages: BoardPage[] = [];
+  let nextId = 1;
+  for (const rawPage of (Array.isArray(raw.pages) ? raw.pages : []).slice(0, BOARD_LIMITS.pages)) {
+    if (!isRecord(rawPage)) continue;
+    const items: BoardItem[] = [];
+    for (const rawItem of (Array.isArray(rawPage.items) ? rawPage.items : []).slice(0, BOARD_LIMITS.itemsPerPage)) {
+      if (!isRecord(rawItem)) continue;
+      let body: BoardItemBody | null;
+      if (rawItem.kind === 'checkpoint') {
+        body = parseCheckpoint({ question: rawItem.text, choices: rawItem.choices, correct: rawItem.correct });
+        if (body?.kind === 'checkpoint') {
+          const result = rawItem.result === 'correct' || rawItem.result === 'incorrect' ? rawItem.result : undefined;
+          const chosen = finite(rawItem.chosen);
+          const tapped = chosen !== null && Number.isInteger(chosen) && body.choices && chosen >= 0 && chosen < body.choices.length ? chosen : undefined;
+          body = { ...body, ...(result ? { result } : {}), ...(result && tapped !== undefined ? { chosen: tapped } : {}) };
+        }
+      } else {
+        body = parseItem(rawItem);
+      }
+      if (!body) continue;
+      items.push({ ...body, id: `n${nextId++}`, delay: 0, duration: 0, settled: true });
+    }
+    if (items.length === 0) continue;
+    pages.push({ id: `np${pages.length + 1}`, title: cleanText(rawPage.title, 80) || null, items });
+  }
+  const cards: ReviewCard[] = [];
+  const seen = new Set<string>();
+  for (const rawCard of (Array.isArray(raw.cards) ? raw.cards : []).slice(0, BOARD_LIMITS.cards)) {
+    const [card] = parseReviewCards(rawCard);
+    if (!card || seen.has(cardKey(card))) continue;
+    seen.add(cardKey(card));
+    cards.push(card);
+  }
+  if (pages.length === 0 && cards.length === 0) return null;
+  return { pages, cards, score: checkpointScore({ ...initialBoardState, pages }) };
+}
+
 export function parseBoardTarget(args: unknown): string {
   if (!isRecord(args)) return '';
   return cleanText(args.target ?? args.id ?? args.text, BOARD_LIMITS.textChars);

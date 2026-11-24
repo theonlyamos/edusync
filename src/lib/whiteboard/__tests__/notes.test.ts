@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOARD_LIMITS, boardReducer, collectReviewCards, initialBoardState, lessonNotes, parseBoardItems, parseCheckpoint, parseReviewCards, type BoardItemBody, type BoardState } from '../board';
+import { BOARD_LIMITS, boardReducer, collectReviewCards, initialBoardState, lessonNotes, notesWithoutPhotos, parseBoardItems, parseCheckpoint, parseReviewCards, sanitizeLessonNotes, type BoardItemBody, type BoardState } from '../board';
 import { formatLearnerPhoto, isWhiteboardToolName } from '../board-tools';
 import { fitWithin } from '../capture';
 
@@ -86,5 +86,58 @@ describe('learner photos', () => {
     expect(fitWithin(4000, 3000, 1280)).toEqual({ width: 1280, height: 960 });
     expect(fitWithin(600, 400, 1280)).toEqual({ width: 600, height: 400 });
     expect(fitWithin(0, 0, 1280)).toEqual({ width: 1, height: 1 });
+  });
+});
+
+describe('stored lesson notes', () => {
+  const build = () => {
+    let state = write(initialBoardState, parseBoardItems({ items: [{ kind: 'heading', text: 'Fractions', id: 'title' }, { kind: 'formula', latex: 'a/b' }] }).items);
+    state = write(state, [parseCheckpoint({ question: 'Half of 8?', choices: ['4', '2'], correct: 0 })!]);
+    const checkpoint = state.pages[0].items[2];
+    state = boardReducer(state, { type: 'answerCheckpoint', id: checkpoint.id, chosen: 1 });
+    state = write(state, [{ kind: 'photo', src: 'data:image/jpeg;base64,AAAA', text: 'Your photo' }]);
+    return boardReducer(state, { type: 'addCards', cards: [{ front: 'Q', back: 'A' }] });
+  };
+
+  it('leaves photos out', () => {
+    const notes = notesWithoutPhotos(lessonNotes(build())!);
+    expect(notes.pages[0].items.map((item) => item.kind)).toEqual(['heading', 'formula', 'checkpoint']);
+  });
+
+  it('survives a round trip through JSON with the score recomputed', () => {
+    const saved = lessonNotes(build())!;
+    const back = sanitizeLessonNotes(JSON.parse(JSON.stringify({ ...saved, score: { correct: 99, answered: 99 } })))!;
+    expect(back.pages[0].items.map((item) => item.kind)).toEqual(['heading', 'formula', 'checkpoint']);
+    expect(back.pages[0].items.every((item) => item.settled && item.delay === 0)).toBe(true);
+    expect(back.pages[0].items[2]).toMatchObject({ kind: 'checkpoint', chosen: 1, result: 'incorrect', correct: 0 });
+    expect(back.score).toEqual({ correct: 0, answered: 1 });
+    expect(back.cards).toEqual([{ front: 'Q', back: 'A' }, { front: 'Half of 8?', back: '4' }]);
+  });
+
+  it('drops anything it does not recognise and caps sizes', () => {
+    const long = 'x'.repeat(5000);
+    const notes = sanitizeLessonNotes({
+      pages: [
+        { title: long, items: [{ kind: 'text', text: long }, { kind: 'photo', src: 'https://example.com/a.png' }, { kind: 'script', text: 'no' }, null, { kind: 'checkpoint', text: 'Q?', result: 'maybe', chosen: 7 }] },
+        { items: [{ kind: 'photo', src: 'x' }] },
+        'junk',
+        ...Array.from({ length: 40 }, () => ({ items: [{ kind: 'text', text: 'page' }] })),
+      ],
+      cards: [...Array.from({ length: 40 }, (_, i) => ({ front: `Q${i}`, back: 'A' })), { front: 'no back' }],
+    })!;
+    expect(notes.pages.length).toBeLessThanOrEqual(BOARD_LIMITS.pages);
+    expect(notes.pages[0].title).toHaveLength(80);
+    expect(notes.pages[0].items).toHaveLength(2);
+    expect(notes.pages[0].items[0]).toMatchObject({ kind: 'text' });
+    expect((notes.pages[0].items[0] as { text: string }).text).toHaveLength(BOARD_LIMITS.textChars);
+    expect(notes.pages[0].items[1]).not.toHaveProperty('result');
+    expect(notes.pages[0].items[1]).not.toHaveProperty('chosen');
+    expect(notes.cards).toHaveLength(BOARD_LIMITS.cards);
+  });
+
+  it('is null for junk or empty notes', () => {
+    expect(sanitizeLessonNotes(null)).toBeNull();
+    expect(sanitizeLessonNotes('notes')).toBeNull();
+    expect(sanitizeLessonNotes({ pages: [{ items: [] }], cards: [] })).toBeNull();
   });
 });

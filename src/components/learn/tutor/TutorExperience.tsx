@@ -19,7 +19,7 @@ import { LearningArtifactCard } from '@/components/students/study-companion/Lear
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
-import { boardReducer, initialBoardState, lessonNotes, parseBoardItems, parseBoardTarget, parseBoardTitle, parseCheckpoint, parseCheckpointResult, parseReviewCards, type LessonNotes as LessonNotesData } from '@/lib/whiteboard/board';
+import { boardReducer, initialBoardState, lessonNotes, notesWithoutPhotos, parseBoardItems, parseBoardTarget, parseBoardTitle, parseCheckpoint, parseCheckpointResult, parseReviewCards, type LessonNotes as LessonNotesData } from '@/lib/whiteboard/board';
 import { formatBoardFrame, formatCheckpointResult, formatFrameQuestion, formatLearnerPhoto, isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
 import { boardFontCss, cropDataUrl, preparePhoto } from '@/lib/whiteboard/capture';
 import type { BoardFrame } from '@/components/learn/whiteboard/Whiteboard';
@@ -34,6 +34,9 @@ const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer')
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
 const Whiteboard = dynamic(() => import('@/components/learn/whiteboard/Whiteboard').then(mod => mod.Whiteboard), { ssr: false });
 const LessonNotes = dynamic(() => import('@/components/learn/whiteboard/LessonNotes').then(mod => mod.LessonNotes), { ssr: false });
+
+/** How long after the tutor last wrote before the notes are saved. */
+const NOTES_AUTOSAVE_MS = 15000;
 
 /** How long a caption stays up after the tutor stops talking. */
 const CAPTION_LINGER_MS = 6000;
@@ -144,7 +147,46 @@ export const TutorExperience = ({
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const [photoNote, setPhotoNote] = useState('');
 
+  // Signed-in students keep their notes: saved while the lesson runs and again when it ends.
+  const sessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    sessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
+  const savedNotesRef = useRef('');
+  const saveNotes = useCallback((sessionId: string | null, leaving = false) => {
+    if (variant !== 'student' || !sessionId) return;
+    const current = boardRef.current;
+    const left = lessonNotes(current);
+    if (!left) return;
+    const key = `${sessionId}:${current.revision}:${current.cards.length}`;
+    if (savedNotesRef.current === key) return;
+    savedNotesRef.current = key;
+    const body = JSON.stringify({ topic: topicRef.current ?? '', notes: notesWithoutPhotos(left) });
+    fetch(`/api/learning/sessions/${sessionId}/notes`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      // Lets the save finish when the page is closing. Browsers only allow this for small bodies.
+      keepalive: leaving && body.length < 60_000,
+    }).then((response) => {
+      if (!response.ok && savedNotesRef.current === key) savedNotesRef.current = '';
+    }).catch(() => {
+      if (savedNotesRef.current === key) savedNotesRef.current = '';
+    });
+  }, [variant]);
+  useEffect(() => {
+    if (!currentSessionId) return;
+    const timer = setTimeout(() => saveNotes(currentSessionId), NOTES_AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [board.revision, board.cards.length, currentSessionId, saveNotes]);
+  useEffect(() => {
+    const onLeave = () => saveNotes(sessionIdRef.current, true);
+    window.addEventListener('pagehide', onLeave);
+    return () => window.removeEventListener('pagehide', onLeave);
+  }, [saveNotes]);
+
   const resetBoard = useCallback(() => {
+    saveNotes(sessionIdRef.current);
     const left = lessonNotes(boardRef.current);
     if (left) setNotes({ data: left, topic: topicRef.current });
     boardDispatch({ type: 'reset' });
@@ -152,7 +194,7 @@ export const TutorExperience = ({
     setPanelView('board');
     setFraming(false);
     boardCaptureRef.current.sentRevision = 0;
-  }, []);
+  }, [saveNotes]);
 
   useEffect(() => {
     boardRef.current = board;
@@ -718,6 +760,7 @@ export const TutorExperience = ({
   // Handle disconnection
   useEffect(() => {
     if (connectionStatus === 'disconnected' && currentSessionId) {
+      saveNotes(currentSessionId);
       (async () => {
         try {
           await axios.patch(`/api/learning/sessions/${currentSessionId}`,
