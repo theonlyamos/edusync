@@ -102,4 +102,38 @@ describe('lesson co-author voice', () => {
         expect(config).toHaveProperty('inputAudioTranscription');
         expect(config).toHaveProperty('outputAudioTranscription');
     });
+
+    it('adds the board tools, board guidance and captions only in whiteboard mode', () => {
+        const config = buildLiveConnectConfig(parse(buildLiveTokenRequest({
+            grantId: null, sessionId: null, resumptionHandle: null, variant: 'tutor', whiteboard: true, topic: 'Fractions',
+        })));
+        expect(toolNames(config)).toEqual([
+            'googleSearch', 'generate_visualization_description', 'set_topic',
+            'write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board',
+            'ask_checkpoint', 'mark_checkpoint', 'save_review_cards',
+        ]);
+        expect(config.systemInstruction).toContain('### Whiteboard');
+        expect(config.systemInstruction).toContain('"Fractions"');
+        expect(config).toHaveProperty('outputAudioTranscription');
+
+        const plain = buildLiveConnectConfig(parse({ variant: 'tutor', whiteboard: false }));
+        expect(plain.systemInstruction).not.toContain('### Whiteboard');
+        expect(plain).not.toHaveProperty('outputAudioTranscription');
+    });
+
+    it('keeps the board with the reviewed-activity tool on an objective run', () => {
+        const config = buildLiveConnectConfig(parse({ whiteboard: true, lesson: { title: 'Cells', learningRunId: 'run-1' } }));
+        expect(toolNames(config)).toEqual([
+            'googleSearch', 'request_learning_artifact', 'set_topic',
+            'write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board',
+            'ask_checkpoint', 'mark_checkpoint', 'save_review_cards',
+        ]);
+    });
+
+    it.each(['studyCompanion', 'coauthor'] as const)('never gives the board to the %s', (variant) => {
+        const config = buildLiveConnectConfig(parse({ variant, whiteboard: true }));
+        expect(toolNames(config)).not.toContain('write_on_board');
+        expect(config.systemInstruction).not.toContain('### Whiteboard');
+        expect(buildLiveTokenRequest({ grantId: null, sessionId: null, resumptionHandle: null, variant, whiteboard: true }).whiteboard).toBe(false);
+    });
 });
