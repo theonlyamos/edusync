@@ -24,7 +24,7 @@ await db.exec(`
     INSERT INTO public.learning_sessions VALUES ('${session}', '${student}'), ('${session2}', '${other}');
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 `);
-const migration = await readFile(path.join(root, 'supabase/migrations/20261124190000_lesson_notes.sql'), 'utf8');
+const migration = await readFile(path.join(root, 'supabase/migrations/20261124183240_lesson_notes.sql'), 'utf8');
 await db.exec(migration);
 
 const rejects = (statement, label) => assert.rejects(() => db.exec(statement), undefined, label);
