@@ -153,6 +153,17 @@ describe('board state', () => {
     expect(state.current).toBe(BOARD_LIMITS.pages - 1);
   });
 
+  it('settles the board when it leaves the screen so it does not replay', () => {
+    let state = write(initialBoardState, [text('One'), text('Two')]);
+    state = boardReducer(state, { type: 'settle' });
+    expect(state.pages[0].items.every((item) => item.settled)).toBe(true);
+    expect(boardReducer(state, { type: 'settle' })).toBe(state);
+    // New writing after that still animates, starting straight away.
+    state = write(state, [text('Three')], 5000);
+    expect(state.pages[0].items[2]).toMatchObject({ delay: 0 });
+    expect(state.pages[0].items[2].settled).toBeUndefined();
+  });
+
   it('ignores an empty write and resets cleanly', () => {
     expect(write(initialBoardState, [])).toBe(initialBoardState);
     const state = write(initialBoardState, [text('x')]);

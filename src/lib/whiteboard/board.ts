@@ -96,6 +96,7 @@ export type BoardAction =
   | { type: 'erase'; target: string }
   | { type: 'newBoard'; title: string | null }
   | { type: 'goto'; index: number }
+  | { type: 'settle' }
   | { type: 'reset' };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -350,6 +351,12 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
       if (index === state.current) return state;
       // Reopened pages show finished work instead of replaying the drawing.
       return { ...state, pages: state.pages.map(settle), current: index };
+    }
+    case 'settle': {
+      // The board left the screen (the learner opened an activity). When it
+      // comes back it shows finished work instead of replaying the drawing.
+      if (state.pages.every((page) => page.items.every((item) => item.settled))) return state;
+      return { ...state, pages: state.pages.map(settle), busyUntil: 0 };
     }
     case 'reset':
       return initialBoardState;

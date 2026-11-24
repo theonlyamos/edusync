@@ -775,6 +775,11 @@ export const TutorExperience = ({
     boardCaptureRef.current.revision = board.revision;
     boardCaptureRef.current.busyUntil = board.busyUntil;
   }, [showBoard, board.revision, board.busyUntil]);
+  // The board unmounts while an activity has the panel; mark its drawing as
+  // finished so it doesn't replay from the start when the learner comes back.
+  useEffect(() => {
+    if (!showBoard) boardDispatch({ type: 'settle' });
+  }, [showBoard]);
   const whiteboardToggle = whiteboardFixed === undefined ? { enabled: whiteboardChoice, onChange: handleWhiteboardChoice } : undefined;
   const studentBackHref = back?.href ?? (variant === 'student'
     ? (lessonContext?.lessonId ? `/students/lessons/${lessonContext.lessonId}` : '/students/dashboard')
