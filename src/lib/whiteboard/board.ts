@@ -44,7 +44,21 @@ export type BoardItemBody =
       yLabel?: string;
       series: PlotSeries[];
       text?: string;
+    }
+  | {
+      /** A quick question the tutor asks to check the idea has landed. */
+      kind: 'checkpoint';
+      text: string;
+      /** Tappable answers. Without them the learner answers out loud. */
+      choices?: string[];
+      /** Index of the right choice, when there are choices. */
+      correct?: number;
+      /** The choice the learner tapped. */
+      chosen?: number;
+      result?: CheckpointResult;
     };
+
+export type CheckpointResult = 'correct' | 'incorrect';
 
 export type BoardItem = BoardItemBody & {
   id: string;
@@ -80,6 +94,8 @@ export const BOARD_LIMITS = {
   series: 3,
   points: 80,
   labelChars: 60,
+  choices: 4,
+  choiceChars: 80,
 } as const;
 
 export const initialBoardState: BoardState = {
@@ -96,6 +112,8 @@ export type BoardAction =
   | { type: 'erase'; target: string }
   | { type: 'newBoard'; title: string | null }
   | { type: 'goto'; index: number }
+  | { type: 'answerCheckpoint'; id: string; chosen: number }
+  | { type: 'markCheckpoint'; result: CheckpointResult }
   | { type: 'settle' }
   | { type: 'reset' };
 
@@ -229,6 +247,43 @@ export function parseBoardItems(args: unknown): { items: BoardItemBody[]; ids: A
   return { items, ids };
 }
 
+/** Reads `ask_checkpoint` arguments into a checkpoint card, or null when there is no question. */
+export function parseCheckpoint(args: unknown): BoardItemBody | null {
+  if (!isRecord(args)) return null;
+  const text = cleanText(args.question ?? args.text, BOARD_LIMITS.textChars);
+  if (!text) return null;
+  const choices = (Array.isArray(args.choices) ? args.choices : [])
+    .map((choice) => cleanText(choice, BOARD_LIMITS.choiceChars))
+    .filter(Boolean)
+    .slice(0, BOARD_LIMITS.choices);
+  if (choices.length < 2) return { kind: 'checkpoint', text };
+  const index = finite(args.correct ?? args.correctIndex ?? args.answer);
+  const correct = index !== null && Number.isInteger(index) && index >= 0 && index < choices.length ? index : undefined;
+  // Choices with no known right answer can't be marked on tap, so the tutor marks them.
+  return { kind: 'checkpoint', text, choices, correct };
+}
+
+export function parseCheckpointResult(args: unknown): CheckpointResult | null {
+  const value = isRecord(args) && typeof args.result === 'string' ? args.result.trim().toLowerCase() : '';
+  if (['correct', 'got_it', 'right', 'yes'].includes(value)) return 'correct';
+  if (['incorrect', 'not_yet', 'wrong', 'no', 'partial'].includes(value)) return 'incorrect';
+  return null;
+}
+
+/** How many checkpoints the learner has got right so far, across every board. */
+export function checkpointScore(state: BoardState): { correct: number; answered: number } {
+  let correct = 0;
+  let answered = 0;
+  for (const page of state.pages) {
+    for (const item of page.items) {
+      if (item.kind !== 'checkpoint' || !item.result) continue;
+      answered++;
+      if (item.result === 'correct') correct++;
+    }
+  }
+  return { correct, answered };
+}
+
 export function parseBoardTarget(args: unknown): string {
   if (!isRecord(args)) return '';
   return cleanText(args.target ?? args.id ?? args.text, BOARD_LIMITS.textChars);
@@ -251,6 +306,8 @@ export function drawDuration(item: BoardItemBody): number {
       return clamp(item.shapes.length * 450, 600, 5000);
     case 'plot':
       return 1200 + item.series.length * 800;
+    case 'checkpoint':
+      return clamp(item.text.length * 30, 400, 1800);
   }
 }
 
@@ -261,6 +318,7 @@ export function itemSearchText(item: BoardItemBody): string {
   if (item.kind === 'formula') parts.push(item.latex);
   if (item.kind === 'diagram') for (const shape of item.shapes) if (shape.text) parts.push(shape.text);
   if (item.kind === 'plot') for (const series of item.series) parts.push(series.label ?? '', series.fn ?? '');
+  if (item.kind === 'checkpoint') parts.push(...(item.choices ?? []));
   return parts.join(' ').toLowerCase();
 }
 
@@ -351,6 +409,32 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
       if (index === state.current) return state;
       // Reopened pages show finished work instead of replaying the drawing.
       return { ...state, pages: state.pages.map(settle), current: index };
+    }
+    case 'answerCheckpoint': {
+      // A tap on one of the choices. It only counts once, and only when the right answer is known.
+      let changed = false;
+      const pages = state.pages.map((page) => ({
+        ...page,
+        items: page.items.map((item) => {
+          if (item.id !== action.id || item.kind !== 'checkpoint' || item.result || item.correct === undefined) return item;
+          if (!item.choices || action.chosen < 0 || action.chosen >= item.choices.length) return item;
+          changed = true;
+          return { ...item, chosen: action.chosen, result: action.chosen === item.correct ? 'correct' as const : 'incorrect' as const };
+        }),
+      }));
+      return changed ? { ...state, pages, revision: state.revision + 1 } : state;
+    }
+    case 'markCheckpoint': {
+      // The tutor judged a spoken answer: it applies to the newest open checkpoint.
+      const page = state.pages[state.pages.length - 1];
+      let index = -1;
+      for (let i = page.items.length - 1; i >= 0; i--) {
+        const item = page.items[i];
+        if (item.kind === 'checkpoint' && !item.result) { index = i; break; }
+      }
+      if (index < 0) return state;
+      const items = page.items.map((item, i) => (i === index ? { ...item, result: action.result } : item));
+      return { ...state, pages: replaceLastPage(state, { ...page, items }), revision: state.revision + 1 };
     }
     case 'settle': {
       // The board left the screen (the learner opened an activity). When it

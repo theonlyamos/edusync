@@ -6,7 +6,7 @@
 
 import { BOARD_COLORS } from './board';
 
-export const WHITEBOARD_TOOL_NAMES = ['write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board'] as const;
+export const WHITEBOARD_TOOL_NAMES = ['write_on_board', 'highlight_on_board', 'erase_from_board', 'new_board', 'ask_checkpoint', 'mark_checkpoint'] as const;
 
 export function isWhiteboardToolName(name: string): boolean {
   return (WHITEBOARD_TOOL_NAMES as readonly string[]).includes(name);
@@ -126,12 +126,68 @@ export const newBoardToolDeclaration = {
   },
 };
 
+export const askCheckpointToolDeclaration = {
+  name: 'ask_checkpoint',
+  description:
+    'Puts a quick check question on the board after a key idea, then you ask it out loud and wait. With choices the learner can tap an answer or say it; without choices they answer out loud.',
+  parameters: {
+    type: 'object',
+    properties: {
+      question: { type: 'string', description: 'One short question that tests the idea you just taught, not recall of your exact words.' },
+      choices: {
+        type: 'array',
+        description: 'Optional: two to four short answers to tap. Make the wrong ones the mistakes learners really make.',
+        items: { type: 'string' },
+      },
+      correct: { type: 'number', description: 'With choices: the position of the right answer, counting from 0.' },
+    },
+    required: ['question'],
+  },
+};
+
+export const markCheckpointToolDeclaration = {
+  name: 'mark_checkpoint',
+  description:
+    'Records how the learner did on the open checkpoint when they answered out loud. Not needed after a CHECKPOINT_RESULT message, which means a tapped answer was already marked.',
+  parameters: {
+    type: 'object',
+    properties: {
+      result: { type: 'string', enum: ['correct', 'incorrect'], description: 'incorrect also covers a partly right or unsure answer.' },
+    },
+    required: ['result'],
+  },
+};
+
 export const whiteboardToolDeclarations = [
   writeOnBoardToolDeclaration,
   highlightOnBoardToolDeclaration,
   eraseFromBoardToolDeclaration,
   newBoardToolDeclaration,
+  askCheckpointToolDeclaration,
+  markCheckpointToolDeclaration,
 ];
+
+/** Sent when the learner taps an answer on a checkpoint card. */
+export function formatCheckpointResult(input: { question: string; chosen: string; correct: boolean; rightAnswer?: string }): string {
+  return `CHECKPOINT_RESULT ${JSON.stringify({
+    question: input.question,
+    learnerChose: input.chosen,
+    correct: input.correct,
+    ...(input.correct || !input.rightAnswer ? {} : { rightAnswer: input.rightAnswer }),
+  })}`;
+}
+
+export type FramedItem = { id: string; kind: string; text: string };
+
+/** Sent when the learner draws a frame around part of the board. A picture of that part goes just before it. */
+export function formatBoardFrame(items: FramedItem[]): string {
+  return `BOARD_FRAME ${JSON.stringify({ items: items.slice(0, 8).map((item) => ({ ...item, text: item.text.slice(0, 120) })) })}`;
+}
+
+/** Sent when the learner types a question about the part they framed. */
+export function formatFrameQuestion(question: string): string {
+  return `BOARD_FRAME_QUESTION ${JSON.stringify({ question: question.replace(/\s+/g, ' ').trim().slice(0, 300) })}`;
+}
 
 export const WHITEBOARD_PROMPT = `
 
@@ -143,6 +199,10 @@ The learner is looking at a whiteboard that only you can write on. Teach like a 
 - **Use the right kind.** \`formula\` for any maths. \`diagram\` for a quick labelled sketch (boxes, circles, arrows on the 100 by 60 grid). \`plot\` for graphs of functions or data. \`text\` and \`bullet\` for words.
 - **Point at things.** Use \`highlight_on_board\` when you refer back to something already written. Give important items an \`id\` so you can find them again.
 - **Keep it tidy.** Call \`new_board\` when you move to a new idea or the board has about eight items. Use \`erase_from_board\` only to fix a mistake.
-- **Still check understanding.** After each key idea, ask the learner one short question and wait for the answer. If they are unsure, explain it a different way on the board.
+- **Check before moving on.** After each key idea, call \`ask_checkpoint\`, ask the question out loud and wait. Give two to four \`choices\` with \`correct\` when the answer is short, so the learner can tap or speak. Never say which choice is right before they answer.
+  - A spoken answer: call \`mark_checkpoint\` with how they did.
+  - A \`CHECKPOINT_RESULT\` message: the learner tapped an answer and it is already marked. It is a system update, not speech; don't read it out.
+  - Right: say so in a few words and move on. Wrong or unsure: start with what went wrong in their thinking, explain the idea a different way on the board (a new example, a sketch, smaller steps), then ask a new checkpoint. Move on only once they get one right.
+- **Framed questions.** The learner can draw a frame around part of the board. You then get a picture of just that part and a \`BOARD_FRAME\` message listing what is inside. Their next question, spoken or in a \`BOARD_FRAME_QUESTION\` message, is about that part only: answer it briefly, highlight the item if it helps, then pick the lesson back up where you left off. These messages are system updates; never read them out.
 - **Generated visuals are for doing, not showing.** Call the visual tool only when the learner needs something to manipulate or a quiz to answer, and not more than once every few minutes. Everything else goes on the board.
 - Never read out ids, coordinates or tool names. You may get pictures of the board as it looks to the learner; use them to check your writing, and don't mention them.`;

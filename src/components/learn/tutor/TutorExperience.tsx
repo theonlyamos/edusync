@@ -8,7 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation, PenLine, Captions, CaptionsOff } from 'lucide-react';
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation, PenLine, Captions, CaptionsOff, SquareDashedMousePointer } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
 import type { LessonContext, LiveTranscriptionPayload, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
@@ -19,8 +19,10 @@ import { LearningArtifactCard } from '@/components/students/study-companion/Lear
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
-import { boardReducer, initialBoardState, parseBoardItems, parseBoardTarget, parseBoardTitle } from '@/lib/whiteboard/board';
-import { isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
+import { boardReducer, initialBoardState, parseBoardItems, parseBoardTarget, parseBoardTitle, parseCheckpoint, parseCheckpointResult } from '@/lib/whiteboard/board';
+import { formatBoardFrame, formatCheckpointResult, formatFrameQuestion, isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
+import { boardFontCss, cropDataUrl } from '@/lib/whiteboard/capture';
+import type { BoardFrame } from '@/components/learn/whiteboard/Whiteboard';
 import { captionReducer, initialCaptionState } from '@/lib/whiteboard/captions';
 import { readWhiteboardPreference, saveWhiteboardPreference } from '@/lib/whiteboard/preference';
 import { TutorCaptions } from '@/components/learn/whiteboard/TutorCaptions';
@@ -91,6 +93,9 @@ export const TutorExperience = ({
   const [captions, captionDispatch] = useReducer(captionReducer, initialCaptionState);
   const [captionsOn, setCaptionsOn] = useState(true);
   const boardContentRef = useRef<HTMLDivElement | null>(null);
+  const boardRef = useRef(board);
+  // Frame-to-ask: the learner drags a box over the board and asks about that part.
+  const [framing, setFraming] = useState(false);
   const boardCaptureRef = useRef({ shown: false, revision: 0, busyUntil: 0, sentRevision: 0 });
 
   const [error, setError] = useState('');
@@ -135,8 +140,52 @@ export const TutorExperience = ({
     boardDispatch({ type: 'reset' });
     captionDispatch({ type: 'clear' });
     setPanelView('board');
+    setFraming(false);
     boardCaptureRef.current.sentRevision = 0;
   }, []);
+
+  useEffect(() => {
+    boardRef.current = board;
+  }, [board]);
+
+  // Messages to the tutor go through the same window events as the rest of the voice UI.
+  const tellTutor = useCallback((text: string) => {
+    window.dispatchEvent(new CustomEvent('voice-send-text', { detail: text }));
+  }, []);
+
+  const handleAnswerCheckpoint = useCallback((id: string, chosen: number) => {
+    const item = boardRef.current.pages.flatMap((page) => page.items).find((entry) => entry.id === id);
+    if (!item || item.kind !== 'checkpoint' || item.result || item.correct === undefined || !item.choices?.[chosen]) return;
+    boardDispatch({ type: 'answerCheckpoint', id, chosen });
+    tellTutor(formatCheckpointResult({
+      question: item.text,
+      chosen: item.choices[chosen],
+      correct: chosen === item.correct,
+      rightAnswer: item.choices[item.correct],
+    }));
+  }, [tellTutor]);
+
+  const handleFrame = useCallback(async (frame: BoardFrame) => {
+    const content = boardContentRef.current;
+    if (!content) return;
+    try {
+      const full = await toPng(content, {
+        pixelRatio: 1,
+        fontEmbedCSS: await boardFontCss(content),
+        backgroundColor: document.documentElement.classList.contains('dark') ? '#18222d' : '#fdfcf7',
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.boardFrameUi !== undefined),
+      });
+      const cropped = await cropDataUrl(full, frame);
+      if (cropped) window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl: cropped, mimeType: 'image/png' } }));
+    } catch (err) {
+      // The list of framed items below still tells the tutor what was picked.
+      console.error('Failed to capture the framed part of the board', err);
+    }
+    tellTutor(formatBoardFrame(frame.items));
+  }, [tellTutor]);
+
+  const handleFrameQuestion = useCallback((question: string) => tellTutor(formatFrameQuestion(question)), [tellTutor]);
+  const handleFrameClose = useCallback(() => setFraming(false), []);
 
   const handleBoardGoto = useCallback((index: number) => boardDispatch({ type: 'goto', index }), []);
 
@@ -358,6 +407,14 @@ export const TutorExperience = ({
         boardDispatch({ type: 'highlight', target: parseBoardTarget(args) });
       } else if (name === 'erase_from_board') {
         boardDispatch({ type: 'erase', target: parseBoardTarget(args) });
+      } else if (name === 'ask_checkpoint') {
+        const checkpoint = parseCheckpoint(args);
+        if (!checkpoint) return;
+        boardDispatch({ type: 'write', items: [checkpoint], now: Date.now() });
+      } else if (name === 'mark_checkpoint') {
+        const result = parseCheckpointResult(args);
+        if (!result) return;
+        boardDispatch({ type: 'markCheckpoint', result });
       } else {
         boardDispatch({ type: 'newBoard', title: parseBoardTitle(args) });
       }
@@ -514,12 +571,12 @@ export const TutorExperience = ({
       isCapturingRef.current = true;
       const capturedRevision = boardCapture.shown ? boardCapture.revision : null;
 
-      toPng(container, {
+      (boardCapture.shown ? boardFontCss(container) : Promise.resolve(null)).then((fontCss) => toPng(container, {
         pixelRatio: 1,
         ...(boardCapture.shown
           ? { backgroundColor: document.documentElement.classList.contains('dark') ? '#18222d' : '#fdfcf7' }
           : {}),
-        skipFonts: true,
+        ...(fontCss === null ? { skipFonts: true } : { fontEmbedCSS: fontCss }),
         cacheBust: true,
         filter: (node) => {
           // Skip style elements (Monaco injects <style> not <link>)
@@ -535,6 +592,9 @@ export const TutorExperience = ({
             }
           }
 
+          // The frame-to-ask box is the learner's pointer, not part of the board.
+          if (node instanceof HTMLElement && node.dataset.boardFrameUi !== undefined) return false;
+
           // Skip Monaco Editor elements
           if (node instanceof Element) {
             if (
@@ -549,7 +609,7 @@ export const TutorExperience = ({
 
           return true;
         },
-      })
+      }))
         .then((dataUrl) => {
           window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
           if (capturedRevision !== null) boardCaptureRef.current.sentRevision = capturedRevision;
@@ -770,6 +830,7 @@ export const TutorExperience = ({
   // the panel when one arrives, and the learner can flip between the two.
   const hasActivity = Boolean(currentObjectiveArtifact || (code && library) || preparingActivity);
   const showBoard = whiteboardMode && (panelView === 'board' || !hasActivity);
+  const boardHasItems = (board.pages[board.current]?.items.length ?? 0) > 0;
   useEffect(() => {
     boardCaptureRef.current.shown = showBoard;
     boardCaptureRef.current.revision = board.revision;
@@ -839,7 +900,16 @@ export const TutorExperience = ({
       )}
       <div data-visualization-viewport className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]" ref={vizRef}>
         {showBoard ? (
-          <Whiteboard board={board} onGoto={handleBoardGoto} contentRef={boardContentRef} />
+          <Whiteboard
+            board={board}
+            onGoto={handleBoardGoto}
+            contentRef={boardContentRef}
+            onAnswerCheckpoint={handleAnswerCheckpoint}
+            framing={framing}
+            onFrame={handleFrame}
+            onFrameQuestion={handleFrameQuestion}
+            onFrameClose={handleFrameClose}
+          />
         ) : currentObjectiveArtifact ? (
           <Card className="flex-1 overflow-y-auto rounded-none border-0 bg-background/95 shadow-none">
             <CardHeader className="sticky top-0 z-10 border-b bg-background/90 p-4 backdrop-blur sm:p-6">
@@ -1011,6 +1081,20 @@ export const TutorExperience = ({
                   aria-label={captionsOn ? 'Hide captions' : 'Show captions'}
                 >
                   {captionsOn ? <Captions className="h-5 w-5" /> : <CaptionsOff className="h-5 w-5" />}
+                </Button>
+              )}
+              {showBoard && boardHasItems && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={framing ? 'default' : 'outline'}
+                  className={`h-11 w-11 rounded-full ${framing ? '' : 'bg-background/90'}`}
+                  aria-pressed={framing}
+                  onClick={() => setFraming((on) => !on)}
+                  title={framing ? 'Stop asking about a part' : 'Ask about part of the board'}
+                  aria-label={framing ? 'Stop asking about a part' : 'Ask about part of the board'}
+                >
+                  <SquareDashedMousePointer className="h-5 w-5" />
                 </Button>
               )}
               {whiteboardMode && hasActivity && (
