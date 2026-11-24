@@ -416,6 +416,9 @@ export const TutorExperience = ({
 
         // Start waiting before the new code is set so the renderer's ready/error signal isn't missed.
         const rendered = renderWaiterRef.current.wait(VISUAL_RENDER_TIMEOUT_MS);
+        // The tutor may have written on the board while this was generating, which
+        // switches back to the board. The new visual has to be on screen to render.
+        setPanelView('activity');
         // Use ADD_VISUALIZATION dispatch which sets code, library, visualizations, and currentVizIndex atomically
         vizDispatch({
           type: 'ADD_VISUALIZATION',
