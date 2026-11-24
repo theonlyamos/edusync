@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Power, Loader, AlertTriangle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 interface StartButtonOverlayProps {
   onStart: () => void;
@@ -13,9 +14,11 @@ interface StartButtonOverlayProps {
   /** Where students go if they'd rather not start a voice session. */
   backHref?: string;
   backLabel?: string;
+  /** Lets the learner choose whiteboard mode before the session starts. */
+  whiteboard?: { enabled: boolean; onChange: (enabled: boolean) => void };
 }
 
-export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error, backHref, backLabel = 'Back' }: StartButtonOverlayProps) {
+export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = false, remainingCredits, creditsLoading = false, hideCredits = false, error, backHref, backLabel = 'Back', whiteboard }: StartButtonOverlayProps) {
   const isConnecting = connectionStatus === 'connecting';
 
   // Skip credit loading check if hideCredits is true
@@ -69,6 +72,20 @@ export function StartButtonOverlay({ onStart, connectionStatus, outOfCredits = f
         {isConnecting ? 'Connecting...' : error ? 'Try again' : 'Start Learning'}
       </div>
       {error && <div role="alert" className="mx-6 mt-4 max-w-md rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{error}</div>}
+      {whiteboard && (
+        <label className="mx-6 mt-5 flex min-h-11 max-w-sm cursor-pointer items-center gap-3 rounded-xl border bg-background/80 px-4 py-2 text-left">
+          <Switch
+            checked={whiteboard.enabled}
+            onCheckedChange={whiteboard.onChange}
+            disabled={isConnecting}
+            aria-describedby="whiteboard-mode-hint"
+          />
+          <span>
+            <span className="block text-sm font-medium">Whiteboard</span>
+            <span id="whiteboard-mode-hint" className="block text-xs text-muted-foreground">Your tutor writes and draws as it explains, with captions.</span>
+          </span>
+        </label>
+      )}
       {backHref && !isConnecting && (
         <a href={backHref} className="mt-6 inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
           {backLabel}

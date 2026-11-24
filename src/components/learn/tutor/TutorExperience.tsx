@@ -8,10 +8,10 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { VoiceControl } from '@/components/voice/VoiceControl';
 import { StartButtonOverlay } from '@/components/voice/StartButtonOverlay';
 import { FeedbackForm, FeedbackData } from '@/components/feedback/FeedbackForm';
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation } from 'lucide-react';
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, RefreshCw, BookOpen, CircleHelp, Presentation, PenLine, Captions, CaptionsOff } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import axios from 'axios';
-import type { LessonContext, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
+import type { LessonContext, LiveTranscriptionPayload, VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
 import { vizReducer, initialVizState, Visualization } from '@/reducers/visualizationReducer';
 import type { ObjectiveLearningController } from '@/hooks/useObjectiveLearning';
 import { normalizeRequestedArtifactKind } from '@/lib/lesson-artifacts/objective-learning-controller';
@@ -19,12 +19,21 @@ import { LearningArtifactCard } from '@/components/students/study-companion/Lear
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
 import { createRenderWaiter, type VisualStatusReport } from '@/lib/visual-status';
 import { LearningActivityExpandSlot, LearningActivityToolbar } from '@/components/lessons/LearningActivityView';
+import { boardReducer, initialBoardState, parseBoardItems, parseBoardTarget, parseBoardTitle } from '@/lib/whiteboard/board';
+import { isWhiteboardToolName } from '@/lib/whiteboard/board-tools';
+import { captionReducer, initialCaptionState } from '@/lib/whiteboard/captions';
+import { readWhiteboardPreference, saveWhiteboardPreference } from '@/lib/whiteboard/preference';
+import { TutorCaptions } from '@/components/learn/whiteboard/TutorCaptions';
 
 /** How long a new visual may take to render before the tutor is told it failed. */
 const VISUAL_RENDER_TIMEOUT_MS = 30_000;
 
 const ReactRenderer = dynamic(() => import('@/components/lessons/ReactRenderer').then(mod => mod.ReactRenderer), { ssr: false });
 const LiveSketch = dynamic(() => import('@/components/lessons/LiveSketch').then(mod => mod.LiveSketch), { ssr: false });
+const Whiteboard = dynamic(() => import('@/components/learn/whiteboard/Whiteboard').then(mod => mod.Whiteboard), { ssr: false });
+
+/** How long a caption stays up after the tutor stops talking. */
+const CAPTION_LINGER_MS = 6000;
 
 /**
  * Shared interactive AI tutor experience. Both the embed (`InteractiveAITutor`,
@@ -46,6 +55,11 @@ export type TutorExperienceProps = {
   onSessionEnded?: (sessionId: string | null) => void;
   /** Where "back" goes, when not the student lesson page (e.g. a teacher rehearsing). */
   back?: { href: string; label: string };
+  /**
+   * Whiteboard mode. `true` or `false` fixes it (the embed's `whiteboard` URL
+   * parameter); leave it out to let the learner choose on the start screen.
+   */
+  whiteboard?: boolean;
 };
 
 export const TutorExperience = ({
@@ -59,6 +73,7 @@ export const TutorExperience = ({
   onSessionStarted,
   onSessionEnded,
   back,
+  whiteboard: whiteboardFixed,
 }: TutorExperienceProps) => {
   const creditsEnabled = variant === 'embed';
   const authHeaders: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
@@ -66,6 +81,17 @@ export const TutorExperience = ({
   // Use reducer for visualization state to batch updates and reduce re-renders
   const [vizState, vizDispatch] = useReducer(vizReducer, initialVizState);
   const { code, library, visualizations, currentVizIndex, generatingVisualization } = vizState;
+
+  // Whiteboard mode: the tutor writes on a board while it talks. Students get it
+  // by default; the embed keeps its visual-first behaviour unless asked.
+  const [whiteboardChoice, setWhiteboardChoice] = useState(variant === 'student');
+  const whiteboardMode = whiteboardFixed ?? whiteboardChoice;
+  const [board, boardDispatch] = useReducer(boardReducer, initialBoardState);
+  const [panelView, setPanelView] = useState<'board' | 'activity'>('board');
+  const [captions, captionDispatch] = useReducer(captionReducer, initialCaptionState);
+  const [captionsOn, setCaptionsOn] = useState(true);
+  const boardContentRef = useRef<HTMLDivElement | null>(null);
+  const boardCaptureRef = useRef({ shown: false, revision: 0, busyUntil: 0, sentRevision: 0 });
 
   const [error, setError] = useState('');
   const [show, setShow] = useState<'render' | 'code'>('render');
@@ -105,6 +131,38 @@ export const TutorExperience = ({
   const lastEndedSessionIdRef = useRef<string | null>(null);
   const handleVoiceStartupFailed = useCallback(() => setVoiceActive(false), []);
 
+  const resetBoard = useCallback(() => {
+    boardDispatch({ type: 'reset' });
+    captionDispatch({ type: 'clear' });
+    setPanelView('board');
+    boardCaptureRef.current.sentRevision = 0;
+  }, []);
+
+  const handleBoardGoto = useCallback((index: number) => boardDispatch({ type: 'goto', index }), []);
+
+  const handleWhiteboardChoice = useCallback((enabled: boolean) => {
+    setWhiteboardChoice(enabled);
+    saveWhiteboardPreference(enabled);
+  }, []);
+
+  // The learner's last choice wins over the default for this kind of tutor.
+  useEffect(() => {
+    const saved = readWhiteboardPreference();
+    if (saved !== null) setWhiteboardChoice(saved);
+  }, []);
+
+  const handleTranscription = useCallback((payload: LiveTranscriptionPayload) => {
+    // Captions follow the tutor; they clear when the learner speaks or cuts in.
+    if (payload.role !== 'assistant' || payload.interrupted) captionDispatch({ type: 'clear' });
+    else captionDispatch({ type: 'chunk', text: payload.text, finished: payload.finished });
+  }, []);
+
+  useEffect(() => {
+    if (!captions.text) return;
+    const timer = setTimeout(() => captionDispatch({ type: 'clear' }), CAPTION_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [captions.text]);
+
   const handleCountdownEnd = async () => {
     if (currentSessionId) {
       try {
@@ -118,6 +176,7 @@ export const TutorExperience = ({
     }
     setVoiceActive(false);
     vizDispatch({ type: 'RESET' }); // Batch reset: code, library, visualizations, currentVizIndex
+    resetBoard();
     setError('');
     setSessionManuallyStopped(true);
   };
@@ -135,6 +194,7 @@ export const TutorExperience = ({
     }
     setVoiceActive(false);
     vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
+    resetBoard();
     setError('');
     if (creditsEnabled) setShowCreditWarning(false);
     setSessionManuallyStopped(true);
@@ -147,6 +207,7 @@ export const TutorExperience = ({
     }
 
     vizDispatch({ type: 'RESET' }); // Batch reset all visualization state
+    resetBoard();
     setError('');
     setTopic(lessonContext?.title || null);
     lastEndedSessionIdRef.current = currentSessionId;
@@ -287,6 +348,22 @@ export const TutorExperience = ({
   }, [code, library, handleRendererError, handleRendererReady, handleSketchError]);
 
   const handleToolCall = async (name: string, args: any, callId?: string): Promise<VisualStatusReport | void> => {
+    if (isWhiteboardToolName(name)) {
+      if (!whiteboardMode) return;
+      if (name === 'write_on_board') {
+        const { items, ids } = parseBoardItems(args);
+        if (items.length === 0) return;
+        boardDispatch({ type: 'write', items, ids, now: Date.now() });
+      } else if (name === 'highlight_on_board') {
+        boardDispatch({ type: 'highlight', target: parseBoardTarget(args) });
+      } else if (name === 'erase_from_board') {
+        boardDispatch({ type: 'erase', target: parseBoardTarget(args) });
+      } else {
+        boardDispatch({ type: 'newBoard', title: parseBoardTitle(args) });
+      }
+      setPanelView('board');
+      return;
+    }
     if (name === 'request_learning_artifact' && objectiveLearning?.runId) {
       const taskDescription: string | undefined = typeof args?.taskDescription === 'string'
         ? args.taskDescription
@@ -297,6 +374,7 @@ export const TutorExperience = ({
           ? `voice:${objectiveLearning.runId}:${callId}`
           : `voice:${objectiveLearning.runId}:${crypto.randomUUID()}`;
         const attachment = await objectiveLearning.requestArtifact(kind, requestId, taskDescription);
+        setPanelView('activity');
         const title = typeof attachment?.artifact?.payload?.title === 'string' ? attachment.artifact.payload.title : undefined;
         const kindLabel = attachment?.artifact?.kind?.replace(/_/g, ' ') ?? kind;
         return { status: 'ready', taskDescription, explanation: title ? `${kindLabel}: "${title}"` : kindLabel };
@@ -308,8 +386,9 @@ export const TutorExperience = ({
     }
     if (name === 'generate_visualization_description') {
       vizDispatch({ type: 'SET_GENERATING', payload: true });
+      setPanelView('activity');
       try {
-        const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current);
+        const panelDimensions = readVisualizationPanelDimensions(vizOnlyRef.current ?? vizRef.current?.querySelector('[data-visualization-panel]'));
         const vizTopic = lessonContext?.title || topic || undefined;
 
         const response = await fetch('/api/genai/visualize', {
@@ -419,16 +498,24 @@ export const TutorExperience = ({
       // Skip screenshot when code view is active - Monaco DOM is heavy
       if (showRef.current === 'code') return;
 
-      const container = vizOnlyRef.current as HTMLElement | null;
+      // The board only changes when the tutor writes, so its picture is sent
+      // once per change, after the pen has stopped, instead of every few seconds.
+      const boardCapture = boardCaptureRef.current;
+      if (boardCapture.shown && (boardCapture.revision === boardCapture.sentRevision || Date.now() < boardCapture.busyUntil)) return;
+      const container = (boardCapture.shown ? boardContentRef.current : vizOnlyRef.current) as HTMLElement | null;
       if (!container || isCapturingRef.current) return;
 
       // Check connection status again in case it changed
       if (connectionStatus !== 'connected') return;
 
       isCapturingRef.current = true;
+      const capturedRevision = boardCapture.shown ? boardCapture.revision : null;
 
       toPng(container, {
         pixelRatio: 1,
+        ...(boardCapture.shown
+          ? { backgroundColor: document.documentElement.classList.contains('dark') ? '#18222d' : '#fdfcf7' }
+          : {}),
         skipFonts: true,
         cacheBust: true,
         filter: (node) => {
@@ -462,6 +549,7 @@ export const TutorExperience = ({
       })
         .then((dataUrl) => {
           window.dispatchEvent(new CustomEvent('voice-send-media', { detail: { dataUrl, mimeType: 'image/png' } }));
+          if (capturedRevision !== null) boardCaptureRef.current.sentRevision = capturedRevision;
         })
         .catch(() => { })
         .finally(() => {
@@ -675,6 +763,16 @@ export const TutorExperience = ({
 
   const currentObjectiveArtifact = objectiveLearning?.artifacts.at(-1);
   const preparingActivity = generatingVisualization || Boolean(objectiveLearning?.activityLoading);
+  // In whiteboard mode the board is the main surface; a visual or quiz takes
+  // the panel when one arrives, and the learner can flip between the two.
+  const hasActivity = Boolean(currentObjectiveArtifact || (code && library) || preparingActivity);
+  const showBoard = whiteboardMode && (panelView === 'board' || !hasActivity);
+  useEffect(() => {
+    boardCaptureRef.current.shown = showBoard;
+    boardCaptureRef.current.revision = board.revision;
+    boardCaptureRef.current.busyUntil = board.busyUntil;
+  }, [showBoard, board.revision, board.busyUntil]);
+  const whiteboardToggle = whiteboardFixed === undefined ? { enabled: whiteboardChoice, onChange: handleWhiteboardChoice } : undefined;
   const studentBackHref = back?.href ?? (variant === 'student'
     ? (lessonContext?.lessonId ? `/students/lessons/${lessonContext.lessonId}` : '/students/dashboard')
     : undefined);
@@ -684,10 +782,10 @@ export const TutorExperience = ({
   const activityError = objectiveLearning?.error || (startOverlayVisible ? '' : error);
   const objectiveActivityControls = objectiveLearning?.runId ? (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('visualization').catch(() => {})}>
+      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => { setPanelView('activity'); void objectiveLearning.requestArtifact('visualization').catch(() => {}); }}>
         <Presentation className="mr-2 h-4 w-4" /> Show next visual
       </Button>
-      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => void objectiveLearning.requestArtifact('quiz').catch(() => {})}>
+      <Button size="sm" className="min-h-11" variant="outline" disabled={objectiveLearning.loading || objectiveLearning.activityLoading} onClick={() => { setPanelView('activity'); void objectiveLearning.requestArtifact('quiz').catch(() => {}); }}>
         <CircleHelp className="mr-2 h-4 w-4" /> Start knowledge check
       </Button>
     </div>
@@ -713,6 +811,7 @@ export const TutorExperience = ({
               creditsLoading={creditsLoading}
               outOfCredits={credits !== null && credits <= 0}
               remainingCredits={credits ?? undefined}
+              whiteboard={whiteboardToggle}
             />
           ) : (
             <StartButtonOverlay
@@ -725,12 +824,15 @@ export const TutorExperience = ({
               backLabel={studentBackLabel}
               connectionStatus={connectionStatus}
               hideCredits={true}
+              whiteboard={whiteboardToggle}
             />
           )}
         </div>
       )}
       <div data-visualization-viewport className="min-h-0 min-w-0 flex-1 flex flex-col overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]" ref={vizRef}>
-        {currentObjectiveArtifact ? (
+        {showBoard ? (
+          <Whiteboard board={board} onGoto={handleBoardGoto} contentRef={boardContentRef} />
+        ) : currentObjectiveArtifact ? (
           <Card className="flex-1 overflow-y-auto rounded-none border-0 bg-background/95 shadow-none">
             <CardHeader className="sticky top-0 z-10 border-b bg-background/90 p-4 backdrop-blur sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -863,8 +965,12 @@ export const TutorExperience = ({
           onFeedbackSubmit={handleFeedbackSubmit}
           onFeedbackClose={handleFeedbackClose}
           onCreditsUpdate={handleCreditsUpdate}
+          whiteboard={whiteboardMode}
+          onTranscription={whiteboardMode ? handleTranscription : undefined}
         />
       </div>
+
+      {whiteboardMode && captionsOn && voiceActive && connectionStatus === 'connected' && <TutorCaptions text={captions.text} />}
 
       {voiceActive && connectionStatus === 'connected' && (
         <div className="absolute bottom-0 left-0 right-0 z-20 pb-[env(safe-area-inset-bottom)]">
@@ -885,6 +991,31 @@ export const TutorExperience = ({
               <span className="text-sm font-mono text-muted-foreground">
                 {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
               </span>
+              {whiteboardMode && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-11 w-11 rounded-full bg-background/90"
+                  aria-pressed={captionsOn}
+                  onClick={() => setCaptionsOn((on) => !on)}
+                  title={captionsOn ? 'Hide captions' : 'Show captions'}
+                  aria-label={captionsOn ? 'Hide captions' : 'Show captions'}
+                >
+                  {captionsOn ? <Captions className="h-5 w-5" /> : <CaptionsOff className="h-5 w-5" />}
+                </Button>
+              )}
+              {whiteboardMode && hasActivity && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 rounded-full bg-background/90 px-4"
+                  onClick={() => setPanelView(showBoard ? 'activity' : 'board')}
+                >
+                  {showBoard ? <Presentation className="mr-2 h-4 w-4" /> : <PenLine className="mr-2 h-4 w-4" />}
+                  {showBoard ? 'Activity' : 'Board'}
+                </Button>
+              )}
             </div>
           </div>
         </div>

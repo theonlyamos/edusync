@@ -3,6 +3,7 @@ import { buildStudyCompanionLiveVoiceSystemPrompt, studyIntentSchema, studyModeS
 import { EUREKA_TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-system-prompt';
 import { buildObjectiveTutorPromptContext } from '@/lib/lesson-artifacts/objective-learning-controller';
 import { DEFAULT_VOICE } from '@/lib/ai-models';
+import { WHITEBOARD_PROMPT, whiteboardToolDeclarations } from '@/lib/whiteboard/board-tools';
 
 /**
  * Gemini Live session setup for the voice tutor and the voice study companion.
@@ -23,6 +24,8 @@ export const liveTokenRequestSchema = z.object({
     resumptionHandle: z.string().min(1).max(4096).nullish(),
     /** coauthor = a teacher planning a lesson out loud with the lesson co-author (teachers only). */
     variant: z.enum(['tutor', 'studyCompanion', 'coauthor']).default('tutor'),
+    /** Whiteboard mode: the tutor also gets tools to write and draw on a board (tutor variant only). */
+    whiteboard: z.boolean().nullish(),
     topic: z.string().max(300).nullish(),
     gradeLevel: z.string().max(80).nullish(),
     studyMode: studyModeSchema.nullish(),
@@ -191,7 +194,12 @@ export function buildLiveSystemPrompt(input: LiveTokenRequest): string {
             lessonHint,
         );
     }
-    return EUREKA_TUTOR_SYSTEM_PROMPT + buildTutorContextAddition(input);
+    return EUREKA_TUTOR_SYSTEM_PROMPT + (usesWhiteboard(input) ? WHITEBOARD_PROMPT : '') + buildTutorContextAddition(input);
+}
+
+/** The board belongs to the voice tutor; the study companion and co-author keep their own screens. */
+export function usesWhiteboard(input: LiveTokenRequest): boolean {
+    return input.variant === 'tutor' && input.whiteboard === true;
 }
 
 export function buildLiveTools(input: LiveTokenRequest) {
@@ -206,6 +214,7 @@ export function buildLiveTools(input: LiveTokenRequest) {
             functionDeclarations: [
                 input.lesson?.learningRunId ? objectiveArtifactToolDeclaration : visualizationToolDeclaration,
                 setTopicToolDeclaration,
+                ...(usesWhiteboard(input) ? whiteboardToolDeclarations : []),
             ],
         },
     ];
@@ -218,7 +227,8 @@ export function buildLiveTools(input: LiveTokenRequest) {
  * can be locked into the token and returned to the browser unchanged.
  */
 export function buildLiveConnectConfig(input: LiveTokenRequest, voiceName: string = DEFAULT_VOICE) {
-    const withTranscripts = input.variant === 'studyCompanion' || input.variant === 'coauthor';
+    // The whiteboard shows what the tutor says as captions under the board.
+    const withTranscripts = input.variant === 'studyCompanion' || input.variant === 'coauthor' || usesWhiteboard(input);
     return {
         responseModalities: ['AUDIO'],
         proactivity: { proactiveAudio: true },

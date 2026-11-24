@@ -1,5 +1,5 @@
-import { useAudioStreaming, LessonContext, type ToolCallListener, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
-import React, { useEffect, useRef, useState } from 'react';
+import { useAudioStreaming, LessonContext, type LiveTranscriptionPayload, type ToolCallListener, type VoiceCreditsUpdate } from '@/hooks/useAudioStreaming';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AudioVisualizer from './AudioVisualizer';
 import { readVisualizationPanelDimensions } from '@/lib/visualization-viewport';
@@ -26,9 +26,14 @@ interface VoiceControlProps {
   onRecordingsReady?: (payload: { user: Blob | null; ai: Blob | null; durationMs: number }) => void;
   /** Called after the server charges (or reuses) a prepaid block of voice minutes. */
   onCreditsUpdate?: (update: VoiceCreditsUpdate) => void;
+  /** Whiteboard mode: the tutor gets the board tools and its speech is transcribed for captions. */
+  whiteboard?: boolean;
+  /** Pieces of the live transcript; only sent in whiteboard mode. */
+  onTranscription?: (payload: LiveTranscriptionPayload) => void;
 }
 
-export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady, onCreditsUpdate }: VoiceControlProps) {
+export function VoiceControl({ active, viewportRef, sessionId, topic, lessonContext, onError, onStartupFailed, onToolCall, onConnectionStatusChange, onCountdownEnd, mobileMode = false, onCountdownChange, onFeedbackFormChange, onFeedbackSubmit, onFeedbackClose, onRecordingsReady, onCreditsUpdate, whiteboard = false, onTranscription }: VoiceControlProps) {
+  const liveOptions = useMemo(() => ({ variant: 'tutor' as const, whiteboard }), [whiteboard]);
   const {
     isStreaming,
     isSpeaking,
@@ -50,10 +55,11 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     getAnalyser,
     getMicAnalyser,
     setOnVadStateListener,
+    setOnTranscription,
     setSaveOnlySpeech,
     closeFeedbackForm,
     submitFeedback,
-  } = useAudioStreaming(topic, lessonContext);
+  } = useAudioStreaming(topic, lessonContext, liveOptions);
   setSaveOnlySpeech?.(true);
   const [countdown, setCountdown] = useState(600);
   const countdownEndedRef = useRef(false);
@@ -136,6 +142,11 @@ export function VoiceControl({ active, viewportRef, sessionId, topic, lessonCont
     setOnCreditsUpdate(onCreditsUpdate ?? null);
     return () => setOnCreditsUpdate(null);
   }, [onCreditsUpdate, setOnCreditsUpdate]);
+
+  useEffect(() => {
+    setOnTranscription?.(onTranscription ?? null);
+    return () => setOnTranscription?.(null);
+  }, [onTranscription, setOnTranscription]);
 
   useEffect(() => {
     if (!setSessionId) return;

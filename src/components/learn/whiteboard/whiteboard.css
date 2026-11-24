@@ -1,0 +1,119 @@
+/* Whiteboard for the voice tutor: paper, pens and the drawing animations. */
+.wb-root {
+  --wb-paper: #fdfcf7;
+  --wb-grid: rgba(15, 23, 42, 0.05);
+  --wb-ink: #1f2937;
+  --wb-blue: #1d4ed8;
+  --wb-red: #dc2626;
+  --wb-green: #15803d;
+  --wb-orange: #c2410c;
+  --wb-purple: #7e22ce;
+  --wb-mark: rgba(250, 204, 21, 0.5);
+  background-color: var(--wb-paper);
+  background-image:
+    linear-gradient(var(--wb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wb-grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--wb-ink);
+}
+
+.dark .wb-root {
+  --wb-paper: #18222d;
+  --wb-grid: rgba(255, 255, 255, 0.04);
+  --wb-ink: #f1f5f9;
+  --wb-blue: #93c5fd;
+  --wb-red: #fca5a5;
+  --wb-green: #86efac;
+  --wb-orange: #fdba74;
+  --wb-purple: #d8b4fe;
+  --wb-mark: rgba(250, 204, 21, 0.3);
+}
+
+.wb-word {
+  display: inline-block;
+  white-space: pre;
+}
+
+.wb-animate .wb-word {
+  opacity: 0;
+  animation: wb-word 220ms ease-out var(--wb-delay, 0ms) forwards;
+}
+
+.wb-animate .wb-wipe {
+  clip-path: inset(-10% 100% -10% 0);
+  animation: wb-wipe var(--wb-dur, 900ms) ease-out var(--wb-delay, 0ms) forwards;
+}
+
+.wb-animate .wb-fade {
+  opacity: 0;
+  animation: wb-fade 320ms ease-out var(--wb-delay, 0ms) forwards;
+}
+
+.wb-label { font-size: 4.2px; }
+.wb-tick { font-size: 2.8px; }
+.wb-axis-label { font-size: 3.4px; }
+
+/* Drawings shrink with the screen, so their lettering is set larger on phones to stay readable. */
+@media (max-width: 640px) {
+  .wb-label { font-size: 5.2px; }
+  .wb-tick { font-size: 4px; }
+  .wb-axis-label { font-size: 4.6px; }
+}
+
+.wb-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wb-animate .wb-stroke {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* Hidden until its turn, or the round pen tip would show as a dot. */
+  opacity: 0;
+  animation: wb-draw var(--wb-dur, 450ms) ease-in-out var(--wb-delay, 0ms) forwards;
+}
+
+.wb-item {
+  border-radius: 6px;
+  background-image: linear-gradient(var(--wb-mark), var(--wb-mark));
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  transition: background-size 450ms ease-out;
+}
+
+.wb-item[data-highlighted='true'] {
+  background-size: 100% 100%;
+}
+
+@keyframes wb-word {
+  from { opacity: 0; transform: translateY(0.12em); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wb-wipe {
+  to { clip-path: inset(-10% 0 -10% 0); }
+}
+
+@keyframes wb-fade {
+  to { opacity: 1; }
+}
+
+@keyframes wb-draw {
+  from { opacity: 1; stroke-dashoffset: 1; }
+  to { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-animate .wb-word,
+  .wb-animate .wb-wipe,
+  .wb-animate .wb-fade,
+  .wb-animate .wb-stroke {
+    animation: none;
+    opacity: 1;
+    clip-path: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+  .wb-item { transition: none; }
+}

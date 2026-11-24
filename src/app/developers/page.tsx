@@ -51,6 +51,7 @@ export default function DevelopersPage() {
                 <li><strong>theme</strong>: <code>light</code> or <code>dark</code>. The default is light.</li>
                 <li><strong>accent</strong>: your brand colour as a hex value without the #, for example <code>accent=1d4ed8</code>. Buttons and highlights use it.</li>
                 <li><strong>getFeedback</strong>: <code>true</code> asks the learner for a short rating when the session ends.</li>
+                <li><strong>whiteboard</strong>: <code>true</code> makes the tutor write and draw on a whiteboard as it explains, with captions. <code>false</code> keeps the visual-first tutor. Without it the learner chooses on the start screen, and the default is off.</li>
               </ul>
               <pre className={code}>{`/embed/new?apiKey=YOUR_API_KEY&topic=Fractions&theme=dark&accent=1d4ed8`}</pre>
             </>

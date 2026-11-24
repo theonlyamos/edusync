@@ -11,6 +11,7 @@ export type LiveTokenRequestInput = {
     sessionId: string | null;
     resumptionHandle: string | null;
     variant: 'tutor' | 'studyCompanion' | 'coauthor';
+    whiteboard?: boolean;
     topic?: string | null;
     gradeLevel?: string | null;
     studyMode?: string | null;
@@ -47,6 +48,7 @@ export function buildLiveTokenRequest(input: LiveTokenRequestInput) {
         sessionId: input.sessionId && UUID_RE.test(input.sessionId) ? input.sessionId : null,
         resumptionHandle: clip(input.resumptionHandle, 4096),
         variant: input.variant,
+        whiteboard: input.variant === 'tutor' && input.whiteboard === true,
         topic: clip(input.topic, 300),
         gradeLevel: clip(input.gradeLevel, 80),
         studyMode: input.studyMode ?? null,

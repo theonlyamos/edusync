@@ -12,6 +12,8 @@ import { voiceErrorMessage } from '@/lib/live-tutor/voice-errors';
 
 export type UseAudioStreamingLiveOptions = {
     variant?: 'tutor' | 'studyCompanion' | 'coauthor';
+    /** Tutor only: give the tutor the whiteboard tools and turn on captions. */
+    whiteboard?: boolean;
     gradeLevel?: string | null;
     studyMode?: StudyMode;
     studyIntent?: StudyIntent;
@@ -35,6 +37,8 @@ export type LiveTranscriptionPayload = {
     role: 'user' | 'assistant';
     text: string;
     finished: boolean;
+    /** The learner cut the tutor off; only sent in whiteboard mode. */
+    interrupted?: boolean;
 };
 
 interface AudioStreamingState {
@@ -637,6 +641,7 @@ export function useAudioStreaming(
                         sessionId: currentSessionIdRef.current,
                         resumptionHandle: sessionResumptionHandleRef.current,
                         variant,
+                        whiteboard: liveOptionsRef.current?.whiteboard,
                         topic: topicRef.current,
                         gradeLevel: liveOptionsRef.current?.gradeLevel,
                         studyMode: liveOptionsRef.current?.studyMode,
@@ -1132,6 +1137,10 @@ export function useAudioStreaming(
                     liveAssistantTranscriptRef.current = '';
                     setIsSpeaking(false);
                     playbackQueueRef.current?.interrupt();
+                    // Whiteboard captions drop the sentence the learner just cut off.
+                    if (liveOptionsRef.current?.whiteboard) {
+                        onTranscriptionListenerRef.current?.({ role: 'assistant', text: '', finished: true, interrupted: true });
+                    }
                     emitLiveInputDiagnostic({ event: 'server-interrupted', connectionGeneration });
                     continue;
                 }

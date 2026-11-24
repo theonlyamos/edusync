@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { TutorExperience } from '@/components/learn/tutor/TutorExperience';
+import { parseWhiteboardParam } from '@/lib/whiteboard/preference';
 
 type InteractiveAITutorProps = {
   onSessionStarted?: (sessionId: string) => void;
@@ -25,6 +26,7 @@ export const InteractiveAITutorComponent = ({ onSessionStarted, onSessionEnded }
       initialTopic={topicFromUrl}
       onSessionStarted={onSessionStarted}
       onSessionEnded={onSessionEnded}
+      whiteboard={parseWhiteboardParam(searchParams.get('whiteboard'))}
     />
   );
 };

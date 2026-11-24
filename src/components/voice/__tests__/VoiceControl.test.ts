@@ -9,6 +9,7 @@ vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useState: (initial: unknown) => [initial, vi.fn()],
   useRef: (current: unknown) => ({ current }),
+  useMemo: (create: () => unknown) => create(),
   useEffect: (run: () => void | (() => void), deps: unknown[]) => state.effects.push({ run, deps }),
 }));
 vi.mock('@/hooks/useAudioStreaming', () => ({
